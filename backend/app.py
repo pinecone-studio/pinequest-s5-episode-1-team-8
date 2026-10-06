@@ -6,7 +6,7 @@ AI Receptionist — backend API (FastAPI). Вэб интерфейс нь fronte
   POST /api/logout  -> cookie устгана
   GET  /api/me      -> нэвтэрсэн хэрэглэгч, байгууллага (нэвтрээгүй бол 401)
 
-Бусад API нь routes/ хавтсанд хэсэг бүрээрээ (org, account, settings, calls, stats ...).
+Бусад API нь routes/ хавтсанд хэсэг бүрээрээ (org, account, settings, calls, stats, leads ...).
 
 Нэвтэрмэгц зөвхөн өөрийн байгууллагын өгөгдлийг харна: middleware хүсэлт бүрт хэрэглэгчийн
 байгууллагыг request.state.tenant-д тавина (routes -> deps.current_tenant).
@@ -30,7 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import accounts  # noqa: E402
 import auth  # noqa: E402  (буруу оролдлогын хязгаар, cookie)
 import tenant as tenants  # noqa: E402
-from routes import account, calls, org, settings, stats  # noqa: E402
+from routes import account, calls, leads, org, settings, stats  # noqa: E402
 
 LOCAL = {"127.0.0.1", "::1"}
 
@@ -172,6 +172,7 @@ app.include_router(account.router)
 app.include_router(settings.router)
 app.include_router(calls.router)
 app.include_router(stats.router)
+app.include_router(leads.router)
 
 
 if __name__ == "__main__":

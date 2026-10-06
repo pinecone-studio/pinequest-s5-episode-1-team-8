@@ -37,6 +37,8 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 | `GET /api/calls?limit=100` | Сүүлийн дуудлагууд (асуултын тоо, хариулж чадаагүй тоо) |
 | `GET /api/calls/{uuid}` | Нэг дуудлагын бүх яриа |
 | `GET /api/stats` | Самбар: дуудлага, хариулсан/чадаагүй, хариултын зам, шинэ бүртгэл, сүүлийн 5 өдөр |
+| `GET /api/leads` | Бүртгэл: бүртгүүлэх / ажилтантай ярих хүсэлтүүд |
+| `PATCH /api/leads/{id}` `{"status"?, "notes"?}` | Төлөв (`new`, `contacted`, `done`), тэмдэглэл |
 
 Бусад бүх `/api/*` нэвтрэлт шаардана (middleware). `/docs` хаалттай.
 Хүсэлт бүрт хэрэглэгчийн байгууллага `request.state.tenant`-д тогтоно — route-ууд `Depends(current_tenant)`-ээр авч зөвхөн тэр байгууллагын өгөгдлийг хэрэглэнэ.
@@ -53,6 +55,7 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 | `routes/settings.py`, `notify.py` | Telegram мэдэгдэл (байгууллага бүрийн `data/settings.json`, 0600) |
 | `routes/calls.py`, `db.py` | Яриа: дуудлагын лог (байгууллага бүрийн `data/receptionist.db`) |
 | `routes/stats.py` | Самбарын статистик |
+| `routes/leads.py` | Бүртгэл (lead) |
 | `demo_data.py` | Жишээ дуудлага, бүртгэл үүсгэх (утасны AI бэлэн болохоос өмнө вэбийг турших) |
 | `deps.py` | `current_user`, `current_tenant` |
 | `config.py` | `DATA_DIR` (анхдагч `backend/data/`) |
