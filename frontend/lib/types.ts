@@ -87,3 +87,22 @@ export type Unanswered = {
   route: string;
   score: number | null;
 };
+
+// backend/routes/leads.py
+export type LeadStatus = "new" | "contacted" | "done";
+
+export type Lead = {
+  id: number;
+  call_uuid: string;
+  created_at: number;
+  name: string | null;
+  phone: string | null; // баталгаажсан дугаар (AI таахгүй)
+  phone_raw: string | null; // STT-ийн сонссон бичвэр
+  caller: string | null; // Caller ID
+  reason: "lead" | "handoff";
+  question: string | null;
+  status: LeadStatus;
+  notes: string | null;
+};
+
+export const LEAD_STATUS: Record<LeadStatus, string> = { new: "Шинэ", contacted: "Холбогдсон", done: "Дууссан" };

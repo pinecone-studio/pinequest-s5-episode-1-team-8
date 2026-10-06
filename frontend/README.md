@@ -31,6 +31,7 @@ app/
   (dashboard)/page.tsx       Самбар: хариулсан хувь, хариултын зам, 5 өдрийн дуудлага, сүүлийн дуудлага
   (dashboard)/setup/         Тохируулах (байгууллагын мэдээлэл, алхмууд)
   (dashboard)/settings/      Тохиргоо (Telegram мэдэгдэл, нууц үг)
+  (dashboard)/leads/         Бүртгэл: төлөв, тэмдэглэл
   (dashboard)/calls/         Яриа: дуудлагын жагсаалт, calls/[uuid] — нэг дуудлагын яриа
   (dashboard)/[section]/     Хараахан хийгдээгүй хэсгүүдийн түр хуудас
   error.tsx                  Backend унтарсан үед
@@ -40,8 +41,9 @@ components/
   setup/                     Step, OrgForm
   settings/                  TelegramSettings, PasswordForm
   calls/                     CallsTable, ChatMessage, RouteTag
+  leads/                     LeadRow
   dashboard/                 AnswerRate, RouteBreakdown, CallsByDay, SetupBanner
-  ui/                        Button, Field, Card, Tag, Alert
+  ui/                        Button, Field, Card, Tag, Alert, Table
   Brand.tsx, PageHeader.tsx, Section.tsx
 lib/
   session.ts                 getUser() / requireUser() — cookie-г backend (/api/me) шалгана
