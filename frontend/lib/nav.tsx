@@ -5,7 +5,11 @@ export type NavItem = {
   label: string;
   icon: ReactNode; // <svg viewBox="0 0 24 24"> доторх хэлбэрүүд
   adminOnly?: boolean;
+  badge?: keyof Badges; // цэсний баруун талд тоо (0 бол харагдахгүй)
 };
+
+/** Sidebar-ын тоон тэмдэг (backend /api/stats-аас) */
+export type Badges = { new_leads: number; unanswered: number };
 
 export const NAV: { title?: string; items: NavItem[] }[] = [
   {
@@ -18,8 +22,8 @@ export const NAV: { title?: string; items: NavItem[] }[] = [
   {
     title: "Үйлчилгээ",
     items: [
-      { href: "/leads", label: "Бүртгэл", icon: <><circle cx="9" cy="8" r="4" /><path d="M2 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1" /><path d="M19 8v6M16 11h6" /></> },
-      { href: "/unanswered", label: "Хариулж чадаагүй", icon: <><circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.7v.5M12 17h.01" /></> },
+      { href: "/leads", label: "Бүртгэл", badge: "new_leads", icon: <><circle cx="9" cy="8" r="4" /><path d="M2 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1" /><path d="M19 8v6M16 11h6" /></> },
+      { href: "/unanswered", label: "Хариулж чадаагүй", badge: "unanswered", icon: <><circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.7v.5M12 17h.01" /></> },
     ],
   },
   {
