@@ -128,3 +128,17 @@ export type TrainingAnswers = { faq: TrainingChoice[]; facts: TrainingChoice[]; 
 
 export type EnglishItem = { id: string | null; kind: "faq" | "knowledge"; mn: string; hash: string; en: string; questions: string[]; questions_en: string[] };
 export type EnglishData = { enabled: boolean; items: EnglishItem[]; phrases: Record<string, string> };
+
+// backend/routes/status.py — sidebar, самбар, Тохируулах (10с тутам)
+export type Status = {
+  ai_server: boolean;
+  sip: boolean;
+  documents: number;
+  facts: number;
+  faq: number;
+  ready: boolean; // мэдээлэл + FAQ аудио бэлдсэн
+  build_running: boolean;
+  selector: { enabled: boolean | null; eval: { selector?: [number, number]; rules?: [number, number] } | null } | null;
+  new_leads: number;
+  unanswered: number;
+};

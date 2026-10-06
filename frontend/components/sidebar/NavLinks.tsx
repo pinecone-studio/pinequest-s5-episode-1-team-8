@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NAV, type Badges, type NavItem } from "@/lib/nav";
+import { NAV, type NavItem } from "@/lib/nav";
+import type { Status } from "@/lib/types";
+import { useStatus } from "@/lib/useStatus";
 
-export function NavLinks({ isAdmin, badges }: { isAdmin: boolean; badges: Badges | null }) {
+export function NavLinks({ isAdmin, status }: { isAdmin: boolean; status: Status | null }) {
   const pathname = usePathname();
+  const badges = useStatus(status).status; // 10с тутам шинэчлэгдэнэ
   return (
     <nav>
       {NAV.map((group, i) => (
