@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NAV, type NavItem } from "@/lib/nav";
+import { NAV, type Badges, type NavItem } from "@/lib/nav";
 
-export function NavLinks({ isAdmin }: { isAdmin: boolean }) {
+export function NavLinks({ isAdmin, badges }: { isAdmin: boolean; badges: Badges | null }) {
   const pathname = usePathname();
   return (
     <nav>
@@ -18,7 +18,8 @@ export function NavLinks({ isAdmin }: { isAdmin: boolean }) {
           {group.items
             .filter((item) => !item.adminOnly || isAdmin)
             .map((item) => (
-              <NavLink key={item.href} item={item} active={isActive(pathname, item.href)} />
+              <NavLink key={item.href} item={item} active={isActive(pathname, item.href)}
+                count={item.badge && badges ? badges[item.badge] : 0} />
             ))}
         </div>
       ))}
@@ -31,7 +32,7 @@ function isActive(pathname: string, href: string) {
   return pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
 }
 
-function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+function NavLink({ item, active, count }: { item: NavItem; active: boolean; count: number }) {
   return (
     <Link
       href={item.href}
@@ -45,7 +46,14 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
         {item.icon}
       </svg>
       {item.label}
-      {active && <span className="ml-auto size-[7px] rounded-full bg-brand" />}
+      <span className="ml-auto flex items-center gap-2">
+        {count > 0 && (
+          <b className="rounded-[10px] bg-warn px-[7px] font-mono text-[11px] leading-[18px] font-semibold text-[#1b1408]" aria-label={`${count} шинэ`}>
+            {count}
+          </b>
+        )}
+        {active && <span className="size-[7px] rounded-full bg-brand" />}
+      </span>
     </Link>
   );
 }
