@@ -132,7 +132,9 @@ def fact_audio(fact_hash: str, t: Tenant = Depends(current_tenant)):
         facts = []
     audio = next((row.get("audio") for row in facts
                   if hashlib.sha1(row.get("text", "").encode()).hexdigest()[:12] == fact_hash), None)
-    allowed = os.path.realpath(DATA_DIR)
-    if not audio or not os.path.isfile(audio) or not os.path.realpath(audio).startswith(allowed + os.sep):
+    # Манай өгөгдөл (хүний бичлэг) эсвэл SIM-TRUNK-ийн нийтлэг TTS кэш доторх файл л
+    allowed = [os.path.realpath(DATA_DIR), os.path.realpath(knowledge_jobs.tts_cache())]
+    real = os.path.realpath(audio) if audio else ""
+    if not audio or not os.path.isfile(audio) or not any(real.startswith(root + os.sep) for root in allowed):
         raise HTTPException(404, "Аудио олдсонгүй")
     return FileResponse(audio, media_type="audio/wav")
