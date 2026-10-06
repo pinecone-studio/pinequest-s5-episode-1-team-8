@@ -8,7 +8,7 @@ export function SetupBanner() {
       <div className="flex flex-wrap items-center gap-4">
         <div className="min-w-0 flex-1">
           <h2 className="mb-1.5 text-[15px] font-semibold">AI ресепшнээ тохируулж дуусгаарай</h2>
-          <p className="text-muted">Байгууллагын мэдээлэл → мэдээлэл оруулах → бэлдэх. Код бичих шаардлагагүй.</p>
+          <p className="text-muted">Байгууллагын мэдээлэл → мэдээлэл оруулах → бэлдэх. Код бичих шаардлагагүй, ~10-30 минут.</p>
         </div>
         <Link href="/setup" className="rounded-[10px] bg-brand px-[26px] py-[15px] font-semibold text-[#07130c] hover:bg-brand-2">
           Тохируулах →
