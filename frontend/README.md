@@ -39,7 +39,7 @@ app/
   error.tsx                  Backend унтарсан үед
 components/
   auth/                      AuthCard, LoginForm, SignupForm
-  sidebar/                   Sidebar, NavLinks, UserCard, LogoutButton
+  sidebar/                   Sidebar, MobileMenu, NavLinks, UserCard, LogoutButton
   setup/                     Step, OrgForm, BuildPanel
   settings/                  TelegramSettings, PasswordForm
   calls/                     CallsTable, ChatMessage, RouteTag
