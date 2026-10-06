@@ -18,9 +18,11 @@ else
   .venv/bin/python -m pip install -q -r backend/requirements.txt || exit 1
 fi
 (cd frontend && bun install --silent) || exit 1
+# Зөвхөн тухайн портыг СОНСОЖ буй серверийг шалгана (VS Code зэрэг холбогдсон програмыг биш)
 for port in 8100 3000; do
-  if lsof -ti ":$port" >/dev/null 2>&1; then
-    echo "$port порт эзэлсэн байна. Өмнө асаасан серверээ унтраана уу: lsof -ti :$port | xargs kill"
+  if lsof -ti "tcp:$port" -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "$port порт дээр өөр сервер ажиллаж байна. Өмнө асаасан ./dev.sh-ээ Ctrl+C-ээр унтраана уу,"
+    echo "эсвэл: lsof -ti tcp:$port -sTCP:LISTEN | xargs kill"
     exit 1
   fi
 done
