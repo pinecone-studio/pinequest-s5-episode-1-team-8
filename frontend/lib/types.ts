@@ -106,3 +106,8 @@ export type Lead = {
 };
 
 export const LEAD_STATUS: Record<LeadStatus, string> = { new: "Шинэ", contacted: "Холбогдсон", done: "Дууссан" };
+
+export type KnowledgeFile = { name: string; size: number; mtime: number; editable: boolean };
+export type KnowledgeFact = { text: string; source: string | null; hash: string; has_audio: boolean; recorded: boolean };
+export type KnowledgeResponse = { files: KnowledgeFile[]; facts: KnowledgeFact[]; indexed_at: string | null };
+export type BuildStatus = { state: "idle" | "queued" | "running" | "done" | "error"; running: boolean; ahead: number; code: number | null; finished: number | null; log: string[] };
