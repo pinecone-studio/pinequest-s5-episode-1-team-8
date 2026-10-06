@@ -11,6 +11,7 @@ export type User = {
   extension: string | null; // дотуур дугаар (Zoiper-оос залгах)
   plan: Plan;
   expires: number; // session дуусах хугацаа (unix секунд)
+  own_tenant?: boolean; // false: admin өөр байгууллагыг сольж харж байна
 };
 
 export const PLAN_LABEL: Record<Plan, string> = { trial: "Туршилт", active: "Идэвхтэй", suspended: "Түдгэлзсэн" };
@@ -141,4 +142,17 @@ export type Status = {
   selector: { enabled: boolean | null; eval: { selector?: [number, number]; rules?: [number, number] } | null } | null;
   new_leads: number;
   unanswered: number;
+};
+
+// backend/routes/admin.py · list_tenants()
+export type AdminTenant = {
+  slug: string;
+  name: string;
+  extension: string | null;
+  plan: Plan;
+  created_at: number | null;
+  calls: number;
+  ready: boolean;
+  users: string[];
+  job: string; // idle | queued | running | done | error
 };

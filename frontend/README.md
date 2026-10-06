@@ -32,6 +32,7 @@ app/
   (dashboard)/setup/         Тохируулах (байгууллагын мэдээлэл, алхмууд)
   (dashboard)/settings/      Тохиргоо (Telegram мэдэгдэл, нууц үг)
   (dashboard)/unanswered/    Хариулж чадаагүй асуултууд
+  (dashboard)/admin/         Байгууллагууд (зөвхөн admin): эрх, сольж харах
   (dashboard)/leads/         Бүртгэл: төлөв, тэмдэглэл
   (dashboard)/calls/         Яриа: дуудлагын жагсаалт, calls/[uuid] — нэг дуудлагын яриа
   (dashboard)/[section]/     Хараахан хийгдээгүй хэсгүүдийн түр хуудас
@@ -43,6 +44,7 @@ components/
   settings/                  TelegramSettings, PasswordForm
   calls/                     CallsTable, ChatMessage, RouteTag
   leads/                     LeadRow
+  admin/                     TenantRow
   dashboard/                 AnswerRate, RouteBreakdown, CallsByDay, SetupBanner
   ui/                        Button, Field, Card, Tag, Alert, Table
   Brand.tsx, PageHeader.tsx, Section.tsx
