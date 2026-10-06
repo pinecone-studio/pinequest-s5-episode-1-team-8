@@ -122,3 +122,6 @@ export type TrainingExample = { i: number; q: string; faq?: string; fact?: strin
 export type TrainingStatus = { model: Record<string, unknown> | null; seed: number; taught: TrainingExample[] };
 export type TrainingChoice = { value: string; title: string };
 export type TrainingAnswers = { faq: TrainingChoice[]; facts: TrainingChoice[]; special: TrainingChoice[] };
+
+export type EnglishItem = { id: string | null; kind: "faq" | "knowledge"; mn: string; hash: string; en: string; questions: string[]; questions_en: string[] };
+export type EnglishData = { enabled: boolean; items: EnglishItem[]; phrases: Record<string, string> };
