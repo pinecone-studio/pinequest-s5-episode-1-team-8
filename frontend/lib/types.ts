@@ -112,3 +112,8 @@ export type KnowledgeResponse = { files: KnowledgeFile[] };
 
 export type FaqItem = { id: string; questions: string[]; answer: string; topic?: string | null };
 export type FaqData = { greeting: string; fillers: string[]; topics: Record<string, unknown>; faq: FaqItem[] };
+
+export type VoiceData = {
+  items: { kind: string; text: string; hash: string }[];
+  settings: { lexicon: { word: string; say: string }[]; speed: number; pause_ms: number };
+};
