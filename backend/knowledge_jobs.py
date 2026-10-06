@@ -1,4 +1,6 @@
-"""SIM-TRUNK-ийн бодит knowledge/audio pipeline-ийг tenant бүрээр дараалалд ажиллуулна."""
+"""SIM-TRUNK-ийн бодит knowledge/audio pipeline-ийг tenant бүрээр дараалалд ажиллуулна.
+
+Скрипт бүр sim_runner.py-ээр дамжиж МАНАЙ байгууллагын хавтас (backend/data/tenants/<slug>) дээр ажиллана."""
 import os
 import queue
 import re
@@ -6,7 +8,7 @@ import subprocess
 import threading
 import time
 
-from config import DATA_DIR
+from config import DATA_DIR, TENANTS_DIR
 from tenant import Tenant
 
 JOBS: dict[str, dict] = {}
@@ -17,6 +19,7 @@ BUILD_STEPS = [["scripts/ingest.py", "--no-audio"], ["scripts/autogen.py"], ["sc
                ["build_faq_audio.py"], ["scripts/ingest.py"], ["scripts/build_en.py"],
                ["scripts/train_selector.py"], ["scripts/audio_qa.py"]]
 OPTIONAL = {"scripts/audio_qa.py"}
+RUNNER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sim_runner.py")
 
 
 def sim_root() -> str:
@@ -25,6 +28,11 @@ def sim_root() -> str:
         return os.path.abspath(configured)
     project = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(os.path.dirname(project), "SIM-TRUNK")
+
+
+def tts_cache() -> str:
+    """SIM-TRUNK-ийн нийтлэг TTS кэш (ingest аудиог энд бичнэ)"""
+    return os.path.join(sim_root(), "data", "tts_cache")
 
 
 def log_path(t: Tenant) -> str:
@@ -48,7 +56,7 @@ def _run(slug: str):
             for step in BUILD_STEPS:
                 log.write(f"\n=== {' '.join(step)} ===\n")
                 log.flush()
-                code = subprocess.call([python, "-W", "ignore", *step], cwd=root, env=env,
+                code = subprocess.call([python, "-W", "ignore", RUNNER, root, TENANTS_DIR, *step], cwd=root, env=env,
                                        stdout=log, stderr=subprocess.STDOUT)
                 if code and step[0] in OPTIONAL:
                     log.write(f"({step[0]} алдаатай дууслаа, алгаслаа)\n")

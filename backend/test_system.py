@@ -13,6 +13,7 @@ Backend-ийн тест. Кодыг өөрчилсний дараа, PR-ийн �
 8. Самбарын статистик: хариулсан / хариулж чадаагүй, зам, сүүлийн 5 өдөр, шинэ бүртгэл
 9. Бүртгэл (lead): жагсаалт, төлөв, тэмдэглэл, байгууллага хооронд тусгаарлалт
 10. Хариулж чадаагүй асуултууд
+11. Мэдээлэл бэлдэх: SIM-TRUNK скрипт манай байгууллагын хавтсаар ажиллана (хуурамч SIM-TRUNK — AI загваргүй)
 
 Түр хавтсанд (DATA_DIR) ажиллана — backend/data/-ийн жинхэнэ хэрэглэгчдэд хүрэхгүй.
 """
@@ -351,6 +352,77 @@ def test_unanswered():
     check("өөр байгууллага харахгүй", owner_client("Асуулт 2", "unans2@example.mn").get("/api/unanswered").json() == [])
 
 
+FAKE_SIM_TENANT = """
+import os
+ROOT = os.path.dirname(os.path.abspath(__file__))
+TENANTS_DIR = os.path.join(ROOT, "tenants")
+TTS_CACHE = os.path.join(ROOT, "data", "tts_cache")
+class Tenant:
+    def __init__(self, slug):
+        self.slug, self.dir = slug, os.path.join(TENANTS_DIR, slug)
+    knowledge_dir = property(lambda self: os.path.join(self.dir, "knowledge"))
+    kb_index_dir = property(lambda self: os.path.join(self.dir, "knowledge_index"))
+def current():
+    return Tenant(os.environ["TENANT"])
+"""
+FAKE_SIM_INGEST = """
+import hashlib, json, os, sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import tenant as tenants
+T = tenants.current()
+facts = []
+for name in sorted(os.listdir(T.knowledge_dir)):
+    for line in open(os.path.join(T.knowledge_dir, name), encoding="utf-8"):
+        if line.strip():
+            os.makedirs(tenants.TTS_CACHE, exist_ok=True)
+            wav = os.path.join(tenants.TTS_CACHE, hashlib.sha1(line.strip().encode()).hexdigest() + ".wav")
+            open(wav, "wb").write(b"RIFF")
+            facts.append({"text": line.strip(), "source": name, "audio": wav})
+os.makedirs(T.kb_index_dir, exist_ok=True)
+json.dump({"facts": facts, "indexed_at": "test"}, open(os.path.join(T.kb_index_dir, "facts.json"), "w"))
+"""
+
+
+def test_knowledge_build():
+    print("\n[11] Мэдээлэл бэлдэх (SIM-TRUNK холболт)")
+    import time
+    import knowledge_jobs
+    sim = tempfile.mkdtemp(prefix="fake_sim_")
+    os.makedirs(os.path.join(sim, "scripts"))
+    os.makedirs(os.path.join(sim, ".venv", "bin"))
+    os.symlink(sys.executable, os.path.join(sim, ".venv", "bin", "python"))
+    open(os.path.join(sim, "tenant.py"), "w").write(FAKE_SIM_TENANT)
+    open(os.path.join(sim, "scripts", "fake_ingest.py"), "w").write(FAKE_SIM_INGEST)
+    old_env, old_steps = os.environ.get("SIM_TRUNK_DIR"), knowledge_jobs.BUILD_STEPS
+    os.environ["SIM_TRUNK_DIR"], knowledge_jobs.BUILD_STEPS = sim, [["scripts/fake_ingest.py"]]
+    try:
+        a = owner_client("Бэлдэх тест", "build@example.mn")
+        a.put("/api/knowledge/file/info.md", json={"content": "Сургалт 6 сар үргэлжилнэ.\nТөлбөр сард 1,500,000 төгрөг."})
+        r = a.post("/api/knowledge/build")
+        st = {}
+        for _ in range(100):
+            st = a.get("/api/knowledge/build").json()
+            if not st["running"]:
+                break
+            time.sleep(0.1)
+        check("бэлдэлт амжилттай дуусна", st.get("state") == "done", st)
+        k = a.get("/api/knowledge").json()
+        check("манай мэдээллийг уншиж, үр дүн манай хавтсанд", [f["text"] for f in k["facts"]] ==
+              ["Сургалт 6 сар үргэлжилнэ.", "Төлбөр сард 1,500,000 төгрөг."] and k["indexed_at"] == "test", k)
+        check("SIM-TRUNK-ийн tenants хавтсанд юу ч бичихгүй", not os.path.exists(os.path.join(sim, "tenants")))
+        fact = k["facts"][0]
+        r = a.get(f"/api/knowledge/audio/{fact['hash']}")
+        check("TTS кэш дэх аудио тоглогдоно", fact["has_audio"] and r.status_code == 200, r.status_code)
+        other = owner_client("Бэлдэх 2", "build2@example.mn")
+        check("өөр байгууллага бусдын аудиог авахгүй", other.get(f"/api/knowledge/audio/{fact['hash']}").status_code == 404)
+    finally:
+        knowledge_jobs.BUILD_STEPS = old_steps
+        if old_env is None:
+            os.environ.pop("SIM_TRUNK_DIR", None)
+        else:
+            os.environ["SIM_TRUNK_DIR"] = old_env
+
+
 if __name__ == "__main__":
     test_login()
     test_signup()
@@ -361,5 +433,6 @@ if __name__ == "__main__":
     test_stats()
     test_leads()
     test_unanswered()
+    test_knowledge_build()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)
