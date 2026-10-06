@@ -1,19 +1,25 @@
 """
 AI Receptionist — backend API (FastAPI). Вэб интерфейс нь frontend/ (Next.js) — /api/* хүсэлтүүдийг энд дамжуулна.
 
-Одоогоор: нэвтрэх, гарах, нэвтэрсэн хэрэглэгчийн мэдээлэл.
-
+  POST /api/signup  {"company", "phone", "email", "password"} -> шинэ байгууллага + эзэмшигч, нэвтэрнэ
   POST /api/login   {"email", "password"} -> хэрэглэгч + httpOnly session cookie
   POST /api/logout  -> cookie устгана
-  GET  /api/me      -> нэвтэрсэн хэрэглэгч (нэвтрээгүй бол 401)
+  GET  /api/me      -> нэвтэрсэн хэрэглэгч, байгууллага (нэвтрээгүй бол 401)
+
+Бусад API нь routes/ хавтсанд хэсэг бүрээрээ (org, account, settings, calls ...).
+
+Нэвтэрмэгц зөвхөн өөрийн байгууллагын өгөгдлийг харна: middleware хүсэлт бүрт хэрэглэгчийн
+байгууллагыг request.state.tenant-д тавина (routes -> deps.current_tenant).
 
   .venv/bin/python backend/app.py          # http://127.0.0.1:8100
 
-Анх асахад хэрэглэгч байхгүй бол "admin" санамсаргүй нууц үгтэй үүсч, терминалд НЭГ удаа хэвлэгдэнэ.
+Анх асахад "admin" хэрэглэгч санамсаргүй нууц үгтэй үүсч, терминалд НЭГ удаа хэвлэгдэнэ.
 Анхдагчаар зөвхөн энэ компьютерээс (127.0.0.1:8100; SIM-TRUNK-ийн вэб 8000-д) нээгдэнэ — гаднаас зөвхөн Next.js-ээр дамжина.
 """
 import os
+import shutil
 import sys
+import threading
 import time
 
 from fastapi import FastAPI, Request
@@ -22,13 +28,15 @@ from pydantic import BaseModel
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import accounts  # noqa: E402
-import auth  # noqa: E402  (буруу оролдлогын хязгаар, cookie нэр)
+import auth  # noqa: E402  (буруу оролдлогын хязгаар, cookie)
+import tenant as tenants  # noqa: E402
+from routes import account, calls, org, settings  # noqa: E402
 
 LOCAL = {"127.0.0.1", "::1"}
 
 # /docs, /openapi.json-ийг хаана: гадагш нээхэд API-ийн бүтцийг ил гаргахгүй
 app = FastAPI(title="AI Receptionist", docs_url=None, redoc_url=None, openapi_url=None)
-PUBLIC = {"/api/login", "/api/logout"}
+PUBLIC = {"/api/login", "/api/logout", "/api/signup"}
 
 
 def client_ip(request: Request) -> str:
@@ -42,8 +50,10 @@ def client_ip(request: Request) -> str:
 
 
 def public_user(user: dict) -> dict:
+    cfg = tenants.Tenant(user["tenant"]).config()
     return {"email": user["email"], "role": user["role"], "tenant": user["tenant"],
-            "expires": user.get("expires")}
+            "tenant_name": cfg.get("name", user["tenant"]), "extension": cfg.get("extension"),
+            "plan": cfg.get("plan", "trial"), "expires": user.get("expires")}
 
 
 @app.middleware("http")
@@ -57,19 +67,29 @@ async def require_login(request: Request, call_next):
             response = JSONResponse({"detail": "Нэвтрэх шаардлагатай"}, status_code=401)
         else:
             request.state.user = user
+            request.state.tenant = tenants.Tenant(user["tenant"])
             response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Cache-Control"] = "no-store"
     return response
 
 
+def error(detail: str, status: int) -> JSONResponse:
+    return JSONResponse({"detail": detail}, status_code=status)
+
+
+def logged_in(request: Request, user: dict) -> JSONResponse:
+    """Хэрэглэгчийн мэдээлэл + session cookie"""
+    response = JSONResponse(public_user(user))
+    auth.set_session(response, request, user)
+    return response
+
+
+# ---------------- нэвтрэх ----------------
+
 class LoginBody(BaseModel):
     email: str = ""
     password: str = ""
-
-
-def error(detail: str, status: int) -> JSONResponse:
-    return JSONResponse({"detail": detail}, status_code=status)
 
 
 @app.post("/api/login")
@@ -85,12 +105,7 @@ def login(request: Request, body: LoginBody):
         auth.record_fail(keys)
         time.sleep(auth.FAIL_DELAY)   # таахыг удаашруулна
         return error("И-мэйл эсвэл нууц үг буруу", 401)
-    token = accounts.make_session(user)
-    response = JSONResponse(public_user(accounts.session_user(token)))
-    secure = request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https"
-    response.set_cookie(auth.COOKIE, token, max_age=accounts.SESSION_DAYS * 86400,
-                        httponly=True, samesite="lax", secure=secure)
-    return response
+    return logged_in(request, user)
 
 
 @app.post("/api/logout")
@@ -105,10 +120,64 @@ def me(request: Request):
     return public_user(request.state.user)
 
 
+# ---------------- бүртгүүлэх ----------------
+
+class SignupBody(BaseModel):
+    company: str = ""
+    phone: str = ""
+    email: str = ""
+    password: str = ""
+
+
+SIGNUPS: dict[str, list[float]] = {}
+SIGNUPS_PER_HOUR = 3
+tenants_lock = threading.Lock()
+
+
+@app.post("/api/signup")
+def signup(request: Request, body: SignupBody):
+    """Шинэ байгууллага + эзэмшигч хэрэглэгч. Туршилтын эрхтэй (plan=trial) эхэлнэ."""
+    ip = client_ip(request)
+    now = time.time()
+    SIGNUPS[ip] = [t for t in SIGNUPS.get(ip, []) if now - t < 3600]
+    if len(SIGNUPS[ip]) >= SIGNUPS_PER_HOUR:
+        return error("Нэг цагт 3-аас олон бүртгэл үүсгэх боломжгүй", 429)
+    email = accounts.normalize_email(body.email)
+    if not accounts.EMAIL.fullmatch(email):
+        return error("И-мэйл хаяг буруу", 400)
+    if len(body.password) < 8:
+        return error("Нууц үг 8-аас дээш тэмдэгт байх ёстой", 400)
+    phone = tenants.clean_phone(body.phone)
+    if phone and not 6 <= len(phone.lstrip("+")) <= 12:
+        return error("Утасны дугаар буруу", 400)
+    try:
+        with tenants_lock:
+            t = tenants.create(body.company, phone=phone, email=email)
+            try:
+                uid = accounts.create_user(email, body.password, t.slug)
+            except ValueError:
+                shutil.rmtree(t.dir, ignore_errors=True)
+                raise
+    except ValueError as e:
+        return error(str(e), 400)
+    SIGNUPS[ip].append(now)
+    print(f"Шинэ байгууллага: {t.slug} ({t.config()['name']}) {email}")
+    return logged_in(request, accounts.get(uid))
+
+
+# ---------------- хэсгүүд ----------------
+
+app.include_router(org.router)
+app.include_router(account.router)
+app.include_router(settings.router)
+app.include_router(calls.router)
+
+
 if __name__ == "__main__":
     import uvicorn
     host = os.getenv("API_HOST", "127.0.0.1")
     port = int(os.getenv("API_PORT", "8100"))
+    tenants.ensure_default()
     password = accounts.ensure_admin()
     if password:
         print(f"Анхны хэрэглэгч үүслээ -> нэвтрэх нэр: admin, нууц үг: {password}")

@@ -24,3 +24,11 @@ def too_many_fails(keys: list[str]) -> bool:
 def record_fail(keys: list[str]):
     for key in keys:
         _fails.setdefault(key, []).append(time.time())
+
+
+def set_session(response, request, user: dict):
+    """Нэвтэрсэн хэрэглэгчийн session cookie (httpOnly, SameSite=Lax, HTTPS дээр Secure)."""
+    import accounts
+    secure = request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https"
+    response.set_cookie(COOKIE, accounts.make_session(user), max_age=accounts.SESSION_DAYS * 86400,
+                        httponly=True, samesite="lax", secure=secure)
