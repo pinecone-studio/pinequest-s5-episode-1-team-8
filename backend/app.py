@@ -30,7 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import accounts  # noqa: E402
 import auth  # noqa: E402  (буруу оролдлогын хязгаар, cookie)
 import tenant as tenants  # noqa: E402
-from routes import account, calls, english, faq, knowledge, leads, org, settings, stats, status, training, unanswered, voice  # noqa: E402
+from routes import account, admin, calls, english, faq, knowledge, leads, org, settings, stats, status, training, unanswered, voice  # noqa: E402
 
 LOCAL = {"127.0.0.1", "::1"}
 
@@ -49,11 +49,27 @@ def client_ip(request: Request) -> str:
     return forwarded.split(",")[0].strip() or host
 
 
-def public_user(user: dict) -> dict:
-    cfg = tenants.Tenant(user["tenant"]).config()
-    return {"email": user["email"], "role": user["role"], "tenant": user["tenant"],
-            "tenant_name": cfg.get("name", user["tenant"]), "extension": cfg.get("extension"),
-            "plan": cfg.get("plan", "trial"), "expires": user.get("expires")}
+def public_user(user: dict, t: "tenants.Tenant | None" = None) -> dict:
+    """t — харж буй байгууллага (admin өөр байгууллага руу сольсон бол тэр), эс бөгөөс хэрэглэгчийнх"""
+    t = t or tenants.Tenant(user["tenant"])
+    cfg = t.config()
+    return {"email": user["email"], "role": user["role"], "tenant": t.slug,
+            "tenant_name": cfg.get("name", t.slug), "extension": cfg.get("extension"),
+            "plan": cfg.get("plan", "trial"), "expires": user.get("expires"),
+            "own_tenant": t.slug == user["tenant"]}
+
+
+def viewed_tenant(request: Request, user: dict) -> "tenants.Tenant":
+    """Хэрэглэгчийн байгууллага. Admin "Байгууллагууд"-аас өөр байгууллага руу сольсон бол тэр (cookie)."""
+    slug = request.cookies.get(auth.TENANT_COOKIE)
+    if user["role"] == "admin" and slug:
+        try:
+            t = tenants.Tenant(slug)
+            if t.exists():
+                return t
+        except ValueError:
+            pass
+    return tenants.Tenant(user["tenant"])
 
 
 @app.middleware("http")
@@ -67,7 +83,7 @@ async def require_login(request: Request, call_next):
             response = JSONResponse({"detail": "Нэвтрэх шаардлагатай"}, status_code=401)
         else:
             request.state.user = user
-            request.state.tenant = tenants.Tenant(user["tenant"])
+            request.state.tenant = viewed_tenant(request, user)
             response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Cache-Control"] = "no-store"
@@ -112,12 +128,13 @@ def login(request: Request, body: LoginBody):
 def logout():
     response = JSONResponse({"ok": True})
     response.delete_cookie(auth.COOKIE)
+    response.delete_cookie(auth.TENANT_COOKIE)
     return response
 
 
 @app.get("/api/me")
 def me(request: Request):
-    return public_user(request.state.user)
+    return public_user(request.state.user, request.state.tenant)
 
 
 # ---------------- бүртгүүлэх ----------------
@@ -180,6 +197,7 @@ app.include_router(voice.router)
 app.include_router(training.router)
 app.include_router(english.router)
 app.include_router(status.router)
+app.include_router(admin.router)
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ Backend-ийн тест. Кодыг өөрчилсний дараа, PR-ийн �
 11. Мэдээлэл бэлдэх: SIM-TRUNK скрипт манай байгууллагын хавтсаар ажиллана (хуурамч SIM-TRUNK — AI загваргүй)
 12. Төлөв (/api/status): AI сервер, SIP, бэлэн эсэх, sidebar-ын тоо
 13. AI сургалт: сургасан загварын мэдээлэл (SIM-TRUNK-ийн бичдэг газраас)
+14. Байгууллагууд (admin): жагсаалт, эрх солих, өөр байгууллага руу сольж харах, owner-т хаалттай
 
 Түр хавтсанд (DATA_DIR) ажиллана — backend/data/-ийн жинхэнэ хэрэглэгчдэд хүрэхгүй.
 """
@@ -471,6 +472,42 @@ def test_training_model():
     check("train_selector.py-ийн үр дүн харагдана", model == meta, model)
 
 
+def test_admin():
+    print("\n[14] Байгууллагууд (admin)")
+    import demo_data
+    tenant.ensure_default()
+    accounts.create_user("root", "root-pass-123", role="admin")
+    adm = TestClient(app)
+    login(adm, "root", "root-pass-123")
+    owner = owner_client("Admin тест", "admintest@example.mn")
+    slug = owner.get("/api/me").json()["tenant"]
+    demo_data.seed(tenant.Tenant(slug))
+    blocked = [owner.get("/api/admin/tenants").status_code, owner.post("/api/admin/switch", json={"slug": slug}).status_code,
+               owner.post("/api/admin/plan", json={"slug": slug, "plan": "active"}).status_code]
+    check("owner-т хаалттай (403)", blocked == [403, 403, 403], blocked)
+    rows = {x["slug"]: x for x in adm.get("/api/admin/tenants").json()}
+    row = rows.get(slug, {})
+    check("бүх байгууллага: хэрэглэгч, дуудлагын тоо, эрх", "pinecone" in rows and row.get("users") == ["admintest@example.mn"]
+          and row.get("calls") == 6 and row.get("plan") == "trial" and row.get("ready") is False, row)
+    r = adm.post("/api/admin/plan", json={"slug": slug, "plan": "active"})
+    check("эрх идэвхжүүлнэ", r.status_code == 200 and owner.get("/api/me").json()["plan"] == "active", r.text)
+    check("буруу эрх / байхгүй байгууллага", adm.post("/api/admin/plan", json={"slug": slug, "plan": "vip"}).status_code == 400
+          and adm.post("/api/admin/plan", json={"slug": "baikhgui", "plan": "active"}).status_code == 404
+          and adm.post("/api/admin/switch", json={"slug": "../etc"}).status_code == 404)
+    r = adm.post("/api/admin/switch", json={"slug": slug})
+    me = adm.get("/api/me").json()
+    check("сольсны дараа тэр байгууллагыг харна", r.status_code == 200 and me["tenant"] == slug and me["own_tenant"] is False
+          and adm.get("/api/org").json()["name"] == "Admin тест" and len(adm.get("/api/calls").json()) == 6, me)
+    adm.post("/api/admin/switch", json={"slug": "pinecone"})
+    check("өөрийнхөө руу буцна", adm.get("/api/me").json()["own_tenant"] is True)
+    forged = owner.get("/api/me", headers={"cookie": f"{auth.COOKIE}={owner.cookies.get(auth.COOKIE)}; {auth.TENANT_COOKIE}=pinecone"}).json()
+    check("owner cookie хуурсан ч өөрийнхөө байгууллагыг л харна", forged["tenant"] == slug, forged)
+    adm.post("/api/admin/switch", json={"slug": slug})
+    adm.post("/api/logout")
+    login(adm, "root", "root-pass-123")
+    check("дахин нэвтрэхэд өөрийн байгууллага", adm.get("/api/me").json()["tenant"] == "pinecone")
+
+
 if __name__ == "__main__":
     test_login()
     test_signup()
@@ -484,5 +521,6 @@ if __name__ == "__main__":
     test_knowledge_build()
     test_status()
     test_training_model()
+    test_admin()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)
