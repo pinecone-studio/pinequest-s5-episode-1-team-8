@@ -7,6 +7,7 @@ Backend-ийн тест. Кодыг өөрчилсний дараа, PR-ийн �
      нууц үг солиход хуучин session хүчингүй, буруу оролдлогын хязгаар (IP + и-мэйл)
 3. Байгууллага бүртгүүлэх: шинэ байгууллага, загвар FAQ, давхардал, хязгаар
 4. Байгууллагын мэдээлэл (Тохируулах): засах, загвар FAQ дахин үүсэх, байгууллага хооронд тусгаарлалт
+5. Нууц үг солих: одоогийн нууц үг шалгах, энэ төхөөрөмж нэвтэрсэн хэвээр, бусад нь гарна
 
 Түр хавтсанд (DATA_DIR) ажиллана — backend/data/-ийн жинхэнэ хэрэглэгчдэд хүрэхгүй.
 """
@@ -184,9 +185,31 @@ def test_org():
     check("нэвтрээгүй -> 401", TestClient(app).get("/api/org").status_code == 401)
 
 
+def test_password():
+    print("\n[5] Нууц үг солих")
+    auth._fails.clear()
+    a = owner_client("Цэцэг дэлгүүр", "tsetseg@example.mn")
+    other = TestClient(app)
+    login(other, "tsetseg@example.mn", "gerel-pass-1")        # өөр төхөөрөмж
+    change = lambda c, cur, new: c.post("/api/account/password", json={"current": cur, "new": new})
+    check("одоогийн нууц үг буруу -> 400", change(a, "wrong-pass", "new-pass-123").status_code == 400)
+    check("богино шинэ нууц үг -> 400", change(a, "gerel-pass-1", "short").status_code == 400)
+    check("хуучинтайгаа ижил -> 400", change(a, "gerel-pass-1", "gerel-pass-1").status_code == 400)
+    r = change(a, "gerel-pass-1", "new-pass-123")
+    check("солигдоно, энэ төхөөрөмж нэвтэрсэн хэвээр", r.status_code == 200 and a.get("/api/me").status_code == 200, r.text)
+    check("бусад төхөөрөмж гарна", other.get("/api/me").status_code == 401)
+    check("шинэ нууц үгээр нэвтэрнэ, хуучнаар үгүй", login(TestClient(app), "tsetseg@example.mn", "new-pass-123").status_code == 200
+          and login(TestClient(app), "tsetseg@example.mn", "gerel-pass-1").status_code == 401)
+    auth._fails.clear()
+    codes = [change(a, "bad-pass-000", "x-pass-1234").status_code for _ in range(6)]
+    check("5 удаа буруу -> 429", codes[-1] == 429, codes)
+    auth._fails.clear()
+
+
 if __name__ == "__main__":
     test_login()
     test_signup()
     test_org()
+    test_password()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)
