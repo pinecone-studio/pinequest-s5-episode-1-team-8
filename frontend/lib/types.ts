@@ -125,11 +125,29 @@ export type BuildStatus = JobStatus;
 export type FaqItem = { id: string; questions: string[]; answer: string; topic?: string | null; auto?: boolean };
 export type FaqData = { greeting: string; fillers: string[]; topics: Record<string, unknown>; faq: FaqItem[] };
 
-// backend/routes/voice.py — recorded: өөрийн хоолойгоор бичсэн (routes/recordings.py)
-export type VoiceItem = { kind: string; text: string; hash: string; recorded: boolean };
+export type VoiceItem = {
+  kind: string;
+  text: string;
+  hash: string;
+  recorded: boolean;
+  flags: string[];
+  cer?: number | null;
+  hyp?: string | null;
+  seed: number;
+  plays: number;
+};
 export type VoiceData = {
   items: VoiceItem[];
+  qa_at?: number | null;
   settings: { lexicon: { word: string; say: string }[]; speed: number; pause_ms: number };
+  question: { exists: boolean; text?: string | null; script: string };
+};
+export type ReferenceVoice = {
+  exists: boolean;
+  script: string;
+  text?: string | null;
+  seconds?: number | null;
+  preview: { running: boolean; code?: number | null; files: string[] };
 };
 
 export type TrainingExample = { i: number; q: string; faq?: string; fact?: string; label?: string };
