@@ -40,6 +40,7 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 | `GET /api/leads` | Бүртгэл: бүртгүүлэх / ажилтантай ярих хүсэлтүүд |
 | `PATCH /api/leads/{id}` `{"status"?, "notes"?}` | Төлөв (`new`, `contacted`, `done`), тэмдэглэл |
 | `GET /api/unanswered?limit=200` | AI хариулж чадаагүй асуултууд (дахин асуусан, тодруулсан, ажилтанд шилжүүлсэн) |
+| `GET /api/status` | AI сервер / SIP асаалттай эсэх, мэдээлэл бэлэн эсэх, бэлдэлт, sidebar-ын тоо (вэб 10с тутам асууна) |
 
 Бусад бүх `/api/*` нэвтрэлт шаардана (middleware). `/docs` хаалттай.
 Хүсэлт бүрт хэрэглэгчийн байгууллага `request.state.tenant`-д тогтоно — route-ууд `Depends(current_tenant)`-ээр авч зөвхөн тэр байгууллагын өгөгдлийг хэрэглэнэ.
@@ -58,6 +59,7 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 | `routes/stats.py` | Самбарын статистик |
 | `routes/leads.py` | Бүртгэл (lead) |
 | `routes/unanswered.py` | Хариулж чадаагүй асуултууд |
+| `routes/status.py` | AI ресепшний төлөв |
 | `demo_data.py` | Жишээ дуудлага, бүртгэл үүсгэх (утасны AI бэлэн болохоос өмнө вэбийг турших) |
 | `sim_runner.py` | SIM-TRUNK-ийн скриптийг (ingest, TTS ...) манай байгууллагын хавтсаар ажиллуулна — "Аудио бэлдэх" |
 | `deps.py` | `current_user`, `current_tenant` |
