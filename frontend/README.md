@@ -42,7 +42,7 @@ components/
   sidebar/                   Sidebar, NavLinks, UserCard, LogoutButton
   setup/                     Step, OrgForm, BuildPanel
   settings/                  TelegramSettings, PasswordForm
-  calls/                     CallsTable, ChatMessage, RouteTag
+  calls/                     CallsTable, CallsFilter, ChatMessage, RouteTag
   leads/                     LeadRow
   admin/                     TenantRow, TenantSwitch, ViewingBanner
   dashboard/                 AnswerRate, RouteBreakdown, CallsByDay, SetupBanner
