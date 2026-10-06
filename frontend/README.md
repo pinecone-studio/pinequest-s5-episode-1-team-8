@@ -39,7 +39,7 @@ app/
 components/
   auth/                      AuthCard, LoginForm, SignupForm
   sidebar/                   Sidebar, NavLinks, UserCard, LogoutButton
-  setup/                     Step, OrgForm
+  setup/                     Step, OrgForm, BuildPanel
   settings/                  TelegramSettings, PasswordForm
   calls/                     CallsTable, ChatMessage, RouteTag
   leads/                     LeadRow
