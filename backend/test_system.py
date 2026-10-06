@@ -14,6 +14,7 @@ Backend-ийн тест. Кодыг өөрчилсний дараа, PR-ийн �
 9. Бүртгэл (lead): жагсаалт, төлөв, тэмдэглэл, байгууллага хооронд тусгаарлалт
 10. Хариулж чадаагүй асуултууд
 11. Мэдээлэл бэлдэх: SIM-TRUNK скрипт манай байгууллагын хавтсаар ажиллана (хуурамч SIM-TRUNK — AI загваргүй)
+12. Төлөв (/api/status): AI сервер, SIP, бэлэн эсэх, sidebar-ын тоо
 
 Түр хавтсанд (DATA_DIR) ажиллана — backend/data/-ийн жинхэнэ хэрэглэгчдэд хүрэхгүй.
 """
@@ -423,6 +424,41 @@ def test_knowledge_build():
             os.environ["SIM_TRUNK_DIR"] = old_env
 
 
+def test_status():
+    print("\n[12] Төлөв (/api/status)")
+    import json
+    import socket
+    import demo_data
+    a = owner_client("Төлөв тест", "status@example.mn")
+    t = tenant.Tenant(a.get("/api/me").json()["tenant"])
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen()
+    os.environ["AI_PORT"] = str(srv.getsockname()[1])
+    try:
+        st = a.get("/api/status").json()
+        check("AI сервер асаалттай бол ai_server=true", st["ai_server"] is True, st)
+        check("шинэ байгууллага: бэлэн биш, тоо 0", st["ready"] is False and st["facts"] == st["faq"] == st["documents"] == 0
+              and st["new_leads"] == st["unanswered"] == 0 and st["build_running"] is False and st["selector"] is None, st)
+    finally:
+        srv.close()
+    check("AI сервер унтарсан бол ai_server=false", a.get("/api/status").json()["ai_server"] is False)
+    os.environ.pop("AI_PORT")
+    demo_data.seed(t)
+    a.put("/api/knowledge/file/info.md", json={"content": "Мэдээлэл"})
+    st = a.get("/api/status").json()
+    check("sidebar-ын тоо самбартай таарна", st["new_leads"] == 2 and st["unanswered"] == 3
+          and st["unanswered"] == a.get("/api/stats").json()["unanswered"] and st["documents"] == 1, st)
+    tenant.write_json(t.path("knowledge_index", "facts.json"), {"facts": [{"text": "a"}, {"text": "b"}]})
+    check("зөвхөн мэдээлэл бэлдсэн -> бэлэн биш (FAQ аудио алга)", a.get("/api/status").json()["ready"] is False)
+    tenant.write_json(t.path("faq_audio", "faq_index.json"), {"faq": [{"id": "x"}]})
+    tenant.write_json(t.path("knowledge_index", "selector.json"), {"enabled": True, "eval": {"selector": [41, 42]}})
+    st = a.get("/api/status").json()
+    check("бэлдсэн -> бэлэн, шалгалтын үр дүн", st["ready"] is True and st["facts"] == 2 and st["faq"] == 1
+          and st["selector"] == {"enabled": True, "eval": {"selector": [41, 42]}}, st)
+    check("өөр байгууллагад нөлөөлөхгүй", owner_client("Төлөв 2", "status2@example.mn").get("/api/status").json()["ready"] is False)
+
+
 if __name__ == "__main__":
     test_login()
     test_signup()
@@ -434,5 +470,6 @@ if __name__ == "__main__":
     test_leads()
     test_unanswered()
     test_knowledge_build()
+    test_status()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)
