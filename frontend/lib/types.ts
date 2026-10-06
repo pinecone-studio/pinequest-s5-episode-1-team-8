@@ -39,3 +39,28 @@ export type Settings = {
   telegram_chat_id: number | string | null;
   telegram_chat_title: string | null;
 };
+
+// backend/routes/calls.py
+export type Call = {
+  uuid: string;
+  caller: string | null;
+  started_at: number;
+  ended_at: number | null;
+  duration: number | null;
+  questions: number;
+  unanswered: number;
+};
+
+export type Message = {
+  id: number;
+  call_uuid: string;
+  ts: number;
+  role: "user" | "assistant";
+  text: string;
+  route: string | null;
+  score: number | null;
+  stt_sec: number | null;
+  latency: number | null;
+};
+
+export type CallDetail = { call: Omit<Call, "questions" | "unanswered">; messages: Message[] };
