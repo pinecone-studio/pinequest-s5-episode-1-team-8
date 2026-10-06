@@ -1,8 +1,10 @@
-import type { Message } from "@/lib/types";
+import { TeachAnswer } from "@/components/teach/TeachAnswer";
+import type { Message, TrainingAnswers } from "@/lib/types";
 import { RouteTag } from "./RouteTag";
 
-/** Яриан дахь нэг мессеж: залгагч баруун талд, AI зүүн талд (ногоон) */
-export function ChatMessage({ m }: { m: Message }) {
+/** Яриан дахь нэг мессеж: залгагч баруун талд, AI зүүн талд (ногоон).
+ *  answers өгвөл залгагчийн асуулт бүр дээр "Зөв хариултыг заах" (AI сургалт) */
+export function ChatMessage({ m, answers }: { m: Message; answers?: TrainingAnswers | null }) {
   const user = m.role === "user";
   return (
     <div
@@ -24,6 +26,12 @@ export function ChatMessage({ m }: { m: Message }) {
           </>
         )}
       </div>
+      {user && answers && (
+        <details className="mt-2 text-sm">
+          <summary className="cursor-pointer text-muted hover:text-fg">Зөв хариултыг заах</summary>
+          <div className="mt-2 min-w-[min(420px,70vw)]"><TeachAnswer question={m.text} answers={answers} /></div>
+        </details>
+      )}
     </div>
   );
 }
