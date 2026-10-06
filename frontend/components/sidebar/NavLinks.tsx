@@ -18,12 +18,17 @@ export function NavLinks({ isAdmin }: { isAdmin: boolean }) {
           {group.items
             .filter((item) => !item.adminOnly || isAdmin)
             .map((item) => (
-              <NavLink key={item.href} item={item} active={pathname === item.href} />
+              <NavLink key={item.href} item={item} active={isActive(pathname, item.href)} />
             ))}
         </div>
       ))}
     </nav>
   );
+}
+
+// /calls/abc ч "Яриа"-г идэвхтэй болгоно
+function isActive(pathname: string, href: string) {
+  return pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
 }
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {

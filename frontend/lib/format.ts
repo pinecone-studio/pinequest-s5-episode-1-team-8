@@ -14,3 +14,10 @@ export function formatDateTime(ts?: number | null) {
     timeZone: TZ, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
   });
 }
+
+/** секунд -> "42с", "3м 05с" */
+export function formatSeconds(s?: number | null) {
+  if (s == null) return "—";
+  const total = Math.round(s);
+  return total < 60 ? `${total}с` : `${Math.floor(total / 60)}м ${String(total % 60).padStart(2, "0")}с`;
+}
