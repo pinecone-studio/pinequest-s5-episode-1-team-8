@@ -10,6 +10,7 @@ Backend-ийн тест. Кодыг өөрчилсний дараа, PR-ийн �
 5. Нууц үг солих: одоогийн нууц үг шалгах, энэ төхөөрөмж нэвтэрсэн хэвээр, бусад нь гарна
 6. Telegram мэдэгдэл: токен, групп сонгох, тест мессеж (Telegram API-г дуурайна — интернэт хэрэггүй)
 7. Яриа: дуудлагын жагсаалт, нэг дуудлагын яриа, байгууллага хооронд тусгаарлалт
+8. Самбарын статистик: хариулсан / хариулж чадаагүй, зам, сүүлийн 5 өдөр, шинэ бүртгэл
 
 Түр хавтсанд (DATA_DIR) ажиллана — backend/data/-ийн жинхэнэ хэрэглэгчдэд хүрэхгүй.
 """
@@ -283,6 +284,28 @@ def test_calls():
     check("өөр байгууллага харахгүй", b.get("/api/calls").json() == [] and b.get(f"/api/calls/{first['uuid']}").status_code == 404)
 
 
+def test_stats():
+    print("\n[8] Самбарын статистик")
+    import demo_data
+    from routes.stats import local_date
+    a = owner_client("Статистик тест", "stats@example.mn")
+    st = a.get("/api/stats").json()
+    check("хоосон үед 0, 5 өдөр", st["calls"] == 0 and st["answered"] == 0 and len(st["days"]) == 5
+          and all(d["calls"] == 0 for d in st["days"]), st)
+    demo_data.seed(tenant.Tenant(a.get("/api/me").json()["tenant"]))
+    st = a.get("/api/stats").json()
+    check("дуудлага, асуулт", st["calls"] == 6 and st["questions"] == 14, st)
+    check("хариулсан 8, хариулж чадаагүй 3 (бүртгэлийн алхам тоолохгүй)", st["answered"] == 8 and st["unanswered"] == 3
+          and not any(r.startswith("lead_") for r in st["routes"]), st["routes"])
+    check("шинэ бүртгэл", st["new_leads"] == 2)
+    expected = {}
+    for c in a.get("/api/calls").json():
+        expected[local_date(c["started_at"])] = expected.get(local_date(c["started_at"]), 0) + 1
+    check("өдөр бүрийн дуудлага (Улаанбаатарын цагаар)", all(d["calls"] == expected.get(d["date"], 0) for d in st["days"])
+          and st["days"][-1]["date"] > st["days"][0]["date"], st["days"])
+    check("өөр байгууллагад 0", owner_client("Статистик 2", "stats2@example.mn").get("/api/stats").json()["calls"] == 0)
+
+
 if __name__ == "__main__":
     test_login()
     test_signup()
@@ -290,5 +313,6 @@ if __name__ == "__main__":
     test_password()
     test_telegram()
     test_calls()
+    test_stats()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)
