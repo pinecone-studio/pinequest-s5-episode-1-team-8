@@ -12,6 +12,7 @@ Backend-ийн тест. Кодыг өөрчилсний дараа, PR-ийн �
 7. Яриа: дуудлагын жагсаалт, нэг дуудлагын яриа, байгууллага хооронд тусгаарлалт
 8. Самбарын статистик: хариулсан / хариулж чадаагүй, зам, сүүлийн 5 өдөр, шинэ бүртгэл
 9. Бүртгэл (lead): жагсаалт, төлөв, тэмдэглэл, байгууллага хооронд тусгаарлалт
+10. Хариулж чадаагүй асуултууд
 
 Түр хавтсанд (DATA_DIR) ажиллана — backend/data/-ийн жинхэнэ хэрэглэгчдэд хүрэхгүй.
 """
@@ -332,6 +333,24 @@ def test_leads():
           and b.patch(f"/api/leads/{lead['id']}", json={"status": "done"}).status_code == 404)
 
 
+def test_unanswered():
+    print("\n[10] Хариулж чадаагүй асуултууд")
+    import demo_data
+    a = owner_client("Асуулт тест", "unans@example.mn")
+    check("анх хоосон", a.get("/api/unanswered").json() == [])
+    demo_data.seed(tenant.Tenant(a.get("/api/me").json()["tenant"]))
+    items = a.get("/api/unanswered").json()
+    pairs = {(x["question"], x["route"]) for x in items}
+    check("3 асуулт, тус бүр өмнөх асуулттайгаа", pairs == {
+        ("Машины зогсоол бий юу", "repeat"), ("Хүүхдэд зориулсан сургалт байгаа юу", "handoff"),
+        ("Мэдээлэл авъя", "clarify")}, pairs)
+    check("шинэ нь эхэндээ, дуудлага руу холбоостой", items[0]["ts"] >= items[-1]["ts"]
+          and a.get(f"/api/calls/{items[0]['call_uuid']}").status_code == 200)
+    check("тоо нь самбартай таарна", len(items) == a.get("/api/stats").json()["unanswered"])
+    check("limit", len(a.get("/api/unanswered?limit=1").json()) == 1)
+    check("өөр байгууллага харахгүй", owner_client("Асуулт 2", "unans2@example.mn").get("/api/unanswered").json() == [])
+
+
 if __name__ == "__main__":
     test_login()
     test_signup()
@@ -341,5 +360,6 @@ if __name__ == "__main__":
     test_calls()
     test_stats()
     test_leads()
+    test_unanswered()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)
