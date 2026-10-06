@@ -32,6 +32,7 @@ export const NAV: { title?: string; items: NavItem[] }[] = [
       { href: "/knowledge", label: "Мэдээлэл (RAG)", icon: <><path d="M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z" /><path d="M8 7h6M8 11h6" /></> },
       { href: "/faq", label: "FAQ", icon: <><path d="M4 5h16v11H9l-5 4z" /><path d="M8 9h8M8 12h5" /></> },
       { href: "/voice", label: "Хоолой", icon: <><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></> },
+      { href: "/english", label: "Англи хэл", icon: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></> },
       { href: "/train", label: "AI сургалт", icon: <><path d="M12 3a4 4 0 0 0-4 4v1a4 4 0 0 0-3 6.5A4 4 0 0 0 9 21h1V3z" /><path d="M12 3a4 4 0 0 1 4 4v1a4 4 0 0 1 3 6.5A4 4 0 0 1 15 21h-1" /></> },
     ],
   },
