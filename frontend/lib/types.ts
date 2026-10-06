@@ -106,3 +106,22 @@ export type Lead = {
 };
 
 export const LEAD_STATUS: Record<LeadStatus, string> = { new: "Шинэ", contacted: "Холбогдсон", done: "Дууссан" };
+
+export type KnowledgeFile = { name: string; size: number; mtime: number; editable: boolean };
+export type KnowledgeResponse = { files: KnowledgeFile[] };
+
+export type FaqItem = { id: string; questions: string[]; answer: string; topic?: string | null };
+export type FaqData = { greeting: string; fillers: string[]; topics: Record<string, unknown>; faq: FaqItem[] };
+
+export type VoiceData = {
+  items: { kind: string; text: string; hash: string }[];
+  settings: { lexicon: { word: string; say: string }[]; speed: number; pause_ms: number };
+};
+
+export type TrainingExample = { i: number; q: string; faq?: string; fact?: string; label?: string };
+export type TrainingStatus = { model: Record<string, unknown> | null; seed: number; taught: TrainingExample[] };
+export type TrainingChoice = { value: string; title: string };
+export type TrainingAnswers = { faq: TrainingChoice[]; facts: TrainingChoice[]; special: TrainingChoice[] };
+
+export type EnglishItem = { id: string | null; kind: "faq" | "knowledge"; mn: string; hash: string; en: string; questions: string[]; questions_en: string[] };
+export type EnglishData = { enabled: boolean; items: EnglishItem[]; phrases: Record<string, string> };
