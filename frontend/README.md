@@ -29,16 +29,20 @@ app/
   signup/page.tsx            Байгууллага бүртгүүлэх
   (dashboard)/layout.tsx     Нэвтэрсний дараах хүрээ: sidebar + хуудас
   (dashboard)/page.tsx       Самбар
+  (dashboard)/setup/         Тохируулах (байгууллагын мэдээлэл, алхмууд)
   (dashboard)/[section]/     Хараахан хийгдээгүй хэсгүүдийн түр хуудас
   error.tsx                  Backend унтарсан үед
 components/
   auth/                      AuthCard, LoginForm, SignupForm
   sidebar/                   Sidebar, NavLinks, UserCard, LogoutButton
+  setup/                     Step, OrgForm
   ui/                        Button, Field, Card, Tag, Alert
   Brand.tsx, PageHeader.tsx
 lib/
   session.ts                 getUser() / requireUser() — cookie-г backend (/api/me) шалгана
+  api.ts                     apiGet() — server component-оос backend-ийн өгөгдөл унших
   client.ts                  apiSend() — client component-оос backend руу (алдааны мессежтэй)
+  useAction.ts               Хадгалах/устгах үйлдэл: pending, алдаа, амжилт, дараа нь хуудсыг шинэчилнэ
   nav.tsx                    Sidebar-ын цэс
   config.ts, types.ts, format.ts
 proxy.ts                     Cookie огт байхгүй бол хуудсыг зурахгүй, шууд /login руу
@@ -47,4 +51,5 @@ proxy.ts                     Cookie огт байхгүй бол хуудсыг 
 ## Шинэ хэсэг нэмэх
 
 Жишээ нь "Яриа": `app/(dashboard)/calls/page.tsx` үүсгээд эхэнд нь `await requireUser()` дуудна.
+Өгөгдлийг server талд `apiGet()`-ээр уншиж, өөрчлөхдөө client component-д `useAction()` + `apiSend()`.
 Цэс `lib/nav.tsx`-д аль хэдийн бий. Фонт локал (`app/fonts/`) — Google Fonts руу хандахгүй.
