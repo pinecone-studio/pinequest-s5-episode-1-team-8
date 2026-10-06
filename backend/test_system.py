@@ -9,6 +9,7 @@ Backend-ийн тест. Кодыг өөрчилсний дараа, PR-ийн �
 4. Байгууллагын мэдээлэл (Тохируулах): засах, загвар FAQ дахин үүсэх, байгууллага хооронд тусгаарлалт
 5. Нууц үг солих: одоогийн нууц үг шалгах, энэ төхөөрөмж нэвтэрсэн хэвээр, бусад нь гарна
 6. Telegram мэдэгдэл: токен, групп сонгох, тест мессеж (Telegram API-г дуурайна — интернэт хэрэггүй)
+7. Яриа: дуудлагын жагсаалт, нэг дуудлагын яриа, байгууллага хооронд тусгаарлалт
 
 Түр хавтсанд (DATA_DIR) ажиллана — backend/data/-ийн жинхэнэ хэрэглэгчдэд хүрэхгүй.
 """
@@ -261,11 +262,33 @@ def test_telegram():
         notify.httpx.post = real_post
 
 
+def test_calls():
+    print("\n[7] Яриа (дуудлагын түүх)")
+    import demo_data
+    a = owner_client("Дуудлага тест", "calls@example.mn")
+    b = owner_client("Хоосон байгууллага", "empty@example.mn")
+    check("анх дуудлага алга", a.get("/api/calls").json() == [])
+    t = tenant.Tenant(a.get("/api/me").json()["tenant"])
+    n = demo_data.seed(t)
+    calls = a.get("/api/calls").json()
+    check("жишээ дуудлагууд, шинэ нь эхэндээ", len(calls) == n and calls[0]["started_at"] >= calls[-1]["started_at"], len(calls))
+    first = calls[0]
+    check("асуултын тоо, хугацаа", first["questions"] == 3 and first["unanswered"] == 0 and first["duration"] > 0, first)
+    check("хариулж чадаагүй тоолно", sum(c["unanswered"] for c in calls) == 3, [c["unanswered"] for c in calls])
+    check("limit", len(a.get("/api/calls?limit=2").json()) == 2 and a.get("/api/calls?limit=0").status_code == 422)
+    d = a.get(f"/api/calls/{first['uuid']}").json()
+    check("нэг дуудлагын яриа дарааллаараа", [m["role"] for m in d["messages"]] == ["user", "assistant"] * 3
+          and d["messages"][1]["route"] == "faq", d)
+    check("байхгүй дуудлага -> 404", a.get("/api/calls/nope").status_code == 404)
+    check("өөр байгууллага харахгүй", b.get("/api/calls").json() == [] and b.get(f"/api/calls/{first['uuid']}").status_code == 404)
+
+
 if __name__ == "__main__":
     test_login()
     test_signup()
     test_org()
     test_password()
     test_telegram()
+    test_calls()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)
