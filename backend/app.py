@@ -30,7 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import accounts  # noqa: E402
 import auth  # noqa: E402  (буруу оролдлогын хязгаар, cookie)
 import tenant as tenants  # noqa: E402
-from routes import account, calls, leads, org, settings, stats, unanswered  # noqa: E402
+from routes import account, calls, knowledge, leads, org, settings, stats, unanswered  # noqa: E402
 
 LOCAL = {"127.0.0.1", "::1"}
 
@@ -174,6 +174,7 @@ app.include_router(calls.router)
 app.include_router(stats.router)
 app.include_router(leads.router)
 app.include_router(unanswered.router)
+app.include_router(knowledge.router)
 
 
 if __name__ == "__main__":
