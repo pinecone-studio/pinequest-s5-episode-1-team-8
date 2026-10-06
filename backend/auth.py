@@ -8,6 +8,7 @@
 import time
 
 COOKIE = "pc_session"
+TENANT_COOKIE = "pc_tenant"     # admin: аль байгууллагыг харж байгаа (routes/admin.py)
 MAX_FAILS, FAIL_WINDOW = 5, 600
 FAIL_DELAY = 1.0
 
@@ -32,3 +33,4 @@ def set_session(response, request, user: dict):
     secure = request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https"
     response.set_cookie(COOKIE, accounts.make_session(user), max_age=accounts.SESSION_DAYS * 86400,
                         httponly=True, samesite="lax", secure=secure)
+    response.delete_cookie(TENANT_COOKIE)        # шинээр нэвтэрмэгц өөрийн байгууллага
