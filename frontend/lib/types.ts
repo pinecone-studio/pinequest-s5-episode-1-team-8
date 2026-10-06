@@ -122,7 +122,7 @@ export type JobStatus = {
 };
 export type BuildStatus = JobStatus;
 
-export type FaqItem = { id: string; questions: string[]; answer: string; topic?: string | null };
+export type FaqItem = { id: string; questions: string[]; answer: string; topic?: string | null; auto?: boolean };
 export type FaqData = { greeting: string; fillers: string[]; topics: Record<string, unknown>; faq: FaqItem[] };
 
 // backend/routes/voice.py — recorded: өөрийн хоолойгоор бичсэн (routes/recordings.py)
