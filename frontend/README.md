@@ -30,14 +30,16 @@ app/
   (dashboard)/layout.tsx     Нэвтэрсний дараах хүрээ: sidebar + хуудас
   (dashboard)/page.tsx       Самбар
   (dashboard)/setup/         Тохируулах (байгууллагын мэдээлэл, алхмууд)
+  (dashboard)/settings/      Тохиргоо (нууц үг солих)
   (dashboard)/[section]/     Хараахан хийгдээгүй хэсгүүдийн түр хуудас
   error.tsx                  Backend унтарсан үед
 components/
   auth/                      AuthCard, LoginForm, SignupForm
   sidebar/                   Sidebar, NavLinks, UserCard, LogoutButton
   setup/                     Step, OrgForm
+  settings/                  PasswordForm
   ui/                        Button, Field, Card, Tag, Alert
-  Brand.tsx, PageHeader.tsx
+  Brand.tsx, PageHeader.tsx, Section.tsx
 lib/
   session.ts                 getUser() / requireUser() — cookie-г backend (/api/me) шалгана
   api.ts                     apiGet() — server component-оос backend-ийн өгөгдөл унших
