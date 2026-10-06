@@ -51,6 +51,7 @@ components/
 lib/
   session.ts                 getUser() / requireUser() — cookie-г backend (/api/me) шалгана
   api.ts                     apiGet() — server component-оос backend-ийн өгөгдөл унших
+  audio.ts                   Микрофоноор бичих, аудио файлыг 24kHz WAV болгох (чимээгүй тайрах, түвшин тэнцүүлэх)
   client.ts                  apiSend() — client component-оос backend руу (алдааны мессежтэй)
   useAction.ts               Хадгалах/устгах үйлдэл: pending, алдаа, амжилт, дараа нь хуудсыг шинэчилнэ
   nav.tsx                    Sidebar-ын цэс
