@@ -43,6 +43,7 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 | `GET /api/status` | AI сервер / SIP асаалттай эсэх, мэдээлэл бэлэн эсэх, бэлдэлт, sidebar-ын тоо (вэб 10с тутам асууна) |
 | `GET /api/admin/tenants` | (admin) Бүх байгууллага: хэрэглэгч, дуудлага, эрх, бэлэн эсэх |
 | `POST /api/admin/switch` `{"slug"}` | (admin) Өөр байгууллагыг сольж харах |
+| `DELETE /api/admin/switch` | (admin) Өөрийн байгууллага руу буцах |
 | `POST /api/admin/plan` `{"slug", "plan"}` | (admin) Эрх: `trial`, `active`, `suspended` |
 
 Бусад бүх `/api/*` нэвтрэлт шаардана (middleware). `/docs` хаалттай.
