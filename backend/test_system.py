@@ -15,6 +15,7 @@ Backend-ийн тест. Кодыг өөрчилсний дараа, PR-ийн �
 10. Хариулж чадаагүй асуултууд
 11. Мэдээлэл бэлдэх: SIM-TRUNK скрипт манай байгууллагын хавтсаар ажиллана (хуурамч SIM-TRUNK — AI загваргүй)
 12. Төлөв (/api/status): AI сервер, SIP, бэлэн эсэх, sidebar-ын тоо
+13. AI сургалт: сургасан загварын мэдээлэл (SIM-TRUNK-ийн бичдэг газраас)
 
 Түр хавтсанд (DATA_DIR) ажиллана — backend/data/-ийн жинхэнэ хэрэглэгчдэд хүрэхгүй.
 """
@@ -459,6 +460,17 @@ def test_status():
     check("өөр байгууллагад нөлөөлөхгүй", owner_client("Төлөв 2", "status2@example.mn").get("/api/status").json()["ready"] is False)
 
 
+def test_training_model():
+    print("\n[13] AI сургалт: сургасан загвар")
+    a = owner_client("Сургалт тест", "train@example.mn")
+    t = tenant.Tenant(a.get("/api/me").json()["tenant"])
+    check("сургаагүй үед model алга", a.get("/api/train").json()["model"] is None)
+    meta = {"enabled": True, "examples": 120, "eval": {"selector": [41, 42], "rules": [40, 42]}}
+    tenant.write_json(t.path("knowledge_index", "selector.json"), meta)   # train_selector.py-ийн бичдэг газар
+    model = a.get("/api/train").json()["model"]
+    check("train_selector.py-ийн үр дүн харагдана", model == meta, model)
+
+
 if __name__ == "__main__":
     test_login()
     test_signup()
@@ -471,5 +483,6 @@ if __name__ == "__main__":
     test_unanswered()
     test_knowledge_build()
     test_status()
+    test_training_model()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)

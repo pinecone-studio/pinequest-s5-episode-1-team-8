@@ -27,7 +27,7 @@ def load_examples(t: Tenant) -> dict:
 @router.get("")
 def status(t: Tenant = Depends(current_tenant)):
     rows = load_examples(t)["examples"]
-    meta_path = t.path("training", "selector.json")
+    meta_path = t.path("knowledge_index", "selector.json")   # SIM-TRUNK-ийн train_selector.py энд бичнэ
     try:
         with open(meta_path, encoding="utf-8") as f:
             model = json.load(f)
