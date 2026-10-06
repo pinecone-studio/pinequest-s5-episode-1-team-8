@@ -109,3 +109,6 @@ export const LEAD_STATUS: Record<LeadStatus, string> = { new: "Шинэ", contac
 
 export type KnowledgeFile = { name: string; size: number; mtime: number; editable: boolean };
 export type KnowledgeResponse = { files: KnowledgeFile[] };
+
+export type FaqItem = { id: string; questions: string[]; answer: string; topic?: string | null };
+export type FaqData = { greeting: string; fillers: string[]; topics: Record<string, unknown>; faq: FaqItem[] };
