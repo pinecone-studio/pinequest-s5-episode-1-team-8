@@ -106,3 +106,6 @@ export type Lead = {
 };
 
 export const LEAD_STATUS: Record<LeadStatus, string> = { new: "Шинэ", contacted: "Холбогдсон", done: "Дууссан" };
+
+export type KnowledgeFile = { name: string; size: number; mtime: number; editable: boolean };
+export type KnowledgeResponse = { files: KnowledgeFile[] };
