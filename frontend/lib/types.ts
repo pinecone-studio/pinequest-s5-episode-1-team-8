@@ -110,9 +110,17 @@ export const LEAD_STATUS: Record<LeadStatus, string> = { new: "Шинэ", contac
 
 export type KnowledgeFile = { name: string; size: number; mtime: number; editable: boolean };
 export type KnowledgeFact = { text: string; source: string | null; hash: string; has_audio: boolean; recorded: boolean };
-export type KnowledgeResponse = { files: KnowledgeFile[]; facts: KnowledgeFact[]; indexed_at: string | null };
-export type BuildStatus = { state: "idle" | "queued" | "running" | "done" | "error"; running: boolean; ahead: number; code: number | null; finished: number | null; log: string[] };
-
+export type KnowledgeResponse = { files: KnowledgeFile[]; facts: KnowledgeFact[]; indexed_at?: number | string | null };
+export type JobStatus = {
+  state: "idle" | "queued" | "running" | "done" | "error";
+  task?: "build" | "train" | "english" | "regen";
+  running: boolean;
+  ahead: number;
+  log: string[];
+  code?: number | null;
+  finished?: number | null;
+};
+export type BuildStatus = JobStatus;
 
 export type FaqItem = { id: string; questions: string[]; answer: string; topic?: string | null };
 export type FaqData = { greeting: string; fillers: string[]; topics: Record<string, unknown>; faq: FaqItem[] };
