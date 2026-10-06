@@ -34,7 +34,7 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 | `PUT /api/settings/telegram` `{"token"}` / `{"chat_id", "chat_title"}` | Ботын токен / мэдэгдэл очих групп |
 | `GET /api/settings/telegram/chats` | Ботод мессеж бичсэн группууд |
 | `POST /api/settings/telegram/test` | Тест мессеж |
-| `GET /api/calls?limit=100` | Сүүлийн дуудлагууд (асуултын тоо, хариулж чадаагүй тоо) |
+| `GET /api/calls?limit=100&q=&unanswered=&days=` | Сүүлийн дуудлагууд (асуултын тоо, хариулж чадаагүй тоо); дугаар/ярианы үгээр хайх, зөвхөн хариулж чадаагүй, сүүлийн N хоног |
 | `GET /api/calls/{uuid}` | Нэг дуудлагын бүх яриа |
 | `GET /api/stats` | Самбар: дуудлага, хариулсан/чадаагүй, хариултын зам, шинэ бүртгэл, сүүлийн 5 өдөр |
 | `GET /api/leads` | Бүртгэл: бүртгүүлэх / ажилтантай ярих хүсэлтүүд |
