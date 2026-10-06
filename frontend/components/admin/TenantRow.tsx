@@ -30,7 +30,18 @@ export function TenantRow({ t }: { t: AdminTenant }) {
     <tr>
       <Td>
         <b>{t.name}</b>
-        <div className="font-mono text-[13px] text-muted">{t.slug} · {formatDateTime(t.created_at)}</div>
+        {t.address ? (
+          <div className="text-[13px] text-muted">
+            <span className="font-semibold">Хаяг:</span> {t.address} · {formatDateTime(t.created_at)}
+          </div>
+        ) : (
+          <div className="font-mono text-[13px] text-muted">{t.slug} · {formatDateTime(t.created_at)}</div>
+        )}
+        {t.email && (
+          <div className="text-[13px] text-muted">
+            <span className="font-semibold">И-мэйл:</span> {t.email}
+          </div>
+        )}
       </Td>
       <Td className="font-mono text-sm">{t.extension ?? "—"}</Td>
       <Td className="text-[13px] text-muted">{t.users.map((u) => <div key={u}>{u}</div>)}</Td>
