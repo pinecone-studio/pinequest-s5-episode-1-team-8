@@ -1,18 +1,23 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
+import { BuildPanel } from "@/components/setup/BuildPanel";
 import { OrgForm } from "@/components/setup/OrgForm";
 import { Step } from "@/components/setup/Step";
-import { Button } from "@/components/ui/Button";
 import { apiGet } from "@/lib/api";
 import { requireUser } from "@/lib/session";
-import { PLAN_LABEL, type Org } from "@/lib/types";
+import { PLAN_LABEL, type BuildStatus, type Org, type Status } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Тохируулах" };
 
 export default async function SetupPage() {
   await requireUser();
-  const org = await apiGet<Org>("/api/org");
+  const [org, status, build] = await Promise.all([
+    apiGet<Org>("/api/org"),
+    apiGet<Status>("/api/status"),
+    apiGet<BuildStatus>("/api/knowledge/build"),
+  ]);
+  const minutes = Math.max(5, Math.round(((status.facts || 40) * 6) / 60)); // өгүүлбэр бүр ~6с
 
   return (
     <>
@@ -38,11 +43,12 @@ export default async function SetupPage() {
         </Link>
       </Step>
 
-      <Step n={3} done={false} title="Бэлдэх">
+      <Step n={3} done={status.ready && !build.running} title="Бэлдэх">
         <p className="mb-3 text-muted">
-          Мэдээллээс асуултын хэлбэр, FAQ-г үүсгэж, бүх хариултыг аудио болгоод AI-г сургана.
+          Мэдээллээс асуултын хэлбэр, тодруулах сэдэв, FAQ-г үүсгэж, бүх хариултыг аудио болгоод AI-г сургана.
+          ~{minutes}+ минут (өгүүлбэрийн тооноос хамаарна). Өөрийн бичлэгтэй өгүүлбэрт TTS хийхгүй.
         </p>
-        <Button disabled title="AI хэсэг нэмэгдсэний дараа">Бэлдэх (удахгүй)</Button>
+        <BuildPanel initial={build} />
       </Step>
 
       <Step n={4} done={false} title="Туршиж залгах">
@@ -50,6 +56,11 @@ export default async function SetupPage() {
           Zoiper (утасны апп)-оос <b className="font-mono text-fg">{org.extension ?? "—"}</b> дугаар руу залгана. Яриа бүр{" "}
           <Link href="/calls" className="text-brand hover:underline">Яриа</Link> хэсэгт харагдана.
         </p>
+        {status.selector?.eval?.selector && (
+          <p className="mt-2 text-muted">
+            Автомат шалгалт: <b className="text-fg">{status.selector.eval.selector[0]}/{status.selector.eval.selector[1]}</b> асуултад зөв хариулсан.
+          </p>
+        )}
         <p className="mt-2 text-[13px] text-muted">Эрх: {PLAN_LABEL[org.plan]}</p>
       </Step>
     </>
