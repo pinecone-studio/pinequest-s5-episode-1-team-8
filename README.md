@@ -1,1 +1,20 @@
 # pinequest-s5-episode-1-team-8
+
+Монгол утасны AI ресепшн — вэб удирдлага. `backend/` (Python FastAPI) + `frontend/` (Next.js, bun).
+
+## Ажиллуулах
+
+Анх удаа нэг удаа:
+```bash
+uv venv --python 3.12 .venv
+```
+
+Дараа нь backend, frontend хоёуланг нь зэрэг:
+```bash
+./dev.sh          # http://localhost:3000   (унтраах: Ctrl+C)
+```
+
+`dev.sh` асах бүрдээ шинэ нэмэгдсэн сангуудыг автоматаар суулгана. Анх асахад `admin`-ийн нууц үг терминалд нэг удаа хэвлэгдэнэ.
+Жишээ дуудлага: `.venv/bin/python backend/demo_data.py`
+
+Дэлгэрэнгүй: [backend/README.md](backend/README.md), [frontend/README.md](frontend/README.md)
