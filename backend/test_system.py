@@ -6,6 +6,7 @@ Backend-ийн тест. Кодыг өөрчилсний дараа, PR-ийн �
 1-2. Нэвтрэлт: нэвтрэх, буруу нууц үг, хамгаалалттай API, гарах, хуурамч cookie,
      нууц үг солиход хуучин session хүчингүй, буруу оролдлогын хязгаар (IP + и-мэйл)
 3. Байгууллага бүртгүүлэх: шинэ байгууллага, загвар FAQ, давхардал, хязгаар
+4. Байгууллагын мэдээлэл (Тохируулах): засах, загвар FAQ дахин үүсэх, байгууллага хооронд тусгаарлалт
 
 Түр хавтсанд (DATA_DIR) ажиллана — backend/data/-ийн жинхэнэ хэрэглэгчдэд хүрэхгүй.
 """
@@ -156,8 +157,36 @@ def test_signup():
     check("дотуур дугаар давхцахгүй", len(exts) == len(set(exts)), exts)
 
 
+def test_org():
+    print("\n[4] Байгууллагын мэдээлэл (Тохируулах)")
+    a = owner_client("Нар кофе", "nar@example.mn")
+    b = owner_client("Сар фитнес", "sar@example.mn")
+    org = a.get("/api/org").json()
+    check("GET /api/org -> өөрийн байгууллага", org["name"] == "Нар кофе" and org["users"][0]["email"] == "nar@example.mn"
+          and org["documents"] == 0 and "hash" not in org["users"][0], org)
+    r = a.put("/api/org", json={"name": "  Нар   кофе шоп ", "phone": "9911-2233", "email": "info@nar.mn",
+                                "address": "СБД, 1-р хороо.", "hours": "Өдөр бүр 08:00-22:00"})
+    t = tenant.Tenant(org["slug"])
+    faq = tenant.load_faq(t)
+    ids = {x["id"] for x in faq["faq"]}
+    check("PUT /api/org -> хадгална (зай, утсыг цэвэрлэнэ)", r.status_code == 200 and r.json()["name"] == "Нар кофе шоп"
+          and r.json()["phone"] == "99112233", r.text)
+    check("загвар FAQ дахин үүснэ: утас, хаяг, цаг, шинэ нэр мэндчилгээнд",
+          {"contact_phone", "location", "hours"} <= ids and "Нар кофе шоп" in faq["greeting"]
+          and any("ерэн ес, арван нэг" in x["answer"] for x in faq["faq"]), ids)
+    a.put("/api/org", json={"name": "Нар кофе шоп"})
+    ids = {x["id"] for x in tenant.load_faq(t)["faq"]}
+    check("хаяг, цагийг хассан -> тэдгээр FAQ хасагдана", not {"contact_phone", "location", "hours"} & ids, ids)
+    bad = [a.put("/api/org", json=body).status_code for body in
+           ({"name": "A"}, {"name": "Нар", "phone": "12"}, {"name": "Нар", "email": "буруу"})]
+    check("буруу нэр / утас / и-мэйл -> 400", bad == [400, 400, 400], bad)
+    check("өөр байгууллага зөвхөн өөрийнхийгөө харна", b.get("/api/org").json()["name"] == "Сар фитнес")
+    check("нэвтрээгүй -> 401", TestClient(app).get("/api/org").status_code == 401)
+
+
 if __name__ == "__main__":
     test_login()
     test_signup()
+    test_org()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)
