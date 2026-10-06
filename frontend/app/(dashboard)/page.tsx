@@ -4,7 +4,7 @@ import { StatCard } from "@/components/ui/Card";
 import { Tag } from "@/components/ui/Tag";
 import { formatDateTime } from "@/lib/format";
 import { requireUser } from "@/lib/session";
-import { ROLE_LABEL } from "@/lib/types";
+import { PLAN_LABEL, ROLE_LABEL } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Самбар" };
 
@@ -18,8 +18,12 @@ export default async function DashboardPage() {
         <StatCard label="Эрх">
           <Tag tone={user.role === "admin" ? "warn" : "ok"}>{ROLE_LABEL[user.role]}</Tag>
         </StatCard>
-        <StatCard label="Байгууллага">
-          <span className="font-mono">{user.tenant}</span>
+        <StatCard label="Байгууллага">{user.tenant_name}</StatCard>
+        <StatCard label="Дотуур дугаар">
+          <span className="font-mono">{user.extension ?? "—"}</span>
+        </StatCard>
+        <StatCard label="Эрхийн төлөв">
+          <Tag tone={user.plan === "active" ? "ok" : user.plan === "suspended" ? "bad" : "gray"}>{PLAN_LABEL[user.plan]}</Tag>
         </StatCard>
         <StatCard label="Нэвтрэлт дуусах">{formatDateTime(user.expires)}</StatCard>
       </div>

@@ -11,6 +11,6 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // /login, /api (backend руу дамжина), Next-ийн файлууд, icon-оос бусад бүх хуудас
-  matcher: ["/((?!login|api|_next/static|_next/image|icon.svg).*)"],
+  // /login, /signup, /api (backend руу дамжина), Next-ийн файлууд, icon-оос бусад бүх хуудас
+  matcher: ["/((?!login|signup|api|_next/static|_next/image|icon.svg).*)"],
 };

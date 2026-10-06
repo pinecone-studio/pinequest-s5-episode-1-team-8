@@ -26,17 +26,19 @@ app/
   layout.tsx                 html, фонт, өнгө
   globals.css                Tailwind + өнгөний токенууд (bg-panel, text-muted, border-line, bg-brand ...)
   login/page.tsx             Нэвтрэх хуудас
+  signup/page.tsx            Байгууллага бүртгүүлэх
   (dashboard)/layout.tsx     Нэвтэрсний дараах хүрээ: sidebar + хуудас
   (dashboard)/page.tsx       Самбар
   (dashboard)/[section]/     Хараахан хийгдээгүй хэсгүүдийн түр хуудас
   error.tsx                  Backend унтарсан үед
 components/
-  auth/LoginForm.tsx         Нэвтрэх форм
+  auth/                      AuthCard, LoginForm, SignupForm
   sidebar/                   Sidebar, NavLinks, UserCard, LogoutButton
   ui/                        Button, Field, Card, Tag, Alert
   Brand.tsx, PageHeader.tsx
 lib/
   session.ts                 getUser() / requireUser() — cookie-г backend (/api/me) шалгана
+  client.ts                  apiSend() — client component-оос backend руу (алдааны мессежтэй)
   nav.tsx                    Sidebar-ын цэс
   config.ts, types.ts, format.ts
 proxy.ts                     Cookie огт байхгүй бол хуудсыг зурахгүй, шууд /login руу
