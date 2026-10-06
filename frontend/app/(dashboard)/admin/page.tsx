@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { NewTenantForm } from "@/components/admin/NewTenantForm";
 import { TenantRow } from "@/components/admin/TenantRow";
 import { EmptyState, PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -20,6 +21,7 @@ export default async function AdminPage() {
         title="Байгууллагууд"
         sub="Платформд бүртгүүлсэн бүх байгууллага. Эрхийг (төлбөр төлсний дараа) энд идэвхжүүлнэ. «Харах» дарахад тэр байгууллагын бүх хуудсыг харна."
       />
+      <NewTenantForm />
       <Card>
         {tenants.length ? (
           <Table head={["Байгууллага", "Дугаар", "Хэрэглэгч", "Дуудлага", "Төлөв", "Эрх", ""]}>

@@ -150,6 +150,8 @@ export type Status = {
 export type AdminTenant = {
   slug: string;
   name: string;
+  address?: string | null;
+  email?: string | null;
   extension: string | null;
   plan: Plan;
   created_at: number | null;
