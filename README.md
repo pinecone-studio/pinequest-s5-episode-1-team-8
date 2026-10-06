@@ -1,6 +1,11 @@
 # pinequest-s5-episode-1-team-8
 
-Монгол утасны AI ресепшн — вэб удирдлага. `backend/` (Python FastAPI) + `frontend/` (Next.js, bun).
+Монгол утасны AI ресепшн — вэб удирдлага ба сервер тал.
+
+| Хавтас | Юу вэ |
+|---|---|
+| [`backend/`](backend/README.md) | Python FastAPI сервер (порт 8100) — нэвтрэлт, API |
+| [`frontend/`](frontend/README.md) | Next.js (bun) вэб удирдлага (порт 3000) — `/api/*` хүсэлтийг backend руу дамжуулна |
 
 ## Ажиллуулах
 
