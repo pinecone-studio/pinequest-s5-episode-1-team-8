@@ -521,6 +521,27 @@ def test_admin():
     login(adm, "root", "root-pass-123")
     check("дахин нэвтрэхэд өөрийн байгууллага", adm.get("/api/me").json()["tenant"] == "pinecone")
 
+    new = {"name": "Нэмсэн сургууль", "phone": "7011 2233", "email": "info@nemsen.mn", "address": "Сүхбаатар дүүрэг",
+           "hours": "", "owner_email": "ezen@example.mn", "password": "ezen-pass-123"}
+    check("owner байгууллага нэмэх -> 403", owner.post("/api/admin/tenants", json=new).status_code == 403)
+    r = adm.post("/api/admin/tenants", json=new)
+    new_slug = r.json().get("slug")
+    row = {x["slug"]: x for x in adm.get("/api/admin/tenants").json()}.get(new_slug, {})
+    check("admin байгууллага + эзэмшигч нэмнэ", r.status_code == 200 and row.get("users") == ["ezen@example.mn"]
+          and row.get("address") == "Сүхбаатар дүүрэг" and row.get("email") == "info@nemsen.mn", (r.text, row))
+    check("admin нэвтэрсэн хэвээр", adm.get("/api/me").json()["email"] == "root")
+    ezen = TestClient(app)
+    check("эзэмшигч нэвтэрч өөрийн байгууллагыг харна", login(ezen, "ezen@example.mn", "ezen-pass-123").status_code == 200
+          and ezen.get("/api/me").json()["tenant"] == new_slug and ezen.get("/api/org").json()["phone"] == "70112233")
+    before = len(tenant.all_tenants())
+    dup = adm.post("/api/admin/tenants", json={**new, "name": "Давхар"})
+    check("давхардсан эзэмшигчийн и-мэйл -> 400, байгууллага үлдэхгүй",
+          dup.status_code == 400 and len(tenant.all_tenants()) == before, dup.text)
+    bad = [adm.post("/api/admin/tenants", json={**new, "owner_email": "x@example.mn", "password": "short"}).status_code,
+           adm.post("/api/admin/tenants", json={**new, "owner_email": "buruu"}).status_code,
+           adm.post("/api/admin/tenants", json={**new, "owner_email": "y@example.mn", "email": "buruu"}).status_code]
+    check("буруу нууц үг / и-мэйл -> 400", bad == [400, 400, 400], bad)
+
 
 def wav_bytes(seconds: float = 1.0, rate: int = 24000, channels: int = 1) -> bytes:
     import io

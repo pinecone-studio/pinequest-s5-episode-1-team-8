@@ -11,6 +11,7 @@
 import json
 import os
 import re
+import threading
 import time
 
 from config import TENANTS_DIR
@@ -20,6 +21,7 @@ DEFAULT_TENANT = "pinecone"
 DEFAULT_NAME = "Pinecone Academy"
 SLUG = re.compile(r"[a-z0-9][a-z0-9-]{1,31}")
 PLANS = ("trial", "active", "suspended")
+LOCK = threading.Lock()  # шинэ байгууллага үүсгэх (slug, дотуур дугаар давхцахгүй)
 
 # {name} -> байгууллагын нэр. Нэрийн араас нөхцөл залгахгүй байхаар бичсэн.
 GREETING = ("Сайн байна уу. {name} байна. Үйлчилгээний чанарыг сайжруулах зорилгоор яриаг хадгална. "
