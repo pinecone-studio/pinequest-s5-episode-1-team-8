@@ -39,6 +39,7 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 | `GET /api/stats` | Самбар: дуудлага, хариулсан/чадаагүй, хариултын зам, шинэ бүртгэл, сүүлийн 5 өдөр |
 | `GET /api/leads` | Бүртгэл: бүртгүүлэх / ажилтантай ярих хүсэлтүүд |
 | `PATCH /api/leads/{id}` `{"status"?, "notes"?}` | Төлөв (`new`, `contacted`, `done`), тэмдэглэл |
+| `GET /api/unanswered?limit=200` | AI хариулж чадаагүй асуултууд (дахин асуусан, тодруулсан, ажилтанд шилжүүлсэн) |
 
 Бусад бүх `/api/*` нэвтрэлт шаардана (middleware). `/docs` хаалттай.
 Хүсэлт бүрт хэрэглэгчийн байгууллага `request.state.tenant`-д тогтоно — route-ууд `Depends(current_tenant)`-ээр авч зөвхөн тэр байгууллагын өгөгдлийг хэрэглэнэ.
@@ -56,6 +57,7 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 | `routes/calls.py`, `db.py` | Яриа: дуудлагын лог (байгууллага бүрийн `data/receptionist.db`) |
 | `routes/stats.py` | Самбарын статистик |
 | `routes/leads.py` | Бүртгэл (lead) |
+| `routes/unanswered.py` | Хариулж чадаагүй асуултууд |
 | `demo_data.py` | Жишээ дуудлага, бүртгэл үүсгэх (утасны AI бэлэн болохоос өмнө вэбийг турших) |
 | `deps.py` | `current_user`, `current_tenant` |
 | `config.py` | `DATA_DIR` (анхдагч `backend/data/`) |
