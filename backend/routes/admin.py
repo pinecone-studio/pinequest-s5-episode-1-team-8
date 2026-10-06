@@ -2,7 +2,8 @@
 Платформын admin: бүх байгууллага (вэб -> Байгууллагууд). Зөвхөн role=admin, бусдад 403.
 
   GET  /api/admin/tenants               -> бүх байгууллага: нэр, дугаар, эрх, хэрэглэгчид, дуудлагын тоо, бэлэн эсэх
-  POST /api/admin/switch {"slug"}       -> тэр байгууллагыг харах (cookie; app.viewed_tenant). Өөрийнхөөрөө буцна.
+  POST /api/admin/switch {"slug"}       -> тэр байгууллагыг харах (cookie; app.viewed_tenant)
+  DELETE /api/admin/switch              -> өөрийн байгууллага руу буцах
   POST /api/admin/plan {"slug", "plan"} -> trial -> active (төлбөр төлсөн) -> suspended. Төлбөрийн систем алга: гараар.
 """
 import os
@@ -68,6 +69,13 @@ def switch(request: Request, body: SwitchBody):
     secure = request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https"
     response.set_cookie(auth.TENANT_COOKIE, t.slug, max_age=accounts.SESSION_DAYS * 86400,
                         httponly=True, samesite="lax", secure=secure)
+    return response
+
+
+@router.delete("/switch")
+def switch_back():
+    response = JSONResponse({"ok": True})
+    response.delete_cookie(auth.TENANT_COOKIE)
     return response
 
 
