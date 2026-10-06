@@ -11,6 +11,7 @@ Backend-ийн тест. Кодыг өөрчилсний дараа, PR-ийн �
 6. Telegram мэдэгдэл: токен, групп сонгох, тест мессеж (Telegram API-г дуурайна — интернэт хэрэггүй)
 7. Яриа: дуудлагын жагсаалт, нэг дуудлагын яриа, байгууллага хооронд тусгаарлалт
 8. Самбарын статистик: хариулсан / хариулж чадаагүй, зам, сүүлийн 5 өдөр, шинэ бүртгэл
+9. Бүртгэл (lead): жагсаалт, төлөв, тэмдэглэл, байгууллага хооронд тусгаарлалт
 
 Түр хавтсанд (DATA_DIR) ажиллана — backend/data/-ийн жинхэнэ хэрэглэгчдэд хүрэхгүй.
 """
@@ -306,6 +307,31 @@ def test_stats():
     check("өөр байгууллагад 0", owner_client("Статистик 2", "stats2@example.mn").get("/api/stats").json()["calls"] == 0)
 
 
+def test_leads():
+    print("\n[9] Бүртгэл (lead)")
+    import demo_data
+    a = owner_client("Бүртгэл тест", "leads@example.mn")
+    b = owner_client("Бүртгэл 2", "leads2@example.mn")
+    check("анх хоосон", a.get("/api/leads").json() == [])
+    demo_data.seed(tenant.Tenant(a.get("/api/me").json()["tenant"]))
+    leads = a.get("/api/leads").json()
+    check("2 бүртгэл, шинэ нь эхэндээ, төлөв new", len(leads) == 2 and leads[0]["created_at"] >= leads[1]["created_at"]
+          and {x["status"] for x in leads} == {"new"}, leads)
+    lead = next(x for x in leads if x["reason"] == "lead")
+    check("баталгаажсан дугаар, STT бичвэр", lead["phone"] == "95554433" and lead["phone_raw"], lead)
+    handoff = next(x for x in leads if x["reason"] == "handoff")
+    check("ажилтан руу шилжүүлсэн: дугааргүй, асуулттай", handoff["phone"] is None and handoff["question"], handoff)
+    r = a.patch(f"/api/leads/{lead['id']}", json={"status": "contacted", "notes": "  Маргааш залгана  "})
+    check("төлөв, тэмдэглэл хадгална", r.status_code == 200 and r.json()["status"] == "contacted"
+          and r.json()["notes"] == "Маргааш залгана", r.text)
+    check("зөвхөн тэмдэглэл -> төлөв хэвээр", a.patch(f"/api/leads/{lead['id']}", json={"notes": "ok"}).json()["status"] == "contacted")
+    check("шинэ бүртгэлийн тоо буурна", a.get("/api/stats").json()["new_leads"] == 1)
+    check("буруу төлөв -> 400", a.patch(f"/api/leads/{lead['id']}", json={"status": "bad"}).status_code == 400)
+    check("байхгүй -> 404", a.patch("/api/leads/99999", json={"status": "done"}).status_code == 404)
+    check("өөр байгууллага харахгүй, засахгүй", b.get("/api/leads").json() == []
+          and b.patch(f"/api/leads/{lead['id']}", json={"status": "done"}).status_code == 404)
+
+
 if __name__ == "__main__":
     test_login()
     test_signup()
@@ -314,5 +340,6 @@ if __name__ == "__main__":
     test_telegram()
     test_calls()
     test_stats()
+    test_leads()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)
