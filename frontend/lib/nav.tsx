@@ -8,7 +8,7 @@ export type NavItem = {
   badge?: keyof Badges; // цэсний баруун талд тоо (0 бол харагдахгүй)
 };
 
-/** Sidebar-ын тоон тэмдэг (backend /api/stats-аас) */
+/** Sidebar-ын тоон тэмдэг (backend /api/status-аас, 10с тутам) */
 export type Badges = { new_leads: number; unanswered: number };
 
 export const NAV: { title?: string; items: NavItem[] }[] = [

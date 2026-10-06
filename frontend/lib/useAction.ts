@@ -2,9 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { refreshStatus } from "./useStatus";
 
 /** Хадгалах, устгах зэрэг үйлдэл: явж байгаа эсэх, алдаа, амжилтын мессеж.
- *  Амжилттай бол хуудсын өгөгдлийг backend-ээс дахин уншина (router.refresh). */
+ *  Амжилттай бол хуудсын өгөгдөл, sidebar-ын төлөвийг backend-ээс дахин уншина. */
 export function useAction() {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -19,6 +20,7 @@ export function useAction() {
       await fn();
       setMessage(okMessage);
       router.refresh();
+      void refreshStatus(); // sidebar-ын тоо (бүртгэл, хариулж чадаагүй)
       return true;
     } catch (err) {
       setError((err as Error).message);
