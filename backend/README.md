@@ -28,6 +28,10 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 | `GET /api/org` | Байгууллагын мэдээлэл, хэрэглэгчид, мэдээллийн файлын тоо |
 | `PUT /api/org` `{"name", "phone", "email", "address", "hours"}` | Хадгална; мэндчилгээ, утас/хаяг/цагийн FAQ дахин үүснэ |
 | `POST /api/account/password` `{"current", "new"}` | Нууц үг солих; энэ төхөөрөмж нэвтэрсэн хэвээр, бусад нь гарна |
+| `GET /api/settings` | Telegram тохиргоо (токеныг өөрийг нь буцаахгүй) |
+| `PUT /api/settings/telegram` `{"token"}` / `{"chat_id", "chat_title"}` | Ботын токен / мэдэгдэл очих групп |
+| `GET /api/settings/telegram/chats` | Ботод мессеж бичсэн группууд |
+| `POST /api/settings/telegram/test` | Тест мессеж |
 
 Бусад бүх `/api/*` нэвтрэлт шаардана (middleware). `/docs` хаалттай.
 Хүсэлт бүрт хэрэглэгчийн байгууллага `request.state.tenant`-д тогтоно — route-ууд `Depends(current_tenant)`-ээр авч зөвхөн тэр байгууллагын өгөгдлийг хэрэглэнэ.
@@ -41,6 +45,7 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 | `speech.py` | Тоо, утасны дугаарыг монгол үгээр (FAQ-ийн хариултад) |
 | `routes/org.py` | Байгууллагын мэдээлэл (Тохируулах) |
 | `routes/account.py` | Нууц үг солих |
+| `routes/settings.py`, `notify.py` | Telegram мэдэгдэл (байгууллага бүрийн `data/settings.json`, 0600) |
 | `deps.py` | `current_user`, `current_tenant` |
 | `config.py` | `DATA_DIR` (анхдагч `backend/data/`) |
 | `accounts.py` | Хэрэглэгчид (SQLite `backend/data/accounts.db`), нууц үгийн хэш, session cookie |
