@@ -9,6 +9,10 @@ export function Sidebar({ user }: { user: User }) {
     <aside className="sticky top-0 flex h-screen w-[270px] shrink-0 flex-col overflow-y-auto border-r border-line px-[18px] pt-[30px] pb-[18px] max-md:static max-md:h-auto max-md:w-full max-md:border-r-0 max-md:border-b">
       <Link href="/" className="px-3 pb-[30px]">
         <Brand />
+        <div className="mt-3 truncate text-sm font-semibold text-fg" title={user.tenant_name}>
+          {user.tenant_name}
+          {user.extension && <span className="ml-2 font-mono text-xs font-medium text-muted">#{user.extension}</span>}
+        </div>
       </Link>
       <NavLinks isAdmin={user.role === "admin"} />
       <div className="mt-auto border-t border-line pt-[18px]">
