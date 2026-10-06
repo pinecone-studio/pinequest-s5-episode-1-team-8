@@ -5,8 +5,7 @@ import { useState, type FormEvent } from "react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
-
-const OFFLINE = "Сервертэй холбогдож чадсангүй. Түр хүлээгээд дахин оролдоно уу.";
+import { apiSend } from "@/lib/client";
 
 /** И-мэйл + нууц үг -> POST /api/login (backend httpOnly cookie тавина) -> самбар руу */
 export function LoginForm() {
@@ -20,22 +19,13 @@ export function LoginForm() {
     setPending(true);
     setError("");
     try {
-      const res = await fetch("/api/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: form.get("email"), password: form.get("password") }),
-      });
-      if (res.ok) {
-        router.replace("/");
-        router.refresh();
-        return; // самбар ачаалагдтал товч идэвхгүй хэвээр
-      }
-      const body = await res.json().catch(() => null);
-      setError(body?.detail ?? OFFLINE);
-    } catch {
-      setError(OFFLINE);
+      await apiSend("/api/login", "POST", { email: form.get("email"), password: form.get("password") });
+      router.replace("/");
+      router.refresh(); // самбар ачаалагдтал товч идэвхгүй хэвээр
+    } catch (err) {
+      setError((err as Error).message);
+      setPending(false);
     }
-    setPending(false);
   }
 
   return (
