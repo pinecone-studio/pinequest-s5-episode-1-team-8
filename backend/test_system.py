@@ -8,6 +8,8 @@ Backend-ийн тест. Кодыг өөрчилсний дараа, PR-ийн �
 3. Байгууллага бүртгүүлэх: шинэ байгууллага, загвар FAQ, давхардал, хязгаар
 4. Байгууллагын мэдээлэл (Тохируулах): засах, загвар FAQ дахин үүсэх, байгууллага хооронд тусгаарлалт
 5. Нууц үг солих: одоогийн нууц үг шалгах, энэ төхөөрөмж нэвтэрсэн хэвээр, бусад нь гарна
+6. Telegram мэдэгдэл: токен, групп сонгох, тест мессеж (Telegram API-г дуурайна — интернэт хэрэггүй)
+7. Яриа: дуудлагын жагсаалт, нэг дуудлагын яриа, байгууллага хооронд тусгаарлалт
 
 Түр хавтсанд (DATA_DIR) ажиллана — backend/data/-ийн жинхэнэ хэрэглэгчдэд хүрэхгүй.
 """
@@ -206,10 +208,87 @@ def test_password():
     auth._fails.clear()
 
 
+class FakeTelegram:
+    """notify.httpx.post-ийн оронд: Telegram руу хандахгүй, дуудлагыг тэмдэглэнэ."""
+    TOKEN = "123456789:" + "A" * 35
+
+    def __init__(self):
+        self.calls: list[tuple[str, dict]] = []
+
+    def __call__(self, url, json=None, timeout=None):
+        token, method = url.split("/bot", 1)[1].split("/", 1)
+        self.calls.append((method, json or {}))
+        if token != self.TOKEN:
+            result = {"ok": False, "description": "Unauthorized"}
+        elif method == "getMe":
+            result = {"ok": True, "result": {"username": "gerel_bot"}}
+        elif method == "getUpdates":
+            result = {"ok": True, "result": [{"message": {"chat": {"id": -100123, "title": "Ажилтнууд"}}}]}
+        else:
+            result = {"ok": True, "result": {}}
+        return type("R", (), {"status_code": 200, "json": lambda self: result})()
+
+
+def test_telegram():
+    print("\n[6] Telegram мэдэгдэл")
+    import notify
+    fake = FakeTelegram()
+    real_post, notify.httpx.post = notify.httpx.post, fake
+    try:
+        a = owner_client("Мөнх эмнэлэг", "munkh@example.mn")
+        st = a.get("/api/settings").json()
+        check("анх тохируулаагүй", st["telegram_token_set"] is False and st["telegram_chat_id"] is None, st)
+        r = a.put("/api/settings/telegram", json={"token": "буруу/../токен"})
+        check("хэлбэр буруу токен -> 400, Telegram руу хандахгүй", r.status_code == 400 and not fake.calls, r.text)
+        r = a.put("/api/settings/telegram", json={"token": "123456789:" + "B" * 35})
+        check("Telegram татгалзсан токен -> 400", r.status_code == 400 and "Unauthorized" in r.text, r.text)
+        check("токенгүй үед групп сонгох -> 400", a.put("/api/settings/telegram", json={"chat_id": 1}).status_code == 400)
+        r = a.put("/api/settings/telegram", json={"token": FakeTelegram.TOKEN})
+        st = r.json()
+        check("зөв токен -> хадгална, токеныг буцаахгүй (сүүлийн 4 үсэг л)", r.status_code == 200 and st["telegram_token_set"]
+              and st["telegram_bot"] == "gerel_bot" and FakeTelegram.TOKEN not in r.text and st["telegram_token_hint"] == "…AAAA", r.text)
+        chats = a.get("/api/settings/telegram/chats").json()
+        check("групп хайх", chats == [{"id": -100123, "title": "Ажилтнууд"}], chats)
+        check("групп сонгоогүй үед тест -> 400", a.post("/api/settings/telegram/test").status_code == 400)
+        a.put("/api/settings/telegram", json={"chat_id": -100123, "chat_title": "Ажилтнууд"})
+        r = a.post("/api/settings/telegram/test")
+        check("тест мессеж сонгосон групп руу", r.status_code == 200 and fake.calls[-1][0] == "sendMessage"
+              and fake.calls[-1][1]["chat_id"] == -100123 and "Мөнх эмнэлэг" in fake.calls[-1][1]["text"], r.text)
+        t = tenant.Tenant(a.get("/api/me").json()["tenant"])
+        check("тохиргооны файл 0600", oct(os.stat(t.settings_path).st_mode & 0o777) == "0o600")
+        b = owner_client("Өөр байгууллага", "other@example.mn")
+        check("өөр байгууллага хуваалцахгүй", b.get("/api/settings").json()["telegram_token_set"] is False)
+    finally:
+        notify.httpx.post = real_post
+
+
+def test_calls():
+    print("\n[7] Яриа (дуудлагын түүх)")
+    import demo_data
+    a = owner_client("Дуудлага тест", "calls@example.mn")
+    b = owner_client("Хоосон байгууллага", "empty@example.mn")
+    check("анх дуудлага алга", a.get("/api/calls").json() == [])
+    t = tenant.Tenant(a.get("/api/me").json()["tenant"])
+    n = demo_data.seed(t)
+    calls = a.get("/api/calls").json()
+    check("жишээ дуудлагууд, шинэ нь эхэндээ", len(calls) == n and calls[0]["started_at"] >= calls[-1]["started_at"], len(calls))
+    first = calls[0]
+    check("асуултын тоо, хугацаа", first["questions"] == 3 and first["unanswered"] == 0 and first["duration"] > 0, first)
+    check("хариулж чадаагүй тоолно", sum(c["unanswered"] for c in calls) == 3, [c["unanswered"] for c in calls])
+    check("limit", len(a.get("/api/calls?limit=2").json()) == 2 and a.get("/api/calls?limit=0").status_code == 422)
+    d = a.get(f"/api/calls/{first['uuid']}").json()
+    check("нэг дуудлагын яриа дарааллаараа", [m["role"] for m in d["messages"]] == ["user", "assistant"] * 3
+          and d["messages"][1]["route"] == "faq", d)
+    check("байхгүй дуудлага -> 404", a.get("/api/calls/nope").status_code == 404)
+    check("өөр байгууллага харахгүй", b.get("/api/calls").json() == [] and b.get(f"/api/calls/{first['uuid']}").status_code == 404)
+
+
 if __name__ == "__main__":
     test_login()
     test_signup()
     test_org()
     test_password()
+    test_telegram()
+    test_calls()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)
