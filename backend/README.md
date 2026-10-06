@@ -1,6 +1,6 @@
 # Backend (Python FastAPI)
 
-AI ресепшний сервер тал. Одоогоор зөвхөн **нэвтрэлт**. Вэб интерфейс нь `frontend/` (Next.js) — хөтөч backend руу шууд биш, Next.js-ээр дамжиж хандана.
+AI ресепшний сервер тал. Вэб интерфейс нь `frontend/` (Next.js) — хөтөч backend руу шууд биш, Next.js-ээр дамжиж хандана.
 
 ## Суулгах, ажиллуулах
 
@@ -11,7 +11,7 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 .venv/bin/python backend/app.py        # http://127.0.0.1:8100
 ```
 
-Анх асахад хэрэглэгч байхгүй бол `admin` хэрэглэгч санамсаргүй нууц үгтэй үүсч, терминалд **нэг удаа** хэвлэгдэнэ.
+Анх асахад жишиг байгууллага (Pinecone Academy) ба `admin` хэрэглэгч санамсаргүй нууц үгтэй үүсч, терминалд **нэг удаа** хэвлэгдэнэ.
 Нууц үг солих: `.venv/bin/python backend/accounts.py admin admin`
 
 Порт 8100 (SIM-TRUNK-ийн вэб 8000 дээр ажилладаг тул давхцахгүй). Солих: `API_PORT=...`
@@ -20,17 +20,27 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 
 | Хүсэлт | Юу хийх вэ |
 |---|---|
+| `POST /api/signup` `{"company", "phone", "email", "password"}` | Шинэ байгууллага + эзэмшигч хэрэглэгч үүсгээд нэвтэрнэ (нэг IP-ээс цагт 3) |
 | `POST /api/login` `{"email", "password"}` | Зөв бол хэрэглэгч + httpOnly session cookie (`pc_session`, 7 хоног) |
 | `POST /api/logout` | Cookie устгана |
-| `GET /api/me` | Нэвтэрсэн хэрэглэгч `{email, role, tenant, expires}`, үгүй бол 401 |
+| `GET /api/me` | Нэвтэрсэн хэрэглэгч, байгууллага `{email, role, tenant, tenant_name, extension, plan, expires}`, үгүй бол 401 |
+
+| `GET /api/org` | Байгууллагын мэдээлэл, хэрэглэгчид, мэдээллийн файлын тоо |
+| `PUT /api/org` `{"name", "phone", "email", "address", "hours"}` | Хадгална; мэндчилгээ, утас/хаяг/цагийн FAQ дахин үүснэ |
 
 Бусад бүх `/api/*` нэвтрэлт шаардана (middleware). `/docs` хаалттай.
+Хүсэлт бүрт хэрэглэгчийн байгууллага `request.state.tenant`-д тогтоно — route-ууд `Depends(current_tenant)`-ээр авч зөвхөн тэр байгууллагын өгөгдлийг хэрэглэнэ.
 
 ## Файлууд
 
 | Файл | Үүрэг |
 |---|---|
-| `app.py` | FastAPI: нэвтрэх, гарах, `/api/me`, нэвтрэлт шалгах middleware |
+| `app.py` | FastAPI: бүртгүүлэх, нэвтрэх, гарах, `/api/me`, нэвтрэлт шалгах middleware |
+| `tenant.py` | Байгууллага: `backend/data/tenants/<slug>/` (config.json, faq.json, knowledge/), загвар FAQ |
+| `speech.py` | Тоо, утасны дугаарыг монгол үгээр (FAQ-ийн хариултад) |
+| `routes/org.py` | Байгууллагын мэдээлэл (Тохируулах) |
+| `deps.py` | `current_user`, `current_tenant` |
+| `config.py` | `DATA_DIR` (анхдагч `backend/data/`) |
 | `accounts.py` | Хэрэглэгчид (SQLite `backend/data/accounts.db`), нууц үгийн хэш, session cookie |
 | `auth.py` | Cookie нэр, буруу оролдлогын хязгаар |
 | `test_system.py` | Тест |
