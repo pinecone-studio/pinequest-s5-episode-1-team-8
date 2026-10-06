@@ -21,3 +21,9 @@ export function formatSeconds(s?: number | null) {
   const total = Math.round(s);
   return total < 60 ? `${total}с` : `${Math.floor(total / 60)}м ${String(total % 60).padStart(2, "0")}с`;
 }
+
+/** "2026-10-06" -> { day: "06", weekday: "Мяг" } */
+export function dayLabel(date: string) {
+  const d = new Date(`${date}T00:00:00Z`);
+  return { day: date.slice(8, 10), weekday: WEEK[d.getUTCDay()].slice(0, 3) };
+}
