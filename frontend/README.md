@@ -30,14 +30,16 @@ app/
   (dashboard)/layout.tsx     Нэвтэрсний дараах хүрээ: sidebar + хуудас
   (dashboard)/page.tsx       Самбар
   (dashboard)/setup/         Тохируулах (байгууллагын мэдээлэл, алхмууд)
-  (dashboard)/settings/      Тохиргоо (нууц үг солих)
+  (dashboard)/settings/      Тохиргоо (Telegram мэдэгдэл, нууц үг)
+  (dashboard)/calls/         Яриа: дуудлагын жагсаалт, calls/[uuid] — нэг дуудлагын яриа
   (dashboard)/[section]/     Хараахан хийгдээгүй хэсгүүдийн түр хуудас
   error.tsx                  Backend унтарсан үед
 components/
   auth/                      AuthCard, LoginForm, SignupForm
   sidebar/                   Sidebar, NavLinks, UserCard, LogoutButton
   setup/                     Step, OrgForm
-  settings/                  PasswordForm
+  settings/                  TelegramSettings, PasswordForm
+  calls/                     CallsTable, ChatMessage, RouteTag
   ui/                        Button, Field, Card, Tag, Alert
   Brand.tsx, PageHeader.tsx, Section.tsx
 lib/
@@ -54,4 +56,4 @@ proxy.ts                     Cookie огт байхгүй бол хуудсыг 
 
 Жишээ нь "Яриа": `app/(dashboard)/calls/page.tsx` үүсгээд эхэнд нь `await requireUser()` дуудна.
 Өгөгдлийг server талд `apiGet()`-ээр уншиж, өөрчлөхдөө client component-д `useAction()` + `apiSend()`.
-Цэс `lib/nav.tsx`-д аль хэдийн бий. Фонт локал (`app/fonts/`) — Google Fonts руу хандахгүй.
+Цэс `lib/nav.tsx`-д аль хэдийн бий. Жишээ дуудлага: `.venv/bin/python backend/demo_data.py`. Фонт локал (`app/fonts/`) — Google Fonts руу хандахгүй.
