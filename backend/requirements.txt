@@ -1,4 +1,4 @@
 # Python 3.12. Суулгах: uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r backend/requirements.txt
 fastapi==0.142.2
 uvicorn==0.54.0
-httpx==0.28.1            # тест (fastapi.testclient)
+httpx==0.28.1            # Telegram мэдэгдэл, тест (fastapi.testclient)

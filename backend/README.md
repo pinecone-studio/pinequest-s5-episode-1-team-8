@@ -14,6 +14,8 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 Анх асахад жишиг байгууллага (Pinecone Academy) ба `admin` хэрэглэгч санамсаргүй нууц үгтэй үүсч, терминалд **нэг удаа** хэвлэгдэнэ.
 Нууц үг солих: `.venv/bin/python backend/accounts.py admin admin`
 
+Жишээ дуудлага үүсгэх (вэбийг турших): `.venv/bin/python backend/demo_data.py`
+
 Порт 8100 (SIM-TRUNK-ийн вэб 8000 дээр ажилладаг тул давхцахгүй). Солих: `API_PORT=...`
 
 ## API
@@ -27,6 +29,13 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 
 | `GET /api/org` | Байгууллагын мэдээлэл, хэрэглэгчид, мэдээллийн файлын тоо |
 | `PUT /api/org` `{"name", "phone", "email", "address", "hours"}` | Хадгална; мэндчилгээ, утас/хаяг/цагийн FAQ дахин үүснэ |
+| `POST /api/account/password` `{"current", "new"}` | Нууц үг солих; энэ төхөөрөмж нэвтэрсэн хэвээр, бусад нь гарна |
+| `GET /api/settings` | Telegram тохиргоо (токеныг өөрийг нь буцаахгүй) |
+| `PUT /api/settings/telegram` `{"token"}` / `{"chat_id", "chat_title"}` | Ботын токен / мэдэгдэл очих групп |
+| `GET /api/settings/telegram/chats` | Ботод мессеж бичсэн группууд |
+| `POST /api/settings/telegram/test` | Тест мессеж |
+| `GET /api/calls?limit=100` | Сүүлийн дуудлагууд (асуултын тоо, хариулж чадаагүй тоо) |
+| `GET /api/calls/{uuid}` | Нэг дуудлагын бүх яриа |
 
 Бусад бүх `/api/*` нэвтрэлт шаардана (middleware). `/docs` хаалттай.
 Хүсэлт бүрт хэрэглэгчийн байгууллага `request.state.tenant`-д тогтоно — route-ууд `Depends(current_tenant)`-ээр авч зөвхөн тэр байгууллагын өгөгдлийг хэрэглэнэ.
@@ -39,6 +48,10 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 | `tenant.py` | Байгууллага: `backend/data/tenants/<slug>/` (config.json, faq.json, knowledge/), загвар FAQ |
 | `speech.py` | Тоо, утасны дугаарыг монгол үгээр (FAQ-ийн хариултад) |
 | `routes/org.py` | Байгууллагын мэдээлэл (Тохируулах) |
+| `routes/account.py` | Нууц үг солих |
+| `routes/settings.py`, `notify.py` | Telegram мэдэгдэл (байгууллага бүрийн `data/settings.json`, 0600) |
+| `routes/calls.py`, `db.py` | Яриа: дуудлагын лог (байгууллага бүрийн `data/receptionist.db`) |
+| `demo_data.py` | Жишээ дуудлага, бүртгэл үүсгэх (утасны AI бэлэн болохоос өмнө вэбийг турших) |
 | `deps.py` | `current_user`, `current_tenant` |
 | `config.py` | `DATA_DIR` (анхдагч `backend/data/`) |
 | `accounts.py` | Хэрэглэгчид (SQLite `backend/data/accounts.db`), нууц үгийн хэш, session cookie |
