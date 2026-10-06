@@ -117,3 +117,8 @@ export type VoiceData = {
   items: { kind: string; text: string; hash: string }[];
   settings: { lexicon: { word: string; say: string }[]; speed: number; pause_ms: number };
 };
+
+export type TrainingExample = { i: number; q: string; faq?: string; fact?: string; label?: string };
+export type TrainingStatus = { model: Record<string, unknown> | null; seed: number; taught: TrainingExample[] };
+export type TrainingChoice = { value: string; title: string };
+export type TrainingAnswers = { faq: TrainingChoice[]; facts: TrainingChoice[]; special: TrainingChoice[] };
