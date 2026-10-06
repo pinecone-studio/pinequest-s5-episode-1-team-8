@@ -44,7 +44,7 @@ components/
   settings/                  TelegramSettings, PasswordForm
   calls/                     CallsTable, ChatMessage, RouteTag
   leads/                     LeadRow
-  admin/                     TenantRow
+  admin/                     TenantRow, TenantSwitch, ViewingBanner
   dashboard/                 AnswerRate, RouteBreakdown, CallsByDay, SetupBanner
   ui/                        Button, Field, Card, Tag, Alert, Table
   Brand.tsx, PageHeader.tsx, Section.tsx
