@@ -1,0 +1,7 @@
+.venv/
+.env
+__pycache__/
+.DS_Store
+logs/
+# Хэрэглэгчид, нууц үгийн хэш, session-ий нууц түлхүүр — git-д орохгүй
+data/
