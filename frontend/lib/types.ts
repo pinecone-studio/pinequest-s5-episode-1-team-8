@@ -151,7 +151,23 @@ export type ReferenceVoice = {
 };
 
 export type TrainingExample = { i: number; q: string; faq?: string; fact?: string; label?: string };
-export type TrainingStatus = { model: Record<string, unknown> | null; seed: number; taught: TrainingExample[] };
+export type TrainingModel = {
+  trained_at?: number | null;
+  examples?: number | null;
+  rows?: number | null;
+  cv_acc?: number | null;
+  eval?: { selector: [number, number]; rules: [number, number] } | null;
+  enabled?: boolean | null;
+  warnings?: string[] | null;
+  answers?: number | null;
+  labels?: string[] | null;
+};
+export type TrainingStatus = JobStatus & {
+  model: TrainingModel | null;
+  seed: number;
+  auto: number;
+  taught: TrainingExample[];
+};
 export type TrainingChoice = { value: string; title: string };
 export type TrainingAnswers = { faq: TrainingChoice[]; facts: TrainingChoice[]; special: TrainingChoice[] };
 
