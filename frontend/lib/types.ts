@@ -30,3 +30,12 @@ export type Org = {
   documents: number;
   users: { id: number; email: string; role: Role; created_at: number }[];
 };
+
+// backend/routes/settings.py · get_settings()
+export type Settings = {
+  telegram_token_set: boolean;
+  telegram_token_hint: string;
+  telegram_bot: string | null;
+  telegram_chat_id: number | string | null;
+  telegram_chat_title: string | null;
+};

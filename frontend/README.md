@@ -30,14 +30,14 @@ app/
   (dashboard)/layout.tsx     Нэвтэрсний дараах хүрээ: sidebar + хуудас
   (dashboard)/page.tsx       Самбар
   (dashboard)/setup/         Тохируулах (байгууллагын мэдээлэл, алхмууд)
-  (dashboard)/settings/      Тохиргоо (нууц үг солих)
+  (dashboard)/settings/      Тохиргоо (Telegram мэдэгдэл, нууц үг)
   (dashboard)/[section]/     Хараахан хийгдээгүй хэсгүүдийн түр хуудас
   error.tsx                  Backend унтарсан үед
 components/
   auth/                      AuthCard, LoginForm, SignupForm
   sidebar/                   Sidebar, NavLinks, UserCard, LogoutButton
   setup/                     Step, OrgForm
-  settings/                  PasswordForm
+  settings/                  TelegramSettings, PasswordForm
   ui/                        Button, Field, Card, Tag, Alert
   Brand.tsx, PageHeader.tsx, Section.tsx
 lib/
