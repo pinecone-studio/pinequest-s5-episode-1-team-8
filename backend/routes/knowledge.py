@@ -1,11 +1,16 @@
-"""Байгууллагын RAG мэдээллийн файлууд: жагсаах, унших, засах, оруулах, устгах."""
+"""Байгууллагын RAG мэдээлэл, бэлдсэн өгүүлбэр/аудио болон SIM-TRUNK build job."""
+import json
+import hashlib
 import os
 import re
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from deps import current_tenant
+import knowledge_jobs
+from config import DATA_DIR
 from tenant import Tenant
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
@@ -31,7 +36,22 @@ def list_files(t: Tenant = Depends(current_tenant)):
             st = os.stat(path)
             files.append({"name": name, "size": st.st_size, "mtime": st.st_mtime,
                           "editable": name.lower().endswith(TEXT_EXT)})
-    return {"files": files}
+    facts_path = t.path("knowledge_index", "facts.json")
+    try:
+        with open(facts_path, encoding="utf-8") as f:
+            indexed = json.load(f)
+    except (OSError, ValueError):
+        indexed = {}
+    facts = []
+    recordings = os.path.realpath(t.path("recordings"))
+    for fact in indexed.get("facts", []):
+        text = fact.get("text", "")
+        audio = fact.get("audio")
+        facts.append({"text": text, "source": fact.get("source"),
+                      "hash": hashlib.sha1(text.encode()).hexdigest()[:12],
+                      "has_audio": bool(audio and os.path.isfile(audio)),
+                      "recorded": bool(audio and os.path.realpath(audio).startswith(recordings + os.sep))})
+    return {"files": files, "facts": facts, "indexed_at": indexed.get("indexed_at")}
 
 
 @router.get("/file/{name}")
@@ -85,3 +105,34 @@ def delete_file(name: str, t: Tenant = Depends(current_tenant)):
         raise HTTPException(404, "Файл олдсонгүй")
     os.remove(path)
     return {"ok": True}
+
+
+@router.post("/build")
+def start_build(t: Tenant = Depends(current_tenant)):
+    try:
+        return knowledge_jobs.enqueue(t)
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.get("/build")
+def build_status(t: Tenant = Depends(current_tenant)):
+    return knowledge_jobs.status(t)
+
+
+@router.get("/audio/{fact_hash}")
+def fact_audio(fact_hash: str, t: Tenant = Depends(current_tenant)):
+    if not re.fullmatch(r"[0-9a-f]{12}", fact_hash):
+        raise HTTPException(400, "Буруу hash")
+    path = t.path("knowledge_index", "facts.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            facts = json.load(f).get("facts", [])
+    except (OSError, ValueError):
+        facts = []
+    audio = next((row.get("audio") for row in facts
+                  if hashlib.sha1(row.get("text", "").encode()).hexdigest()[:12] == fact_hash), None)
+    allowed = os.path.realpath(DATA_DIR)
+    if not audio or not os.path.isfile(audio) or not os.path.realpath(audio).startswith(allowed + os.sep):
+        raise HTTPException(404, "Аудио олдсонгүй")
+    return FileResponse(audio, media_type="audio/wav")
