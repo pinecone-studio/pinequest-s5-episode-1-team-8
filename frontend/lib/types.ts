@@ -64,3 +64,26 @@ export type Message = {
 };
 
 export type CallDetail = { call: Omit<Call, "questions" | "unanswered">; messages: Message[] };
+
+// backend/routes/stats.py
+export type Stats = {
+  calls: number;
+  questions: number;
+  answered: number;
+  unanswered: number;
+  routes: Record<string, number>;
+  avg_latency: number | null;
+  avg_stt: number | null;
+  new_leads: number;
+  days: { date: string; calls: number }[]; // сүүлийн 5 өдөр, хуучнаас шинэ рүү
+};
+
+// backend/routes/unanswered.py
+export type Unanswered = {
+  id: number;
+  call_uuid: string;
+  ts: number;
+  question: string;
+  route: string;
+  score: number | null;
+};

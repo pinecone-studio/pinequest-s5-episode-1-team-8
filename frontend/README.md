@@ -28,7 +28,7 @@ app/
   login/page.tsx             Нэвтрэх хуудас
   signup/page.tsx            Байгууллага бүртгүүлэх
   (dashboard)/layout.tsx     Нэвтэрсний дараах хүрээ: sidebar + хуудас
-  (dashboard)/page.tsx       Самбар
+  (dashboard)/page.tsx       Самбар: хариулсан хувь, хариултын зам, 5 өдрийн дуудлага, сүүлийн дуудлага
   (dashboard)/setup/         Тохируулах (байгууллагын мэдээлэл, алхмууд)
   (dashboard)/settings/      Тохиргоо (Telegram мэдэгдэл, нууц үг)
   (dashboard)/calls/         Яриа: дуудлагын жагсаалт, calls/[uuid] — нэг дуудлагын яриа
@@ -40,6 +40,7 @@ components/
   setup/                     Step, OrgForm
   settings/                  TelegramSettings, PasswordForm
   calls/                     CallsTable, ChatMessage, RouteTag
+  dashboard/                 AnswerRate, RouteBreakdown, CallsByDay, SetupBanner
   ui/                        Button, Field, Card, Tag, Alert
   Brand.tsx, PageHeader.tsx, Section.tsx
 lib/
