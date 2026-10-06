@@ -117,8 +117,10 @@ export type BuildStatus = { state: "idle" | "queued" | "running" | "done" | "err
 export type FaqItem = { id: string; questions: string[]; answer: string; topic?: string | null };
 export type FaqData = { greeting: string; fillers: string[]; topics: Record<string, unknown>; faq: FaqItem[] };
 
+// backend/routes/voice.py — recorded: өөрийн хоолойгоор бичсэн (routes/recordings.py)
+export type VoiceItem = { kind: string; text: string; hash: string; recorded: boolean };
 export type VoiceData = {
-  items: { kind: string; text: string; hash: string }[];
+  items: VoiceItem[];
   settings: { lexicon: { word: string; say: string }[]; speed: number; pause_ms: number };
 };
 
