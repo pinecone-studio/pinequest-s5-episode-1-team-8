@@ -2,11 +2,13 @@
 Платформын admin: бүх байгууллага (вэб -> Байгууллагууд). Зөвхөн role=admin, бусдад 403.
 
   GET  /api/admin/tenants               -> бүх байгууллага: нэр, дугаар, эрх, хэрэглэгчид, дуудлагын тоо, бэлэн эсэх
+  POST /api/admin/tenants {...}         -> шинэ байгууллага + эзэмшигч (төлбөр төлсөн хүн) хэрэглэгч
   POST /api/admin/switch {"slug"}       -> тэр байгууллагыг харах (cookie; app.viewed_tenant)
   DELETE /api/admin/switch              -> өөрийн байгууллага руу буцах
   POST /api/admin/plan {"slug", "plan"} -> trial -> active (төлбөр төлсөн) -> suspended. Төлбөрийн систем алга: гараар.
 """
 import os
+import shutil
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -51,11 +53,50 @@ def list_tenants():
                 calls = con.execute("SELECT COUNT(*) FROM calls").fetchone()[0]
         ready = bool(load_json(t.path("knowledge_index", "facts.json")).get("facts")) \
             and bool(load_json(t.path("faq_audio", "faq_index.json")).get("faq"))
-        out.append({"slug": t.slug, "name": cfg.get("name", t.slug), "extension": cfg.get("extension"),
+        out.append({"slug": t.slug, "name": cfg.get("name", t.slug), "address": cfg.get("address"),
+                    "email": cfg.get("email"),
+                    "extension": cfg.get("extension"),
                     "plan": cfg.get("plan", "trial"), "created_at": cfg.get("created_at"), "calls": calls,
                     "ready": ready, "users": [u["email"] for u in accounts.users_of(t.slug)],
                     "job": (knowledge_jobs.JOBS.get(t.slug) or {}).get("state", "idle")})
-    return out
+    # дотуур дугаараар: Pinecone (1000) эхэнд, бусад нь нэмэгдсэн дарааллаараа
+    return sorted(out, key=lambda x: int(x["extension"] or 0))
+
+
+class NewTenantBody(BaseModel):
+    name: str = ""
+    phone: str = ""
+    email: str = ""        # байгууллагын албан и-мэйл
+    address: str = ""
+    hours: str = ""
+    owner_email: str = ""  # нэвтрэх хэрэглэгч
+    password: str = ""
+
+
+@router.post("/tenants")
+def create_tenant(body: NewTenantBody):
+    owner = accounts.normalize_email(body.owner_email)
+    if not accounts.EMAIL.fullmatch(owner):
+        raise HTTPException(400, "Эзэмшигчийн и-мэйл буруу")
+    if len(body.password) < 8:
+        raise HTTPException(400, "Нууц үг 8-аас дээш тэмдэгт байх ёстой")
+    email = body.email.strip()
+    if email and not accounts.EMAIL.fullmatch(email):
+        raise HTTPException(400, "Байгууллагын и-мэйл буруу")
+    phone = tenants.clean_phone(body.phone)
+    if phone and not 6 <= len(phone.lstrip("+")) <= 12:
+        raise HTTPException(400, "Утасны дугаар буруу")
+    try:
+        with tenants.LOCK:
+            t = tenants.create(body.name, phone=phone, email=email, address=body.address[:300], hours=body.hours[:200])
+            try:
+                accounts.create_user(owner, body.password, t.slug)
+            except ValueError:
+                shutil.rmtree(t.dir, ignore_errors=True)
+                raise
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+    return {"ok": True, "slug": t.slug}
 
 
 class SwitchBody(BaseModel):

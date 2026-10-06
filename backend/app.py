@@ -19,7 +19,6 @@ AI Receptionist — backend API (FastAPI). Вэб интерфейс нь fronte
 import os
 import shutil
 import sys
-import threading
 import time
 
 from fastapi import FastAPI, Request
@@ -148,7 +147,7 @@ class SignupBody(BaseModel):
 
 SIGNUPS: dict[str, list[float]] = {}
 SIGNUPS_PER_HOUR = 3
-tenants_lock = threading.Lock()
+tenants_lock = tenants.LOCK
 
 
 @app.post("/api/signup")
