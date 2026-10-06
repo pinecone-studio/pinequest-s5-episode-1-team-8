@@ -8,3 +8,10 @@ export function Alert({ children }: { children: ReactNode }) {
     </p>
   );
 }
+
+/** Үйлдлийн үр дүн: алдаа (улаан) эсвэл амжилт (ногоон). Хоосон бол юу ч харуулахгүй. */
+export function ActionStatus({ error, message }: { error?: string; message?: string }) {
+  if (error) return <span role="alert" className="text-sm text-danger">{error}</span>;
+  if (message) return <span role="status" className="text-sm text-brand">{message}</span>;
+  return null;
+}

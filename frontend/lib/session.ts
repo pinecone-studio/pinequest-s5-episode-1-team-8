@@ -11,10 +11,10 @@ import type { User } from "./types";
  * cache(): нэг render-т layout, page хоёулаа дуудсан ч backend руу нэг л хүсэлт явна.
  */
 export const getUser = cache(async (): Promise<User | null> => {
-  const token = (await cookies()).get(SESSION_COOKIE)?.value;
-  if (!token) return null;
+  const store = await cookies();
+  if (!store.has(SESSION_COOKIE)) return null;
   const res = await fetch(`${API_URL}/api/me`, {
-    headers: { cookie: `${SESSION_COOKIE}=${token}` },
+    headers: { cookie: store.toString() },
     cache: "no-store",
   });
   if (res.status === 401) return null;
