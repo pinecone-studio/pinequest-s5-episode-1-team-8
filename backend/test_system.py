@@ -17,6 +17,7 @@ Backend-ийн тест. Кодыг өөрчилсний дараа, PR-ийн �
 12. Төлөв (/api/status): AI сервер, SIP, бэлэн эсэх, sidebar-ын тоо
 13. AI сургалт: сургасан загварын мэдээлэл (SIM-TRUNK-ийн бичдэг газраас)
 14. Байгууллагууд (admin): жагсаалт, эрх солих, өөр байгууллага руу сольж харах, owner-т хаалттай
+15. Өөрийн хоолойгоор бичих: бичлэг хадгалах, сонсох, устгах, WAV шалгалт, байгууллага хооронд тусгаарлалт
 
 Түр хавтсанд (DATA_DIR) ажиллана — backend/data/-ийн жинхэнэ хэрэглэгчдэд хүрэхгүй.
 """
@@ -512,6 +513,53 @@ def test_admin():
     check("дахин нэвтрэхэд өөрийн байгууллага", adm.get("/api/me").json()["tenant"] == "pinecone")
 
 
+def wav_bytes(seconds: float = 1.0, rate: int = 24000, channels: int = 1) -> bytes:
+    import io
+    import math
+    import struct
+    import wave
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(channels)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        n = int(seconds * rate)
+        w.writeframes(b"".join(struct.pack("<h", int(8000 * math.sin(i / 20))) * channels for i in range(n)))
+    return buf.getvalue()
+
+
+def test_recordings():
+    print("\n[15] Өөрийн хоолойгоор бичих")
+    a = owner_client("Хоолой тест", "voice@example.mn")
+    t = tenant.Tenant(a.get("/api/me").json()["tenant"])
+    items = a.get("/api/voice").json()["items"]
+    greet = next(x for x in items if x["kind"] == "Мэндчилгээ")
+    check("өгүүлбэр бүр бичлэггүй (TTS) эхэлнэ", items and not any(x["recorded"] for x in items), items[:2])
+    up = lambda h, data: a.post(f"/api/voice/{h}", files={"file": ("rec.wav", data, "audio/wav")})  # noqa: E731
+    r = up(greet["hash"], wav_bytes(1.2))
+    check("бичлэг хадгална", r.status_code == 200 and r.json()["seconds"] == 1.2, r.text)
+    check("SIM-TRUNK-тэй ижил газар (recordings/<hash>.wav) — Бэлдэхэд TTS-ийн оронд",
+          os.path.exists(t.path("recordings", f"{greet['hash']}.wav")))
+    check("жагсаалтад бичлэгтэй гэж харагдана", next(x for x in a.get("/api/voice").json()["items"]
+                                                    if x["hash"] == greet["hash"])["recorded"] is True)
+    r = a.get(f"/api/voice/{greet['hash']}/audio")
+    check("сонсох -> WAV", r.status_code == 200 and r.content[:4] == b"RIFF", r.status_code)
+    bad = [up(greet["hash"], b"not a wav").status_code, up(greet["hash"], wav_bytes(1, rate=44100)).status_code,
+           up(greet["hash"], wav_bytes(1, channels=2)).status_code, up(greet["hash"], wav_bytes(0.1)).status_code]
+    check("WAV биш / 44.1kHz / stereo / хэт богино -> 400", bad == [400, 400, 400, 400], bad)
+    check("байхгүй өгүүлбэр -> 404, буруу hash -> 400", up("0" * 12, wav_bytes()).status_code == 404
+          and up("../../x", wav_bytes()).status_code in (400, 404))
+    other = owner_client("Хоолой 2", "voice2@example.mn")
+    check("өөр байгууллага сонсох / устгах боломжгүй", other.get(f"/api/voice/{greet['hash']}/audio").status_code == 404
+          and other.delete(f"/api/voice/{greet['hash']}").status_code == 404)
+    r = a.delete(f"/api/voice/{greet['hash']}")
+    check("устгахад TTS руу буцна", r.status_code == 200 and not os.path.exists(t.path("recordings", f"{greet['hash']}.wav"))
+          and a.get(f"/api/voice/{greet['hash']}/audio").status_code == 404)
+    tenant.write_json(t.path("knowledge_index", "facts.json"), {"facts": [{"text": "Сургалт 6 сар."}]})
+    check("бэлдсэн мэдээллийн өгүүлбэр жагсаалтад", any(x["kind"] == "Мэдээлэл" and x["text"] == "Сургалт 6 сар."
+                                                          for x in a.get("/api/voice").json()["items"]))
+
+
 if __name__ == "__main__":
     test_login()
     test_signup()
@@ -526,5 +574,6 @@ if __name__ == "__main__":
     test_status()
     test_training_model()
     test_admin()
+    test_recordings()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)

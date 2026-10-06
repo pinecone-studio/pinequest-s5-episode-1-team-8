@@ -45,6 +45,9 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 | `POST /api/admin/switch` `{"slug"}` | (admin) Өөр байгууллагыг сольж харах |
 | `DELETE /api/admin/switch` | (admin) Өөрийн байгууллага руу буцах |
 | `POST /api/admin/plan` `{"slug", "plan"}` | (admin) Эрх: `trial`, `active`, `suspended` |
+| `POST /api/voice/{hash}` file=WAV | Өгүүлбэрийг өөрийн хоолойгоор (24kHz mono 16-bit WAV) — "Бэлдэх"-д TTS-ийн оронд |
+| `DELETE /api/voice/{hash}` | Бичлэг устгах (TTS руу буцна) |
+| `GET /api/voice/{hash}/audio` | Одоо тоглогдох аудио: бичлэг эсвэл TTS |
 
 Бусад бүх `/api/*` нэвтрэлт шаардана (middleware). `/docs` хаалттай.
 Хүсэлт бүрт хэрэглэгчийн байгууллага `request.state.tenant`-д тогтоно — route-ууд `Depends(current_tenant)`-ээр авч зөвхөн тэр байгууллагын өгөгдлийг хэрэглэнэ.
@@ -65,6 +68,7 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 | `routes/unanswered.py` | Хариулж чадаагүй асуултууд |
 | `routes/status.py` | AI ресепшний төлөв |
 | `routes/admin.py` | Платформын admin: байгууллагууд, эрх, сольж харах |
+| `routes/recordings.py` | Өөрийн хоолойгоор бичих (`tenants/<slug>/recordings/<hash>.wav`, SIM-TRUNK-тэй ижил) |
 | `demo_data.py` | Жишээ дуудлага, бүртгэл үүсгэх (утасны AI бэлэн болохоос өмнө вэбийг турших) |
 | `sim_runner.py` | SIM-TRUNK-ийн скриптийг (ingest, TTS ...) манай байгууллагын хавтсаар ажиллуулна — "Аудио бэлдэх" |
 | `deps.py` | `current_user`, `current_tenant` |
