@@ -25,6 +25,9 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 | `POST /api/logout` | Cookie устгана |
 | `GET /api/me` | Нэвтэрсэн хэрэглэгч, байгууллага `{email, role, tenant, tenant_name, extension, plan, expires}`, үгүй бол 401 |
 
+| `GET /api/org` | Байгууллагын мэдээлэл, хэрэглэгчид, мэдээллийн файлын тоо |
+| `PUT /api/org` `{"name", "phone", "email", "address", "hours"}` | Хадгална; мэндчилгээ, утас/хаяг/цагийн FAQ дахин үүснэ |
+
 Бусад бүх `/api/*` нэвтрэлт шаардана (middleware). `/docs` хаалттай.
 Хүсэлт бүрт хэрэглэгчийн байгууллага `request.state.tenant`-д тогтоно — route-ууд `Depends(current_tenant)`-ээр авч зөвхөн тэр байгууллагын өгөгдлийг хэрэглэнэ.
 
@@ -35,6 +38,7 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 | `app.py` | FastAPI: бүртгүүлэх, нэвтрэх, гарах, `/api/me`, нэвтрэлт шалгах middleware |
 | `tenant.py` | Байгууллага: `backend/data/tenants/<slug>/` (config.json, faq.json, knowledge/), загвар FAQ |
 | `speech.py` | Тоо, утасны дугаарыг монгол үгээр (FAQ-ийн хариултад) |
+| `routes/org.py` | Байгууллагын мэдээлэл (Тохируулах) |
 | `deps.py` | `current_user`, `current_tenant` |
 | `config.py` | `DATA_DIR` (анхдагч `backend/data/`) |
 | `accounts.py` | Хэрэглэгчид (SQLite `backend/data/accounts.db`), нууц үгийн хэш, session cookie |
