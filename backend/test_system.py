@@ -3,8 +3,9 @@ Backend-ийн тест. Кодыг өөрчилсний дараа, PR-ийн �
 
   .venv/bin/python backend/test_system.py
 
-1. Нэвтрэлт: нэвтрэх, буруу нууц үг, хамгаалалттай API, гарах, хуурамч cookie,
-   нууц үг солиход хуучин session хүчингүй, буруу оролдлогын хязгаар (IP + и-мэйл)
+1-2. Нэвтрэлт: нэвтрэх, буруу нууц үг, хамгаалалттай API, гарах, хуурамч cookie,
+     нууц үг солиход хуучин session хүчингүй, буруу оролдлогын хязгаар (IP + и-мэйл)
+3. Байгууллага бүртгүүлэх: шинэ байгууллага, загвар FAQ, давхардал, хязгаар
 
 Түр хавтсанд (DATA_DIR) ажиллана — backend/data/-ийн жинхэнэ хэрэглэгчдэд хүрэхгүй.
 """
@@ -17,9 +18,12 @@ sys.path.insert(0, HERE)
 os.environ["DATA_DIR"] = tempfile.mkdtemp(prefix="pc_test_")
 
 import accounts  # noqa: E402
+import app as server  # noqa: E402
 import auth  # noqa: E402
-from app import app  # noqa: E402
+import tenant  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
+
+app = server.app
 
 failures: list[str] = []
 
@@ -32,6 +36,21 @@ def check(name: str, ok: bool, detail: object = ""):
 
 def login(client: TestClient, email: str, password: str, **kw):
     return client.post("/api/login", json={"email": email, "password": password}, **kw)
+
+
+def signup(client: TestClient, **kw):
+    body = {"company": "Гэрэл шүдний эмнэлэг", "phone": "7270 0800", "email": "gerel@example.mn",
+            "password": "gerel-pass-1", **kw}
+    return client.post("/api/signup", json=body)
+
+
+def owner_client(company: str, email: str) -> TestClient:
+    """Шинэ байгууллага бүртгүүлж нэвтэрсэн client (бусад тестэд)"""
+    server.SIGNUPS.clear()
+    c = TestClient(app)
+    r = signup(c, company=company, email=email, phone="")
+    assert r.status_code == 200, r.text
+    return c
 
 
 def test_login():
@@ -98,7 +117,47 @@ def test_login():
     check("гаднын хүсэлтийн IP толгойд итгэхгүй (нэг IP-ээс 5 удаа -> 429)", r.status_code == 429, r.status_code)
 
 
+def test_signup():
+    print("\n[3] Байгууллага бүртгүүлэх")
+    import speech
+    check("утасны дугаарыг үгээр", speech.number_words("72700800", phone=True) == "далан хоёр, долоон зуу, найман зуу"
+          and speech.number_words("99112233", phone=True) == "ерэн ес, арван нэг, хорин хоёр, гучин гурав",
+          speech.number_words("99112233", phone=True))
+    check("slug: кирилл -> латин", tenant.make_slug("Гэрэл шүдний эмнэлэг") == "gerel-shudnii-emneleg",
+          tenant.make_slug("Гэрэл шүдний эмнэлэг"))
+
+    server.SIGNUPS.clear()
+    c = TestClient(app)
+    r = signup(c)
+    me = c.get("/api/me").json()
+    check("бүртгүүлмэгц нэвтэрнэ (owner, өөрийн байгууллага)", r.status_code == 200 and me["email"] == "gerel@example.mn"
+          and me["role"] == "owner" and me["tenant_name"] == "Гэрэл шүдний эмнэлэг" and me["plan"] == "trial", r.text)
+    t = tenant.Tenant(me["tenant"])
+    cfg, faq = t.config(), tenant.load_faq(t)
+    ids = {x["id"] for x in faq.get("faq", [])}
+    check("утсыг цэвэрлэж хадгална, дотуур дугаар олгоно", cfg.get("phone") == "72700800" and me["extension"].isdigit(), cfg)
+    check("загвар FAQ (утастай -> contact_phone, хаяггүй -> location алга)",
+          "contact_phone" in ids and "location" not in ids and "Гэрэл шүдний эмнэлэг" in faq["greeting"], ids)
+    check("мэдээллийн хавтас үүснэ", os.path.isdir(t.knowledge_dir))
+
+    bad = [signup(TestClient(app), email="bad-email").status_code,
+           signup(TestClient(app), email="x@example.mn", password="short").status_code,
+           signup(TestClient(app), email="x@example.mn", company="A").status_code,
+           signup(TestClient(app), email="x@example.mn", phone="123").status_code]
+    check("буруу и-мэйл / богино нууц үг / нэр / утас -> 400", bad == [400] * 4, bad)
+    r = signup(TestClient(app), company="Өөр байгууллага")
+    check("бүртгэлтэй и-мэйл -> 400, хавтас үлдэхгүй", r.status_code == 400
+          and not tenant.Tenant(tenant.make_slug("Өөр байгууллага")).exists(), r.text)
+
+    server.SIGNUPS.clear()
+    codes = [signup(TestClient(app), company=f"Байгууллага {i}", email=f"org{i}@example.mn").status_code for i in range(4)]
+    check("нэг IP-ээс цагт 3-аас олон бүртгэл -> 429", codes == [200, 200, 200, 429], codes)
+    exts = sorted(x.config()["extension"] for x in tenant.all_tenants())
+    check("дотуур дугаар давхцахгүй", len(exts) == len(set(exts)), exts)
+
+
 if __name__ == "__main__":
     test_login()
+    test_signup()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)

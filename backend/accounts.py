@@ -21,8 +21,8 @@ import sqlite3
 import time
 from contextlib import contextmanager
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.getenv("DATA_DIR", os.path.join(ROOT, "data"))     # тест түр хавтас ашиглана
+from config import DATA_DIR
+
 DB = os.path.join(DATA_DIR, "accounts.db")
 SECRET_FILE = os.path.join(DATA_DIR, "web_secret")
 SESSION_DAYS = 7
@@ -117,6 +117,12 @@ def get(user_id: int) -> dict | None:
         row = con.execute("SELECT id, email, tenant, role, pw_version, created_at FROM users WHERE id=?",
                           (user_id,)).fetchone()
     return dict(row) if row else None
+
+
+def users_of(tenant: str) -> list[dict]:
+    with connect() as con:
+        return [dict(r) for r in con.execute(
+            "SELECT id, email, role, created_at FROM users WHERE tenant=? ORDER BY id", (tenant,))]
 
 
 def make_session(user: dict) -> str:
