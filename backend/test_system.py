@@ -284,6 +284,15 @@ def test_calls():
     check("асуултын тоо, хугацаа", first["questions"] == 3 and first["unanswered"] == 0 and first["duration"] > 0, first)
     check("хариулж чадаагүй тоолно", sum(c["unanswered"] for c in calls) == 3, [c["unanswered"] for c in calls])
     check("limit", len(a.get("/api/calls?limit=2").json()) == 2 and a.get("/api/calls?limit=0").status_code == 422)
+    find = lambda query: [c["caller"] for c in a.get(f"/api/calls?{query}").json()]  # noqa: E731
+    check("шүүлтүүр: залгагчийн дугаараар", find("q=9555") == ["95554433"], find("q=9555"))
+    check("шүүлтүүр: ярианы үгээр, том/жижиг үсэг хамаарахгүй", find("q=зогсоол") == ["88001122"]
+          and find("q=ЗОГСООЛ") == ["88001122"], find("q=ЗОГСООЛ"))
+    check("шүүлтүүр: зөвхөн хариулж чадаагүй", sorted(find("unanswered=true")) == ["80112233", "88001122", "99887766"],
+          find("unanswered=true"))
+    check("шүүлтүүр: хослуулах, хугацаа", find("q=зогсоол&unanswered=true&days=1") == ["88001122"]
+          and len(find("days=1")) == 2 and len(find("days=365")) == 6, find("days=1"))
+    check("шүүлтүүр: % _ тэмдэгт жинхэнэ утгаараа", find("q=%25") == [] and find("q=_") == [], find("q=%25"))
     d = a.get(f"/api/calls/{first['uuid']}").json()
     check("нэг дуудлагын яриа дарааллаараа", [m["role"] for m in d["messages"]] == ["user", "assistant"] * 3
           and d["messages"][1]["route"] == "faq", d)
