@@ -19,6 +19,7 @@ Backend-ийн тест. Кодыг өөрчилсний дараа, PR-ийн �
 14. Байгууллагууд (admin): жагсаалт, эрх солих, өөр байгууллага руу сольж харах, owner-т хаалттай
 15. Өөрийн хоолойгоор бичих: бичлэг хадгалах, сонсох, устгах, WAV шалгалт, байгууллага хооронд тусгаарлалт
 16. ElevenLabs хоолой (admin): түлхүүр, хоолойнууд, жишээ үүсгэх, сонгох (ElevenLabs, SIM-TRUNK-ийг дуурайна)
+17. Хоолой (Oron-гүй): одоогийн хоолой, ElevenLabs-ийн дахин үүсгэх, аудиог шинэчлэх, ZIP татах
 
 Түр хавтсанд (DATA_DIR) ажиллана — backend/data/-ийн жинхэнэ хэрэглэгчдэд хүрэхгүй.
 """
@@ -719,6 +720,57 @@ def test_eleven():
             os.environ["SIM_TRUNK_DIR"] = old_env
 
 
+def test_voice_eleven_only():
+    print("\n[17] Хоолой (Oron-гүй)")
+    import io
+    import json
+    import time
+    import zipfile
+    import knowledge_jobs
+    old_env = os.environ.get("SIM_TRUNK_DIR")
+    os.environ["SIM_TRUNK_DIR"] = tempfile.mkdtemp(prefix="no_sim_")    # Python орчингүй -> ажил шууд дуусна
+    try:
+        a = owner_client("Хоолой Eleven", "voice-eleven@example.mn")
+        t = tenant.Tenant(a.get("/api/me").json()["tenant"])
+        v = a.get("/api/voice").json()
+        check("түлхүүргүй үед хоолой алга, Oron-ийн асуултын аялга алга",
+              v["voice"]["has_key"] is False and v["voice"]["name"] is None and "question" not in v, v.get("voice"))
+        cfg = t.config()
+        cfg.update(eleven_voice="LauraVoice0001", eleven_voice_name="Laura")
+        t.save_config(cfg)
+        check("сонгосон хоолой харагдана", a.get("/api/voice").json()["voice"]["name"] == "Laura")
+        removed = [a.get("/api/voice/reference").status_code, a.get("/api/voice/question/audio").status_code]
+        check("Oron-ийн лавлах хоолой, асуултын аялга хасагдсан", all(code >= 400 for code in removed), removed)
+
+        def wait():
+            for _ in range(100):
+                if not knowledge_jobs.status(t)["running"]:
+                    return
+                time.sleep(0.05)
+
+        item = next(x for x in v["items"] if x["kind"] == "Мэндчилгээ")
+        r = a.post(f"/api/voice/regenerate/{item['hash']}")
+        wait()
+        seeds = json.load(open(t.path("data", "tts_seeds.json"), encoding="utf-8"))
+        again = next(x for x in a.get("/api/voice").json()["items"] if x["hash"] == item["hash"])
+        check("↻ ElevenLabs-ийн seed (eleven:<hash>) нэмэгдэнэ", r.status_code == 200 and seeds == {f"eleven:{item['hash']}": 1}
+              and again["seed"] == 1, seeds)
+        r = a.post("/api/voice/rebuild")
+        check("аудиог шинэчлэх ажил эхэлнэ", r.status_code == 200 and r.json()["task"] == "regen", r.text)
+        wait()
+        a.post(f"/api/voice/recording/{item['hash']}", files={"file": ("rec.wav", wav_bytes(1.0), "audio/wav")})
+        r = a.get("/api/voice/export")
+        z = zipfile.ZipFile(io.BytesIO(r.content))
+        manifest = json.loads(z.read("manifest.json"))
+        check("ZIP: бичлэг + manifest (json, csv)", r.status_code == 200 and f"audio/{item['hash']}.wav" in z.namelist()
+              and "manifest.csv" in z.namelist() and manifest["clips"][0]["source"] == "бичлэг", z.namelist())
+    finally:
+        if old_env is None:
+            os.environ.pop("SIM_TRUNK_DIR", None)
+        else:
+            os.environ["SIM_TRUNK_DIR"] = old_env
+
+
 if __name__ == "__main__":
     test_login()
     test_signup()
@@ -735,5 +787,6 @@ if __name__ == "__main__":
     test_admin()
     test_recordings()
     test_eleven()
+    test_voice_eleven_only()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)

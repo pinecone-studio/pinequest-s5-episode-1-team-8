@@ -68,7 +68,7 @@ def runtime_root() -> str:
         os.makedirs(target, exist_ok=True)
         if not os.path.lexists(link):
             os.symlink(target, link, target_is_directory=True)
-    voices = os.path.join(runtime, "voices")
+    voices = os.path.join(runtime, "voices")       # Oron-ийн лавлах хоолой (custom.*) ашиглахгүй
     if os.path.islink(voices):
         os.unlink(voices)
     os.makedirs(voices, exist_ok=True)
@@ -80,12 +80,6 @@ def runtime_root() -> str:
             link = os.path.join(voices, name)
             if not os.path.lexists(link):
                 os.symlink(os.path.join(source_voices, name), link)
-    custom_dir = os.path.join(DATA_DIR, "voices")
-    os.makedirs(custom_dir, exist_ok=True)
-    for name in ("custom.wav", "custom.txt"):
-        link = os.path.join(voices, name)
-        if not os.path.lexists(link):
-            os.symlink(os.path.join(custom_dir, name), link)
     os.makedirs(os.path.join(runtime, "logs"), exist_ok=True)
     return runtime
 

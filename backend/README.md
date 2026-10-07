@@ -54,6 +54,8 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 | `POST /api/voice/{hash}` file=WAV | Өгүүлбэрийг өөрийн хоолойгоор (24kHz mono 16-bit WAV) — "Бэлдэх"-д TTS-ийн оронд |
 | `DELETE /api/voice/{hash}` | Бичлэг устгах (TTS руу буцна) |
 | `GET /api/voice/{hash}/audio` | Одоо тоглогдох аудио: бичлэг эсвэл TTS |
+| `POST /api/voice/rebuild` | Хоолой (ElevenLabs), толь, бичлэгийн дагуу аудиог шинэчлэх (сургалтгүй) |
+| `GET /api/voice/export` | Одоо тоглогдох бүх аудио + manifest (json, csv) -> ZIP |
 
 Бусад бүх `/api/*` нэвтрэлт шаардана (middleware). `/docs` хаалттай.
 Хүсэлт бүрт хэрэглэгчийн байгууллага `request.state.tenant`-д тогтоно — route-ууд `Depends(current_tenant)`-ээр авч зөвхөн тэр байгууллагын өгөгдлийг хэрэглэнэ.
