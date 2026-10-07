@@ -19,6 +19,9 @@ uv pip install --python .venv/bin/python -r backend/requirements-ai.txt   # AI r
 .venv/bin/python backend/run_ai.py sip     # SIP bridge, 5060/UDP
 ```
 
+Эсвэл төслийн үндсэн хавтсаас `./dev.sh --phone` ажиллуулбал backend, frontend,
+AudioSocket AI болон SIP bridge дөрвүүлээ нэг terminal дээр асна. `Ctrl+C` бүгдийг унтраана.
+
 Анх асахад жишиг байгууллага (Pinecone Academy) ба `admin` хэрэглэгч санамсаргүй нууц үгтэй үүсч, терминалд **нэг удаа** хэвлэгдэнэ.
 Нууц үг солих: `.venv/bin/python backend/accounts.py admin admin`
 
