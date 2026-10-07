@@ -18,7 +18,7 @@ import tempfile
 import time
 import zipfile
 
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
@@ -28,7 +28,7 @@ import knowledge_jobs
 from audio_files import phone_quality, recording_for, recording_path, save_recording, text_hash
 from deps import current_tenant
 from ingest_text import read_file, split_facts
-from tenant import Tenant, load_faq
+from tenant import Tenant, load_faq, write_json
 
 router = APIRouter(prefix="/api/voice", tags=["voice"])
 
@@ -64,6 +64,8 @@ def all_texts(t: Tenant) -> list[tuple[str, str]]:
             if name.lower().endswith((".txt", ".md", ".pdf", ".docx")) and name.lower() != "readme.md":
                 path = os.path.join(dp, name)
                 items += [(f"мэдээлэл {name}", x) for x, _ in split_facts(read_file(path))]
+    items += [("миний бичлэг", text) for text in load_json(t.path("custom_voice.json"), [])
+              if isinstance(text, str) and text.strip()]
 
     seen, unique = set(), []
     for kind, text in items:
@@ -183,6 +185,23 @@ async def save_voice(item_hash: str, file: UploadFile = File(...), t: Tenant = D
     return {"ok": True, "seconds": round(seconds, 1)}
 
 
+@router.post("/custom")
+async def save_custom_voice(text: str = Form(...), file: UploadFile = File(...), t: Tenant = Depends(current_tenant)):
+    """Хэрэглэгчийн бичсэн дууг танигдсан монгол текстийн хамт хадгална."""
+    text = " ".join(text.split())
+    if not 2 <= len(text) <= 500:
+        raise HTTPException(400, "Бичвэр 2-500 тэмдэгт байх ёстой")
+    if any(item_text == text for _, item_text in all_texts(t)):
+        raise HTTPException(409, "Ийм бичвэртэй аудио аль хэдийн байна")
+    try:
+        seconds = save_recording(await file.read(), recording_path(t.recordings_dir, text))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    texts = load_json(t.path("custom_voice.json"), [])
+    write_json(t.path("custom_voice.json"), [*texts, text])
+    return {"ok": True, "hash": text_hash(text), "seconds": round(seconds, 1)}
+
+
 @router.delete("/recording/{item_hash}")
 def delete_voice(item_hash: str, t: Tenant = Depends(current_tenant)):
     item = next((row for row in voice_items(t) if row["hash"] == item_hash), None)
@@ -190,6 +209,9 @@ def delete_voice(item_hash: str, t: Tenant = Depends(current_tenant)):
     if not path or not os.path.isfile(path):
         raise HTTPException(404, "Бичлэг олдсонгүй")
     os.remove(path)
+    if item["kind"] == "миний бичлэг":
+        texts = load_json(t.path("custom_voice.json"), [])
+        write_json(t.path("custom_voice.json"), [text for text in texts if text_hash(text) != item_hash])
     return {"ok": True}
 
 

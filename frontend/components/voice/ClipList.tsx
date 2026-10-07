@@ -11,6 +11,17 @@ import { useAction } from "@/lib/useAction";
 import { IconButton } from "./IconButton";
 
 type Filter = "all" | "flag" | "top" | "rec";
+type SpeechResult = { 0: { transcript: string } };
+type SpeechRecognitionLike = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: { results: ArrayLike<SpeechResult> }) => void) | null;
+  onerror: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
 /** "Өгүүлбэрүүд" таб: залгагчид тоглогдох бүх өгүүлбэр — сонсох, өөрөө бичих, ElevenLabs-аар дахин үүсгэх */
 export function ClipList({ items, voiceName, play, onChange }: {
@@ -22,7 +33,11 @@ export function ClipList({ items, voiceName, play, onChange }: {
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [recording, setRecording] = useState<string | null>(null);
+  const [customText, setCustomText] = useState("");
+  const [customWav, setCustomWav] = useState<Blob | null>(null);
+  const [customMessage, setCustomMessage] = useState("");
   const stopRef = useRef<(() => Promise<Blob>) | null>(null);
+  const speechRef = useRef<SpeechRecognitionLike | null>(null);
   const { pending, error, message, run } = useAction();
 
   const top = useMemo(() => new Set(items.filter((i) => i.plays > 0).sort((a, b) => b.plays - a.plays)
@@ -70,8 +85,87 @@ export function ClipList({ items, voiceName, play, onChange }: {
     }, "Бичиж байна… уншаад ■ дарна");
   }
 
+  async function toggleCustomRecord() {
+    if (recording === "custom" && stopRef.current) {
+      const stop = stopRef.current;
+      stopRef.current = null;
+      speechRef.current?.stop();
+      speechRef.current = null;
+      setRecording(null);
+      try {
+        const { wav, seconds } = await toCleanWav(await stop());
+        setCustomWav(wav);
+        setCustomMessage(`${seconds.toFixed(1)} секунд бичлээ. Текстээ шалгаад хадгална уу.`);
+      } catch (err) {
+        setCustomMessage((err as Error).message);
+      }
+      return;
+    }
+    if (recording) return;
+    setCustomText("");
+    setCustomWav(null);
+    setCustomMessage("");
+    try {
+      stopRef.current = (await startRecording()).stop;
+      setRecording("custom");
+      const browser = window as unknown as { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor };
+      const Recognition = browser.SpeechRecognition ?? browser.webkitSpeechRecognition;
+      if (!Recognition) {
+        setCustomMessage("Энэ хөтөч яриа танихгүй байна. Бичвэрээ гараар оруулна уу.");
+        return;
+      }
+      const speech = new Recognition();
+      speech.lang = "mn-MN";
+      speech.continuous = true;
+      speech.interimResults = true;
+      speech.onresult = (event) => {
+        let text = "";
+        for (let i = 0; i < event.results.length; i++) text += event.results[i][0].transcript;
+        setCustomText(text.trim());
+      };
+      speech.onerror = () => setCustomMessage("Яриа танигдсангүй. Бичвэрээ гараар оруулж болно.");
+      speech.start();
+      speechRef.current = speech;
+      setCustomMessage("Бичиж, монгол текст болгож байна…");
+    } catch (err) {
+      setCustomMessage((err as Error).message);
+    }
+  }
+
+  function saveCustom() {
+    if (!customWav || !customText.trim()) {
+      setCustomMessage("Бичлэг болон монгол бичвэрээ оруулна уу.");
+      return;
+    }
+    void run(async () => {
+      const form = new FormData();
+      form.append("file", customWav, "my-voice.wav");
+      form.append("text", customText.trim());
+      await apiSend("/api/voice/custom", "POST", form);
+      setCustomText("");
+      setCustomWav(null);
+      setCustomMessage("");
+      await onChange();
+    }, "Таны бичлэг хадгалагдлаа ✓");
+  }
+
   return (
     <section className="space-y-4">
+      <div className="rounded-[14px] border border-line-2 bg-panel p-5">
+        <h2 className="font-semibold">Өөрийн хоолойг бичиж, текст болгох</h2>
+        <p className="mt-1 text-sm text-muted">Дуу бичихэд таны хэлсэн монгол текст доор гарна. Текстээ шалгаад хадгалсны дараа тухайн мөрийн ▶ товчоор аудиогоо сонсоно.</p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button variant={recording === "custom" ? "primary" : "ghost"} disabled={pending || (Boolean(recording) && recording !== "custom")}
+            onClick={() => void toggleCustomRecord()}>
+            {recording === "custom" ? "■ Зогсоох" : "● Дуу бичих"}
+          </Button>
+          {customWav && <Button variant="primary" disabled={pending || !customText.trim()} onClick={saveCustom}>Бичлэгтэй нь хадгалах</Button>}
+          {customMessage && <span className="text-sm text-muted">{customMessage}</span>}
+        </div>
+        <textarea rows={2} value={customText} onChange={(event) => setCustomText(event.target.value)}
+          placeholder="Танигдсан монгол текст энд гарна. Шаардлагатай бол засна уу."
+          className="mt-3 w-full rounded-[10px] border border-line-2 bg-bg px-3 py-2 text-sm outline-none focus:border-brand" />
+      </div>
       <div className="flex flex-wrap items-center gap-2">
         {filters.map(([key, label, f]) => (
           <Button key={key} variant={filter === key ? "primary" : "ghost"} onClick={() => setFilter(key)}>
