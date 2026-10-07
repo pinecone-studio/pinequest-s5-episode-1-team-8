@@ -6,14 +6,15 @@ import { Td } from "@/components/ui/Table";
 import { Tag } from "@/components/ui/Tag";
 import { apiSend } from "@/lib/client";
 import { formatDateTime } from "@/lib/format";
-import { LEAD_STATUS, type Lead, type LeadStatus } from "@/lib/types";
+import { LEAD_STATUS, type Lead, type LeadStatus, type Reminder } from "@/lib/types";
 import { useAction } from "@/lib/useAction";
+import { ReminderCell } from "./ReminderCell";
 
 const CONTROL =
   "w-full rounded-[10px] border-[1.5px] border-line-2 bg-bg px-3 py-2 text-sm focus:border-brand focus:outline-none disabled:opacity-50";
 
-/** Бүртгэлийн нэг мөр: төлөв солих, тэмдэглэл бичих (талбараас гарахад хадгална) */
-export function LeadRow({ lead }: { lead: Lead }) {
+/** Бүртгэлийн нэг мөр: төлөв солих, тэмдэглэл бичих (талбараас гарахад хадгална), AI сануулга */
+export function LeadRow({ lead, reminder }: { lead: Lead; reminder?: Reminder }) {
   const { pending, error, message, run } = useAction();
   const save = (body: { status?: LeadStatus; notes?: string }) =>
     run(() => apiSend(`/api/leads/${lead.id}`, "PATCH", body), "Хадгаллаа ✓");
@@ -57,6 +58,9 @@ export function LeadRow({ lead }: { lead: Lead }) {
           className={CONTROL}
         />
         <div className="mt-1 min-h-5"><ActionStatus error={error} message={message} /></div>
+      </Td>
+      <Td className="min-w-[230px]">
+        <ReminderCell lead={lead} reminder={reminder} />
       </Td>
     </tr>
   );

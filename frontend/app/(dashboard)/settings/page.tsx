@@ -1,19 +1,25 @@
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/PageHeader";
 import { Section } from "@/components/Section";
+import { OutboundSettings } from "@/components/settings/OutboundSettings";
 import { PasswordForm } from "@/components/settings/PasswordForm";
+import { ReminderTemplate } from "@/components/settings/ReminderTemplate";
 import { TelegramSettings } from "@/components/settings/TelegramSettings";
 import { Card } from "@/components/ui/Card";
 import { Tag } from "@/components/ui/Tag";
 import { apiGet } from "@/lib/api";
 import { requireUser } from "@/lib/session";
-import type { Settings } from "@/lib/types";
+import type { OutboundConfig, RemindersData, Settings } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Тохиргоо" };
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const st = await apiGet<Settings>("/api/settings");
+  const [st, reminders, outbound] = await Promise.all([
+    apiGet<Settings>("/api/settings"),
+    apiGet<RemindersData>("/api/reminders"),
+    user.role === "admin" ? apiGet<OutboundConfig>("/api/admin/outbound") : Promise.resolve(null),
+  ]);
   return (
     <>
       <PageHeader
@@ -34,6 +40,18 @@ export default async function SettingsPage() {
           <TelegramSettings settings={st} />
         </Card>
       </Section>
+      <Section title="AI сануулгын мессеж" aside={<Tag tone="gray">Бүртгэл → Уулзалт товлох</Tag>}>
+        <Card>
+          <ReminderTemplate initial={reminders.template} fallback={reminders.default_template} />
+        </Card>
+      </Section>
+      {outbound && (
+        <Section title="Гарах дуудлага (admin)" aside={<Tag tone={outbound.mode === "off" ? "gray" : "ok"}>{outbound.mode === "sip" ? "GSM gateway / SIP" : outbound.mode === "mac" ? "iMac + iPhone" : "Унтраалттай"}</Tag>}>
+          <Card>
+            <OutboundSettings initial={outbound} />
+          </Card>
+        </Section>
+      )}
       <Section title="Нууц үг солих" aside={user.email}>
         <Card>
           <PasswordForm />

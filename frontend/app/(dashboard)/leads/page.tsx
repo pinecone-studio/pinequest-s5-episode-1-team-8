@@ -5,23 +5,23 @@ import { Card } from "@/components/ui/Card";
 import { Table } from "@/components/ui/Table";
 import { apiGet } from "@/lib/api";
 import { requireUser } from "@/lib/session";
-import type { Lead } from "@/lib/types";
+import type { Lead, RemindersData } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Бүртгэл" };
 
 export default async function LeadsPage() {
   await requireUser();
-  const leads = await apiGet<Lead[]>("/api/leads");
+  const [leads, reminders] = await Promise.all([apiGet<Lead[]>("/api/leads"), apiGet<RemindersData>("/api/reminders")]);
   return (
     <>
       <PageHeader
         title="Бүртгэл"
-        sub="Залгагчид бүртгүүлэх эсвэл ажилтантай ярих хүсэлт өгсөн. Утасны дугаарыг AI таахгүй — залгагч хэлж, баталгаажуулсан дугаар л харагдана. Баталгаажаагүй бол STT мөрөөс шалгана уу."
+        sub="Залгагчид бүртгүүлэх эсвэл ажилтантай ярих хүсэлт өгсөн. Утасны дугаарыг AI таахгүй — залгагч хэлж, баталгаажуулсан дугаар л харагдана. «Уулзалт товлох» дарвал AI залгаж баталгаажуулна (1 — тийм, 2 — цуцлах)."
       />
       <Card>
         {leads.length ? (
-          <Table head={["Хэзээ", "Нэр", "Утас", "Шалтгаан", "Төлөв", "Тэмдэглэл"]}>
-            {leads.map((lead) => <LeadRow key={lead.id} lead={lead} />)}
+          <Table head={["Хэзээ", "Нэр", "Утас", "Шалтгаан", "Төлөв", "Тэмдэглэл", "AI сануулга"]}>
+            {leads.map((lead) => <LeadRow key={lead.id} lead={lead} reminder={reminders.items[String(lead.id)]} />)}
           </Table>
         ) : (
           <EmptyState>Бүртгэл алга. Утсаар &quot;Бүртгүүлмээр байна&quot; гэж туршаарай.</EmptyState>
