@@ -23,6 +23,9 @@ TASK_STEPS = {
     "train": [["scripts/train_selector.py"]],
     "english": [["scripts/prebuild_en.py"], ["scripts/build_en.py"], ["scripts/audio_qa.py"]],
     "regen": [["build_faq_audio.py"], ["scripts/ingest.py"], ["scripts/audio_qa.py"]],
+    # Хариулж чадаагүй асуултаас нэмсэн FAQ: шинэ хариултын аудио + selector сургалт.
+    # ElevenLabs/build-time TTS ашигладаг тул ажиллаж буй AI серверийг зогсоох шаардлагагүй.
+    "answers": [["build_faq_audio.py"], ["scripts/train_selector.py"], ["scripts/audio_qa.py"]],
 }
 OPTIONAL = {"scripts/audio_qa.py"}
 RUNNER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sim_runner.py")

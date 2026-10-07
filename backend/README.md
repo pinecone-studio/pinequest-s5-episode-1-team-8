@@ -40,6 +40,11 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 | `GET /api/leads` | Бүртгэл: бүртгүүлэх / ажилтантай ярих хүсэлтүүд |
 | `PATCH /api/leads/{id}` `{"status"?, "notes"?}` | Төлөв (`new`, `contacted`, `done`), тэмдэглэл |
 | `GET /api/unanswered?limit=200` | AI хариулж чадаагүй асуултууд (дахин асуусан, тодруулсан, ажилтанд шилжүүлсэн) |
+| `GET /api/unanswered/review` | Асуултыг ажиллаж буй SIM-TRUNK AI-аар дахин шалгаж, шийдэгдсэн/чимээ/шийдэх ангилал болон ойр хариултын санал авна |
+| `POST /api/unanswered/hide` `{"q"}` | Шийдэгдсэн эсвэл чимээ асуултыг ажлын жагсаалтаас нууна (дуудлагын лог хэвээр) |
+| `POST /api/unanswered/teach` `{"q", "answer"}` | Байгаа FAQ/мэдээллийг зөв хариулт болгон заана |
+| `POST /api/unanswered/answer` `{"q", "answer", "questions"}` | Байгууллагын бичсэн баталгаатай шинэ хариултыг давхардалгүй FAQ болгоно |
+| `POST /api/unanswered/apply` | Шинэ хариултын аудио үүсгэж selector сургалтыг дараалалд оруулна |
 | `GET /api/status` | AI сервер / SIP асаалттай эсэх, мэдээлэл бэлэн эсэх, бэлдэлт, sidebar-ын тоо (вэб 10с тутам асууна) |
 | `GET /api/admin/tenants` | (admin) Бүх байгууллага: хэрэглэгч, дуудлага, эрх, бэлэн эсэх |
 | `POST /api/admin/tenants` `{"name", "phone", "email", "address", "hours", "owner_email", "password"}` | (admin) Шинэ байгууллага + эзэмшигч хэрэглэгч |
