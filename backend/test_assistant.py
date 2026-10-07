@@ -205,8 +205,37 @@ def events_and_phone():
     check("reminders.json эвдрээгүй", str(bold_ev) in raw["items"])
 
 
+
+def database_view():
+    print("\n[10] Өгөгдлийн сан вэбээс (зөвхөн унших)")
+    c, t = client("Pinecone DB", "db@example.mn")
+    c.post("/api/assistant/samples")
+    r = c.get("/api/database").json()
+    names = [x["name"] for x in r["tables"]]
+    check("бүх хүснэгт (RAG эхэндээ)", names[:5] == ["leads", "person_docs", "lead_codes", "lead_changes", "knowledge_docs"]
+          and {"calls", "messages"} <= set(names) and r["file"].endswith("receptionist.db"), names)
+    rows = {x["name"]: x["rows"] for x in r["tables"]}
+    check("мөрийн тоо", rows["leads"] == 4 and rows["person_docs"] >= 16 and rows["lead_codes"] == 4, rows)
+    say(c, None, "Миний цаг хэзээ билээ")      # вектор DB-д хадгалагдана
+    s = say(c, None, "Миний цаг хэзээ билээ")
+    say(c, s["session"], dtmf=people.ensure_code(t.dir, 1))
+    say(c, s["session"], "Миний бүртгэл ямар байгаа вэ")
+    d = c.get("/api/database/person_docs").json()
+    vecs = [cell for row in d["rows"] for cell in row if isinstance(cell, dict)]
+    check("хувийн RAG: баримт + вектор (хэмжээ, эхний утгууд)", d["total"] >= 16 and vecs and vecs[0]["dims"] == 4096
+          and len(vecs[0]["preview"]) == 6, d["columns"])
+    d = c.get("/api/database/leads", params={"q": "Hackathon"}).json()
+    check("хайлт", d["total"] == 3 and all("Hackathon" in str(row) for row in d["rows"]), d["total"])
+    check("байхгүй хүснэгт / SQL injection -> 404", c.get("/api/database/sqlite_master").status_code == 404
+          and c.get('/api/database/leads"; DROP TABLE leads; --').status_code == 404)
+    check("хүснэгт эвдрээгүй", c.get("/api/database/leads").json()["total"] == 4)
+    other = TestClient(server.app)
+    check("нэвтрээгүй бол харахгүй", other.get("/api/database").status_code == 401)
+
+
 if __name__ == "__main__":
     main()
     events_and_phone()
+    database_view()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)
