@@ -30,6 +30,8 @@ class FaqBody(BaseModel):
 
 @router.put("")
 def put_faq(body: FaqBody, t: Tenant = Depends(current_tenant)):
+    old_data = load_faq(t)
+    old = {row.get("id"): row for row in old_data.get("faq", [])}
     seen: set[str] = set()
     rows = []
     for item in body.faq:
@@ -42,12 +44,39 @@ def put_faq(body: FaqBody, t: Tenant = Depends(current_tenant)):
         row = {"id": key, "questions": questions, "answer": answer}
         if item.topic:
             row["topic"] = item.topic
+        # Загвараас үүссэн FAQ-г өөрчлөөгүй бол auto тэмдгийг хадгална. Зассан бол
+        # дараагийн build байгууллагын загвараар дарж бичихгүй.
+        previous = old.get(key, {})
+        comparable = {k: v for k, v in previous.items() if k != "auto"}
+        if item.auto and row == comparable:
+            row["auto"] = True
         rows.append(row)
     greeting = " ".join(body.greeting.split())[:600]
     if not greeting:
         raise HTTPException(400, "Мэндчилгээ хоосон байна")
-    data = {"greeting": greeting, "greeting_custom": True,
+    data = {"greeting": greeting,
+            "greeting_custom": old_data.get("greeting_custom", False) or greeting != old_data.get("greeting"),
             "fillers": [" ".join(x.split())[:300] for x in body.fillers if x.strip()][:10],
             "topics": body.topics, "faq": rows}
     write_json(t.faq_path, data)
     return data
+
+
+class AddQuestion(BaseModel):
+    faq_id: str
+    question: str
+
+
+@router.post("/question")
+def add_question(body: AddQuestion, t: Tenant = Depends(current_tenant)):
+    """Бодит дуудлагын асуултыг FAQ-ийн асуултын шинэ хувилбар болгоно."""
+    data = load_faq(t)
+    question = " ".join(body.question.split())[:300]
+    for row in data.get("faq", []):
+        if row.get("id") == body.faq_id:
+            if question and question not in row.get("questions", []):
+                row.setdefault("questions", []).append(question)
+                row.pop("auto", None)
+                write_json(t.faq_path, data)
+            return {"ok": True}
+    raise HTTPException(404, "FAQ олдсонгүй")
