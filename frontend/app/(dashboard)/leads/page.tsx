@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LeadRow } from "@/components/leads/LeadRow";
+import { StaffPin } from "@/components/leads/StaffPin";
 import { EmptyState, PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Table } from "@/components/ui/Table";
@@ -20,8 +21,11 @@ export default async function LeadsPage() {
     <>
       <PageHeader
         title="Бүртгэл"
-        sub="Залгагчид бүртгүүлэх эсвэл ажилтантай ярих хүсэлт өгсөн. Утасны дугаарыг AI таахгүй — залгагч хэлж, баталгаажуулсан дугаар л харагдана. «Уулзалт товлох» дарвал AI залгаж баталгаажуулна (1 — тийм, 2 — цуцлах). Хүн бүр бүртгэлийн кодтой: кодоороо залгаж цаг, дугаараа өөрөө солино — AI өөрчилж, энд түүх нь харагдана."
+        sub="Залгагчид бүртгүүлэх эсвэл ажилтантай ярих хүсэлт өгсөн. Утасны дугаарыг AI таахгүй — залгагч хэлж, баталгаажуулсан дугаар л харагдана. «Уулзалт товлох» дарвал AI залгаж баталгаажуулна (1 — тийм, 2 — цуцлах). Хүн бүр бүртгэлийн кодтой: кодоороо залгаж цаг, дугаараа өөрөө солино. Багш, ажилтан ажилтны кодоор бусдын бүртгэлийг утсаар өөрчилнө — AI бичиж, энд түүх нь харагдана."
       />
+      <Card className="mb-5">
+        <StaffPin initial={people.staff_pin} />
+      </Card>
       <Card>
         {leads.length ? (
           <Table head={["Хэзээ", "Нэр", "Утас", "Шалтгаан", "Төлөв", "Тэмдэглэл", "AI сануулга"]}>

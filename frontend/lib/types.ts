@@ -333,13 +333,14 @@ export type LeadChange = {
   field: "phone" | "appointment" | "code";
   old: string | null;
   new: string | null;
-  source: "ai" | "web";
+  source: "ai" | "staff" | "web"; // ai — залгагч өөрөө утсаар, staff — ажилтан утсаар
   call_uuid: string | null;
 };
 export type PeopleData = {
   codes: Record<string, string>;
   changes: LeadChange[];
   booking: { days: number[]; start: number; end: number; capacity: number; horizon: number };
+  staff_pin: string;
 };
 
 // backend/routes/report.py — долоо хоногийн тайлан
