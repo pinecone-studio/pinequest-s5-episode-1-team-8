@@ -6,15 +6,17 @@ import { Td } from "@/components/ui/Table";
 import { Tag } from "@/components/ui/Tag";
 import { apiSend } from "@/lib/client";
 import { formatDateTime } from "@/lib/format";
-import { LEAD_STATUS, type Lead, type LeadStatus, type Reminder } from "@/lib/types";
+import { LEAD_STATUS, type Lead, type LeadChange, type LeadStatus, type Reminder } from "@/lib/types";
 import { useAction } from "@/lib/useAction";
+import { LeadChanges } from "./LeadChanges";
 import { ReminderCell } from "./ReminderCell";
 
 const CONTROL =
   "w-full rounded-[10px] border-[1.5px] border-line-2 bg-bg px-3 py-2 text-sm focus:border-brand focus:outline-none disabled:opacity-50";
 
-/** Бүртгэлийн нэг мөр: төлөв солих, тэмдэглэл бичих (талбараас гарахад хадгална), AI сануулга */
-export function LeadRow({ lead, reminder }: { lead: Lead; reminder?: Reminder }) {
+/** Бүртгэлийн нэг мөр: төлөв солих, тэмдэглэл бичих (талбараас гарахад хадгална), AI сануулга,
+ *  бүртгэлийн код ба залгагч утсаар хийсэн өөрчлөлтүүд (хувийн RAG) */
+export function LeadRow({ lead, reminder, code, changes = [] }: { lead: Lead; reminder?: Reminder; code?: string; changes?: LeadChange[] }) {
   const { pending, error, message, run } = useAction();
   const save = (body: { status?: LeadStatus; notes?: string }) =>
     run(() => apiSend(`/api/leads/${lead.id}`, "PATCH", body), "Хадгаллаа ✓");
@@ -25,7 +27,11 @@ export function LeadRow({ lead, reminder }: { lead: Lead; reminder?: Reminder })
         <span className="font-mono text-sm">{formatDateTime(lead.created_at)}</span>
         <div><Link href={`/calls/${lead.call_uuid}`} className="text-[13px] text-muted hover:underline">яриа</Link></div>
       </Td>
-      <Td>{lead.name || "—"}</Td>
+      <Td className="min-w-[240px]">
+        {lead.name || "—"}
+        {code && <div className="text-[13px] text-muted">Код <b className="font-mono text-fg">{code}</b></div>}
+        <LeadChanges changes={changes} />
+      </Td>
       <Td>
         {lead.phone ? <b className="font-mono">{lead.phone}</b> : <Tag tone="bad">дугааргүй</Tag>}
         {lead.phone_raw && <div className="text-[13px] text-muted">STT: {lead.phone_raw}</div>}
