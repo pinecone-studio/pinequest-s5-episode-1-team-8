@@ -84,8 +84,8 @@ def main():
     check("ElevenLabs түлхүүр SIM-TRUNK/data-аас", eleven.KEY_FILE == os.path.join(SIM, "data", "elevenlabs_key"))
     os.makedirs(os.path.join(SIM, "data"), exist_ok=True)
     open(eleven.KEY_FILE, "w").write("sk_" + "x" * 40)
-    check("түлхүүртэй гэж харагдана (Уянга)", a.get("/api/voice").json()["voice"] == {
-        "name": "Уянга", "id": eleven.DEFAULT_VOICE, "model": eleven.MODEL, "has_key": True})
+    check("түлхүүртэй гэж харагдана (анхдагч Уянга)", a.get("/api/voice").json()["voice"] == {
+        "name": "ElevenLabs", "id": eleven.DEFAULT_VOICE, "model": eleven.MODEL, "has_key": True})
 
     calls_made: list[list[str]] = []
     plist = os.path.join(SIM, "ai.plist")
