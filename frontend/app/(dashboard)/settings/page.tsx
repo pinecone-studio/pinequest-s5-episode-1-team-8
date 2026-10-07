@@ -4,21 +4,23 @@ import { Section } from "@/components/Section";
 import { OutboundSettings } from "@/components/settings/OutboundSettings";
 import { PasswordForm } from "@/components/settings/PasswordForm";
 import { ReminderTemplate } from "@/components/settings/ReminderTemplate";
+import { WeeklyReport } from "@/components/settings/WeeklyReport";
 import { TelegramSettings } from "@/components/settings/TelegramSettings";
 import { Card } from "@/components/ui/Card";
 import { Tag } from "@/components/ui/Tag";
 import { apiGet } from "@/lib/api";
 import { requireUser } from "@/lib/session";
-import type { OutboundConfig, RemindersData, Settings } from "@/lib/types";
+import type { OutboundConfig, RemindersData, Settings, WeeklyReport as Report } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Тохиргоо" };
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const [st, reminders, outbound] = await Promise.all([
+  const [st, reminders, outbound, report] = await Promise.all([
     apiGet<Settings>("/api/settings"),
     apiGet<RemindersData>("/api/reminders"),
     user.role === "admin" ? apiGet<OutboundConfig>("/api/admin/outbound") : Promise.resolve(null),
+    apiGet<Report>("/api/report?days=7"),
   ]);
   return (
     <>
@@ -38,6 +40,11 @@ export default async function SettingsPage() {
       >
         <Card>
           <TelegramSettings settings={st} />
+        </Card>
+      </Section>
+      <Section title="Долоо хоногийн тайлан" aside={<Tag tone={report.enabled ? "ok" : "gray"}>{report.enabled ? "Даваа 09:00" : "Унтраалттай"}</Tag>}>
+        <Card>
+          <WeeklyReport initial={report} />
         </Card>
       </Section>
       <Section title="AI сануулгын мессеж" aside={<Tag tone="gray">Бүртгэл → Уулзалт товлох</Tag>}>

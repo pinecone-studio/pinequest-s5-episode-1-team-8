@@ -324,3 +324,22 @@ export const REMINDER_STATUS: Record<ReminderStatus, [string, "ok" | "warn" | "b
   declined: ["❌ Цуцалсан", "bad"], unconfirmed: ["Хариу өгөөгүй", "warn"], no_answer: ["📵 Утсаа аваагүй", "warn"],
   busy: ["📵 Завгүй", "warn"], failed: ["⚠️ Залгаж чадсангүй", "bad"],
 };
+
+// backend/routes/report.py — долоо хоногийн тайлан
+export type WeeklyReport = {
+  days: number;
+  calls: number;
+  questions: number;
+  answered: number;
+  unanswered: number;
+  rate: number | null;
+  topics: [string, number][];
+  unanswered_top: { q: string; count: number }[];
+  new_leads: number;
+  reminders: Record<string, number>;
+  peak_hour: number | null;
+  text: string;
+  enabled: boolean;
+  telegram: boolean;
+  last_sent?: number | null;
+};
