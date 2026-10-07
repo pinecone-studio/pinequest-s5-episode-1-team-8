@@ -155,8 +155,34 @@ export type TrainingStatus = { model: Record<string, unknown> | null; seed: numb
 export type TrainingChoice = { value: string; title: string };
 export type TrainingAnswers = { faq: TrainingChoice[]; facts: TrainingChoice[]; special: TrainingChoice[] };
 
-export type EnglishItem = { id: string | null; kind: "faq" | "knowledge"; mn: string; hash: string; en: string; questions: string[]; questions_en: string[] };
-export type EnglishData = { enabled: boolean; items: EnglishItem[]; phrases: Record<string, string> };
+export type EnglishItem = {
+  id: string | null;
+  kind: "faq" | "knowledge";
+  mn: string;
+  hash: string;
+  en: string;
+  questions: string[];
+  questions_en: string[];
+  built: boolean;
+  flags: string[];
+  hyp?: string | null;
+};
+export type EnglishPhrases = {
+  greeting_suffix: string;
+  repeat: string;
+  error: string;
+  mongolian_only: string;
+  holds: string[];
+  lead: Record<string, string>;
+};
+export type EnglishData = {
+  enabled: boolean;
+  items: EnglishItem[];
+  phrases: EnglishPhrases;
+  stale: { hash: string; mn: string; en: string }[];
+  built: boolean;
+  built_at?: number | null;
+};
 
 // backend/routes/status.py — sidebar, самбар, Тохируулах (10с тутам)
 export type Status = {
