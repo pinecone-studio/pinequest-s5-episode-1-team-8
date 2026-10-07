@@ -567,27 +567,31 @@ def test_recordings():
     t = tenant.Tenant(a.get("/api/me").json()["tenant"])
     items = a.get("/api/voice").json()["items"]
     greet = next(x for x in items if x["kind"] == "Мэндчилгээ")
-    check("өгүүлбэр бүр бичлэггүй (TTS) эхэлнэ", items and not any(x["recorded"] for x in items), items[:2])
-    up = lambda h, data: a.post(f"/api/voice/{h}", files={"file": ("rec.wav", data, "audio/wav")})  # noqa: E731
+    check("өгүүлбэр бүр бичлэггүй (ElevenLabs) эхэлнэ", items and not any(x["recorded"] for x in items), items[:2])
+    up = lambda h, data: a.post(f"/api/voice/recording/{h}", files={"file": ("rec.wav", data, "audio/wav")})  # noqa: E731
     r = up(greet["hash"], wav_bytes(1.2))
-    check("бичлэг хадгална", r.status_code == 200 and r.json()["seconds"] == 1.2, r.text)
+    check("бичлэг хадгална", r.status_code == 200 and abs(r.json()["seconds"] - 1.2) < 0.05, r.text)
     check("SIM-TRUNK-тэй ижил газар (recordings/<hash>.wav) — Бэлдэхэд TTS-ийн оронд",
           os.path.exists(t.path("recordings", f"{greet['hash']}.wav")))
     check("жагсаалтад бичлэгтэй гэж харагдана", next(x for x in a.get("/api/voice").json()["items"]
                                                     if x["hash"] == greet["hash"])["recorded"] is True)
-    r = a.get(f"/api/voice/{greet['hash']}/audio")
+    r = a.get(f"/api/voice/audio/{greet['hash']}")
     check("сонсох -> WAV", r.status_code == 200 and r.content[:4] == b"RIFF", r.status_code)
-    bad = [up(greet["hash"], b"not a wav").status_code, up(greet["hash"], wav_bytes(1, rate=44100)).status_code,
-           up(greet["hash"], wav_bytes(1, channels=2)).status_code, up(greet["hash"], wav_bytes(0.1)).status_code]
-    check("WAV биш / 44.1kHz / stereo / хэт богино -> 400", bad == [400, 400, 400, 400], bad)
+    bad = [up(greet["hash"], b"not a wav").status_code, up(greet["hash"], wav_bytes(0.1)).status_code]
+    check("WAV биш / хэт богино -> 400", bad == [400, 400], bad)
+    import wave
+    r = up(greet["hash"], wav_bytes(1, rate=44100, channels=2))
+    with wave.open(t.path("recordings", f"{greet['hash']}.wav"), "rb") as w:
+        fmt = (w.getframerate(), w.getnchannels())
+    check("44.1kHz stereo -> 24kHz mono болгоно", r.status_code == 200 and fmt == (24000, 1), (r.status_code, fmt))
     check("байхгүй өгүүлбэр -> 404, буруу hash -> 400", up("0" * 12, wav_bytes()).status_code == 404
-          and up("../../x", wav_bytes()).status_code in (400, 404))
+          and a.get("/api/voice/audio/..%2F..%2Fx").status_code in (400, 404))
     other = owner_client("Хоолой 2", "voice2@example.mn")
-    check("өөр байгууллага сонсох / устгах боломжгүй", other.get(f"/api/voice/{greet['hash']}/audio").status_code == 404
-          and other.delete(f"/api/voice/{greet['hash']}").status_code == 404)
-    r = a.delete(f"/api/voice/{greet['hash']}")
-    check("устгахад TTS руу буцна", r.status_code == 200 and not os.path.exists(t.path("recordings", f"{greet['hash']}.wav"))
-          and a.get(f"/api/voice/{greet['hash']}/audio").status_code == 404)
+    check("өөр байгууллага сонсох / устгах боломжгүй", other.get(f"/api/voice/audio/{greet['hash']}").status_code == 404
+          and other.delete(f"/api/voice/recording/{greet['hash']}").status_code == 404)
+    r = a.delete(f"/api/voice/recording/{greet['hash']}")
+    check("устгахад ElevenLabs руу буцна", r.status_code == 200 and not os.path.exists(t.path("recordings", f"{greet['hash']}.wav"))
+          and a.get(f"/api/voice/audio/{greet['hash']}").status_code == 404)
     tenant.write_json(t.path("knowledge_index", "facts.json"), {"facts": [{"text": "Сургалт 6 сар."}]})
     check("бэлдсэн мэдээллийн өгүүлбэр жагсаалтад", any(x["kind"] == "Мэдээлэл" and x["text"] == "Сургалт 6 сар."
                                                           for x in a.get("/api/voice").json()["items"]))
