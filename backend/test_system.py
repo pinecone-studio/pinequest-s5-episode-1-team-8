@@ -21,6 +21,7 @@ Backend-ийн тест. Кодыг өөрчилсний дараа, PR-ийн �
 16. ElevenLabs хоолой (admin): түлхүүр, хоолойнууд, жишээ үүсгэх, сонгох (ElevenLabs, SIM-TRUNK-ийг дуурайна)
 17. Хоолой (Oron-гүй): одоогийн хоолой, ElevenLabs-ийн дахин үүсгэх, аудиог шинэчлэх, ZIP татах
 18. Хоолойн жагсаалт: бэлдсэний дараа яг тоглогдох хэллэгүүд (SIM-TRUNK-ийн faq_index.json)
+19. Байгууллагын загвар SIM-TRUNK-тэй ижил: хэллэг (config phrases), утасны ярианы FAQ, мэндчилгээ
 
 Түр хавтсанд (DATA_DIR) ажиллана — backend/data/-ийн жинхэнэ хэрэглэгчдэд хүрэхгүй.
 """
@@ -870,6 +871,28 @@ def test_voice_texts():
     check("бэлдээгүй хэллэг загвараараа (дахин асуух)", by_kind("дахин асуух") == ["Уучлаарай, сайн ойлгосонгүй. Та дахин хэлж өгнө үү?"])
 
 
+def test_tenant_sim_parity():
+    print("\n[19] Байгууллагын загвар = SIM-TRUNK")
+    t = tenant.create("Загвар тест", phone="7011 2233")
+    faq = tenant.load_faq(t)
+    ids = {x["id"] for x in faq["faq"]}
+    check("утасны ярианы FAQ (сонсогдож байна уу, дахин хэлэх, буруу дугаар ...)",
+          {"phone_hear_check", "phone_bad_line", "repeat_last", "phone_wait", "phone_which_org",
+           "phone_call_later", "phone_wrong_number", "contact_phone"} <= ids, sorted(ids))
+    ph = t.phrases()
+    check("хэллэгт нэр, утас орно", "Загвар тест" in ph["greeting"] and "дал, арван нэг, хорин хоёр, гучин гурав" in ph["lead"]["done_no_phone"], ph["lead"])
+    cfg = t.config()
+    cfg["phrases"] = {"greeting": "Сайн байна уу, {name}. Юугаар туслах вэ?"}
+    t.save_config(cfg)
+    faq["faq"].append({"id": "custom_1", "questions": ["Үнэ"], "answer": "Гараар бичсэн хариулт."})
+    tenant.write_json(t.faq_path, faq)
+    tenant.refresh_faq(t)
+    after = tenant.load_faq(t)
+    check("мэндчилгээ config phrases-аас, гараар нэмсэн FAQ хэвээр",
+          after["greeting"] == "Сайн байна уу, Загвар тест. Юугаар туслах вэ?"
+          and any(x["id"] == "custom_1" for x in after["faq"]), after["greeting"])
+
+
 if __name__ == "__main__":
     test_login()
     test_signup()
@@ -888,5 +911,6 @@ if __name__ == "__main__":
     test_eleven()
     test_voice_eleven_only()
     test_voice_texts()
+    test_tenant_sim_parity()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)
