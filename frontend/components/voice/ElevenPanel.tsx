@@ -57,9 +57,11 @@ export function ElevenPanel({ initial, play, onRebuild }: {
 
   function choose() {
     void run(async () => {
-      const r = await apiSend<{ name: string }>("/api/admin/eleven/choice", "PUT", { voice: selected });
+      // SIM-TRUNK (Oron-гүй): өөрийн бичлэгээс бусад бүх өгүүлбэр сонгосон хоолойгоор
+      const clips = Object.fromEntries(data.items.filter((i) => !i.recorded).map((i) => [i.hash, "eleven"]));
+      const r = await apiSend<{ eleven: number }>("/api/admin/eleven/choice", "PUT", { voice: selected, clips });
       await refresh();
-      if (window.confirm(`Бүх өгүүлбэр ${r.name} хоолойгоор тоглогдоно (өөрийн бичлэгээс бусад). Аудиог одоо шинэчлэх үү?`)) {
+      if (window.confirm(`${r.eleven} өгүүлбэр ${selectedName} хоолойгоор тоглогдоно (өөрийн бичлэгээс бусад). Аудиог одоо шинэчлэх үү?`)) {
         await apiSend("/api/voice/rebuild", "POST");
       }
       await onRebuild();
@@ -103,7 +105,7 @@ export function ElevenPanel({ initial, play, onRebuild }: {
             className="min-w-0 flex-1 rounded-[10px] border border-line-2 bg-bg px-3 py-2 text-base text-fg">
             {voices.map((v) => (
               <option key={v.id} value={v.id}>
-                {count(v.id) ? `✓ ${count(v.id)} жишээ · ` : ""}{v.library ? "🇲🇳 " : ""}{v.name}{v.info ? ` — ${v.info}` : ""}
+                {count(v.id) ? `✓ ${count(v.id)} жишээ · ` : ""}{v.name}{v.info ? ` — ${v.info}` : ""}
                 {v.id === data.voice ? " (одоогийн)" : ""}
               </option>
             ))}

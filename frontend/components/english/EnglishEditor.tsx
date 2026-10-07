@@ -20,7 +20,7 @@ const LEAD: [string, string][] = [["ask_name_again", "Нэр асуух"], ["ask
 
 export function EnglishEditor({ initial }: { initial: EnglishData }) {
   const [enabled, setEnabled] = useState(initial.enabled);
-  const [items, setItems] = useState(initial.items);
+  const [items, setItems] = useState(() => initial.items.map((item) => ({ ...item, en: item.en ?? "" }))); // null -> "" (засварлах талбар)
   const [phrases, setPhrases] = useState(initial.phrases);
   const [audioError, setAudioError] = useState("");
   const playing = useRef<HTMLAudioElement | null>(null);
