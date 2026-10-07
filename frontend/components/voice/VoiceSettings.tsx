@@ -16,11 +16,21 @@ type Tab = "clips" | "voice" | "lexicon";
 const TABS: [Tab, string][] = [["clips", "Өгүүлбэрүүд"], ["voice", "Хоолой сонгох"], ["lexicon", "Дуудлагын толь"]];
 
 /** Хоолой: залгагчид тоглогдох бүх аудио — ElevenLabs (анхдагч Уянга) эсвэл өөрийн бичлэг. Oron TTS ашиглахгүй. */
-export function VoiceSettings({ initial, eleven, isAdmin }: { initial: VoiceData; eleven: ElevenStatus | null; isAdmin: boolean }) {
+export function VoiceSettings({ initial, eleven, isAdmin, initialTab }: {
+  initial: VoiceData;
+  eleven: ElevenStatus | null;
+  isAdmin: boolean;
+  initialTab?: string; // ?tab=voice -> refresh хийхэд тухайн табдаа үлдэнэ
+}) {
   const [data, setData] = useState(initial);
-  const [tab, setTab] = useState<Tab>("clips");
+  const [tab, setTab] = useState<Tab>(TABS.find(([key]) => key === initialTab)?.[0] ?? "clips");
   const [buildKey, setBuildKey] = useState(0); // "Аудиог шинэчлэх"-ийг өөр газраас эхлүүлбэл төлөвийг дахин уншина
   const { play, error } = usePlayer();
+
+  function select(next: Tab) {
+    setTab(next);
+    window.history.replaceState(null, "", next === "clips" ? "/voice" : `/voice?tab=${next}`);
+  }
 
   const refresh = async () => setData(await apiSend<VoiceData>("/api/voice", "GET"));
   const recorded = data.items.filter((i) => i.recorded).length;
@@ -49,7 +59,7 @@ export function VoiceSettings({ initial, eleven, isAdmin }: { initial: VoiceData
 
       <div className="flex flex-wrap gap-1 border-b border-line" role="tablist">
         {TABS.map(([key, label]) => (
-          <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)}
+          <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => select(key)}
             className={`-mb-px cursor-pointer border-b-2 px-4 py-2.5 font-semibold ${tab === key ? "border-brand text-fg" : "border-transparent text-muted hover:text-fg"}`}>
             {label}
           </button>

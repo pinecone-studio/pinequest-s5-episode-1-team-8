@@ -7,8 +7,9 @@ import type { ElevenStatus, VoiceData } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Хоолой" };
 
-export default async function VoicePage() {
+export default async function VoicePage({ searchParams }: PageProps<"/voice">) {
   const user = await requireUser();
+  const { tab } = await searchParams;
   const isAdmin = user.role === "admin";
   const [data, eleven] = await Promise.all([
     apiGet<VoiceData>("/api/voice"),
@@ -26,7 +27,7 @@ export default async function VoicePage() {
           </a>
         }
       />
-      <VoiceSettings initial={data} eleven={eleven} isAdmin={isAdmin} />
+      <VoiceSettings initial={data} eleven={eleven} isAdmin={isAdmin} initialTab={typeof tab === "string" ? tab : undefined} />
     </>
   );
 }
