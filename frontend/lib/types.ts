@@ -185,8 +185,8 @@ export type VoiceData = {
 };
 
 // backend/routes/eleven.py — ElevenLabs хоолой сонгох (admin)
-export type ElevenVoice = { id: string; name: string; info: string; library: boolean };
-export type ElevenItem = { kind: string; text: string; hash: string; recorded: boolean; sample: boolean; eleven: string[] };
+export type ElevenVoice = { id: string; name: string; info: string; library?: boolean }; // name: монгол сангийн хоолой "🇲🇳 ..."
+export type ElevenItem = { kind: string; text: string; hash: string; recorded: boolean; sample: boolean; eleven: string[]; choice: string };
 export type ElevenJob = { running: boolean; done: number; total: number; chars: number; error: string | null };
 export type ElevenStatus = {
   has_key: boolean;
@@ -195,7 +195,8 @@ export type ElevenStatus = {
   job: ElevenJob;
   voices: ElevenVoice[];
   items: ElevenItem[];
-  error: string | null;
+  error?: string | null;
+  oron?: boolean;
 };
 
 export type TrainingExample = { i: number; q: string; faq?: string; fact?: string; label?: string };
@@ -219,13 +220,16 @@ export type TrainingStatus = JobStatus & {
 export type TrainingChoice = { value: string; title: string };
 export type TrainingAnswers = { faq: TrainingChoice[]; facts: TrainingChoice[]; special: TrainingChoice[] };
 
+// backend/english_core.py (SIM-TRUNK english.py · items)
 export type EnglishItem = {
   id: string | null;
-  kind: "faq" | "knowledge";
+  kind: "faq" | "fact";
   mn: string;
   hash: string;
-  en: string;
-  questions: string[];
+  en: string | null; // орчуулаагүй бол null
+  section?: string | null;
+  mn_questions: string[];
+  standard: boolean;
   questions_en: string[];
   built: boolean;
   flags: string[];
