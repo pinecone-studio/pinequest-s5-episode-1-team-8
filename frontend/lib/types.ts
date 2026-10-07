@@ -343,6 +343,23 @@ export type PeopleData = {
   staff_pin: string;
 };
 
+// backend/routes/rag.py — нэг өгөгдлийн сан (receptionist.db): байгууллагын RAG + хувийн RAG + дуудлага
+export type RagStats = {
+  facts: number;
+  chunks: number;
+  faq_questions: number;
+  person_docs: number;
+  people: number;
+  calls: number;
+  messages: number;
+  leads: number;
+  changes: number;
+  embed_model: string | null;
+  dim: number;
+  built_at: number | null;
+  db_bytes: number;
+};
+
 // backend/routes/report.py — долоо хоногийн тайлан
 export type WeeklyReport = {
   days: number;

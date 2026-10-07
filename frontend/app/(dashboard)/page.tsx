@@ -4,6 +4,7 @@ import { CallsTable } from "@/components/calls/CallsTable";
 import { RouteTag } from "@/components/calls/RouteTag";
 import { AnswerRate } from "@/components/dashboard/AnswerRate";
 import { CallsByDay } from "@/components/dashboard/CallsByDay";
+import { RagStore } from "@/components/dashboard/RagStore";
 import { RouteBreakdown } from "@/components/dashboard/RouteBreakdown";
 import { SetupBanner } from "@/components/dashboard/SetupBanner";
 import { TopTopics } from "@/components/dashboard/TopTopics";
@@ -13,18 +14,19 @@ import { Card } from "@/components/ui/Card";
 import { apiGet } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { requireUser } from "@/lib/session";
-import type { Call, Stats, Status, Unanswered, WeeklyReport } from "@/lib/types";
+import type { Call, RagStats, Stats, Status, Unanswered, WeeklyReport } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Самбар" };
 
 export default async function DashboardPage() {
   await requireUser();
-  const [stats, calls, unanswered, status, report] = await Promise.all([
+  const [stats, calls, unanswered, status, report, rag] = await Promise.all([
     apiGet<Stats>("/api/stats"),
     apiGet<Call[]>("/api/calls?limit=6"),
     apiGet<Unanswered[]>("/api/unanswered?limit=5"),
     apiGet<Status>("/api/status"),
     apiGet<WeeklyReport>("/api/report?days=7"),
+    apiGet<RagStats>("/api/rag"),
   ]);
 
   return (
@@ -55,6 +57,12 @@ export default async function DashboardPage() {
         <RouteBreakdown routes={stats.routes} />
         <CallsByDay days={stats.days} />
       </section>
+
+      <Section title="Нэг өгөгдлийн сан (RAG)">
+        <Card>
+          <RagStore rag={rag} />
+        </Card>
+      </Section>
 
       <Section title="Энэ 7 хоногт" aside={<Link href="/settings" className="hover:underline">Долоо хоногийн тайлан →</Link>}>
         <Card>
