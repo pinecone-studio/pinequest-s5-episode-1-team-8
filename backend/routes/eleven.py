@@ -4,7 +4,7 @@ ElevenLabs хоолой сонгох (вэб -> Хоолой -> Хоолой с�
   GET  /api/admin/eleven                     -> түлхүүртэй эсэх, хоолойнууд, өгүүлбэр бүрт аль хоолойгоор жишээ үүссэн
   POST /api/admin/eleven/key {"key"}         -> шалгаад хадгална (буцааж харуулахгүй)
   POST /api/admin/eleven/generate {"voice", "scope": "sample"|"all"} -> үүсгээгүйг цаана нь үүсгэнэ
-  PUT  /api/admin/eleven/choice {"voice"}    -> энэ байгууллагын хоолой ("Аудиог шинэчлэх"-ээр хэрэгжинэ)
+  PUT  /api/admin/eleven/choice {"voice", "clips"} -> энэ байгууллагын хоолой ("Аудиог шинэчлэх"-ээр хэрэгжинэ)
   GET  /api/admin/eleven/audio/{voice}/{h}   -> жишээ аудио (?phone=1 утасны чанар)
 """
 import os
@@ -31,26 +31,28 @@ def check_voice(voice: str):
 
 @router.get("")
 def status(t: Tenant = Depends(current_tenant)):
+    """SIM-TRUNK web/app.py · eleven_status-тэй ижил."""
     eng = eleven.engine(t)
-    base = {"has_key": bool(eleven.key()), "model": eng["model"], "voice": eng["voice"], "job": eleven.JOB,
-            "voices": [], "items": [], "error": None}
-    if not base["has_key"]:
-        return base
-    try:
-        voices = eleven.voices()
-    except RuntimeError as exc:
-        return {**base, "error": str(exc)}
-    items = voice_items(t)
+    voices = []
+    if eleven.key():
+        try:
+            voices = eleven.voices()
+        except RuntimeError as exc:
+            return {"has_key": True, "error": str(exc), "voices": [], "items": [], "model": eleven.MODEL, "job": eleven.JOB}
+    items = [{k: i[k] for k in ("kind", "text", "hash", "recorded")} for i in voice_items(t)]
     sample = {i["hash"] for i in eleven.sample_items(items)}
     made = {}
     for v in voices:
         d = eleven.samples_dir(t, v["id"])
         if os.path.isdir(d):
-            made[v["id"]] = {name[:-4] for name in os.listdir(d) if name.endswith(".wav")}
-    rows = [{"kind": i["kind"], "text": i["text"], "hash": i["hash"], "recorded": i["recorded"],
-             "sample": i["hash"] in sample, "eleven": [vid for vid, hashes in made.items() if i["hash"] in hashes]}
-            for i in items]
-    return {**base, "voices": voices, "items": rows}
+            made[v["id"]] = {name[:-4] for name in os.listdir(d)}
+    clips = t.config().get("clip_engine") or {}
+    for it in items:
+        it["sample"] = it["hash"] in sample
+        it["eleven"] = [vid for vid, hashes in made.items() if it["hash"] in hashes]
+        it["choice"] = clips.get(it["hash"], "eleven")
+    return {"has_key": bool(eleven.key()), "voices": voices, "items": items, "model": eleven.MODEL,
+            "voice": eng["voice"], "job": eleven.JOB, "oron": False}
 
 
 class KeyBody(BaseModel):
@@ -88,17 +90,20 @@ def generate(body: GenerateBody, t: Tenant = Depends(current_tenant)):
 
 class ChoiceBody(BaseModel):
     voice: str
+    clips: dict[str, str] = {}           # text_hash -> "eleven" (SIM-TRUNK: "oron" | "eleven")
 
 
 @router.put("/choice")
 def choice(body: ChoiceBody, t: Tenant = Depends(current_tenant)):
-    """Бүх өгүүлбэр (өөрийн бичлэгээс бусад) энэ хоолойгоор. Үүсгэсэн жишээг бэлдэх үед шууд ашиглана."""
+    """Өгүүлбэр бүрийн сонголт -> config (eleven_voice, clip_engine). "Аудиог шинэчлэх"-ээр хэрэгжинэ."""
     check_voice(body.voice)
+    known = {i["hash"] for i in voice_items(t)}
+    clips = {h: e for h, e in body.clips.items() if h in known and e in ("oron", "eleven")}
     cfg = t.config()
-    cfg.update(tts_engine="eleven", eleven_voice=body.voice, eleven_voice_name=eleven.voice_name(body.voice))
-    cfg.pop("clip_engine", None)              # Oron-той өгүүлбэр бүрийн сонголт хэрэггүй
+    cfg.update(eleven_voice=body.voice, clip_engine={h: e for h, e in clips.items() if e == "eleven"},
+               eleven_voice_name=eleven.voice_name(body.voice))
     t.save_config(cfg)
-    return {"ok": True, "name": cfg["eleven_voice_name"]}
+    return {"ok": True, "eleven": sum(e == "eleven" for e in clips.values())}
 
 
 @router.get("/audio/{voice}/{h}")

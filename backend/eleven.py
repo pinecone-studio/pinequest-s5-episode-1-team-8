@@ -24,7 +24,6 @@ KEY_FILE = os.path.join(SIM_TRUNK_DIR, "data", "elevenlabs_key") if LIVE else os
 URL = "https://api.elevenlabs.io/v1"
 MODEL = "eleven_v4"                      # монгол хэл дэмждэг (v3, multilingual v2 дэмждэггүй)
 DEFAULT_VOICE = os.getenv("ELEVEN_VOICE", "2cecqSnkajrth9sJSoEH")   # Уянга (ElevenLabs-ийн нийтийн сан)
-DEFAULT_NAME = "Уянга"
 VOICE_ID = re.compile(r"[A-Za-z0-9]{10,40}")
 SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "eleven_samples.py")
 SAMPLES = 8
@@ -51,7 +50,11 @@ def save_key(value: str):
         raise ValueError("Түлхүүрийн хэлбэр буруу")
     r = httpx.get(f"{URL}/voices", headers={"xi-api-key": value}, timeout=30)
     if r.status_code != 200:
-        raise ValueError(f"ElevenLabs түлхүүрийг хүлээж авсангүй ({r.status_code}). Voices (Read) эрх хэрэгтэй.")
+        try:
+            msg = r.json()["detail"]["message"]
+        except Exception:
+            msg = ""
+        raise ValueError(f"ElevenLabs түлхүүрийг хүлээж авсангүй ({r.status_code}). Voices (Read) эрх хэрэгтэй. {msg}")
     os.makedirs(os.path.dirname(KEY_FILE), exist_ok=True)
     fd = os.open(KEY_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
@@ -63,8 +66,8 @@ def engine(t: Tenant) -> dict:
     """Байгууллагын ElevenLabs тохиргоо (SIM-TRUNK stream_voice.tts_engine, Oron-гүй)."""
     cfg = t.config()
     voice = cfg.get("eleven_voice") or (DEFAULT_VOICE if key() else None)
-    # SIM-TRUNK: "Uyanga - Kind Khalkha Friend" -> "Uyanga" (хоолойн сангийн тайлбаргүй)
-    name = (cfg.get("eleven_voice_name") or "").split(" - ")[0] or (DEFAULT_NAME if voice == DEFAULT_VOICE else None)
+    # SIM-TRUNK web/app.py · voice(): "Uyanga - Kind Khalkha Friend" -> "Uyanga", сонгоогүй бол "ElevenLabs"
+    name = (cfg.get("eleven_voice_name") or "ElevenLabs").split(" - ")[0]
     speed = min(max(float(cfg.get("eleven_speed", 1.0)), 0.7), 1.2)
     return {"voice": voice, "name": name, "model": cfg.get("eleven_model", MODEL), "speed": speed}
 
@@ -75,56 +78,51 @@ def samples_dir(t: Tenant, voice: str) -> str:
 
 
 def voices() -> list[dict]:
-    """Монгол хүний хоолой (нийтийн сан) эхэнд, дараа нь дансны хоолойнууд. RuntimeError: API алдаа."""
+    """Монгол хүний хоолой (нийтийн сан, халх аялга) эхэнд. API-аар ашиглахад төлбөртэй багц хэрэгтэй.
+    RuntimeError: дансны хоолой авч чадсангүй (SIM-TRUNK web/app.py · eleven_status)."""
     if not _voices:
         headers = {"xi-api-key": key() or ""}
         try:
-            # Нийтийн сангийн хоолойг API-аар ашиглахад төлбөртэй багц хэрэгтэй
             r = httpx.get(f"{URL}/shared-voices", params={"language": "mn", "page_size": 30}, headers=headers, timeout=30)
             if r.status_code == 200:
                 for v in r.json().get("voices", []):
-                    _voices[v["voice_id"]] = {"id": v["voice_id"], "name": v.get("name", ""), "library": True,
-                                              "info": " · ".join(x for x in ("монгол", v.get("gender"), "сангийн хоолой") if x)}
+                    _voices[v["voice_id"]] = {
+                        "id": v["voice_id"], "name": f"🇲🇳 {v.get('name', '')}", "library": True,
+                        "info": " · ".join(x for x in ("монгол", v.get("gender"), "сангийн хоолой (төлбөртэй багц)") if x)}
             r = httpx.get(f"{URL}/voices", headers=headers, timeout=30)
             r.raise_for_status()
-        except httpx.HTTPError as exc:
-            _voices.clear()
-            raise RuntimeError(f"Хоолойн жагсаалт авч чадсангүй: {exc}") from exc
-        for v in r.json().get("voices", []):
-            if v["voice_id"] not in _voices:       # дансанд нэмсэн сангийн хоолой -> "монгол" тэмдэглэгээ хэвээр
+            for v in r.json().get("voices", []):
                 labels = v.get("labels") or {}
-                _voices[v["voice_id"]] = {"id": v["voice_id"], "name": v.get("name", ""), "library": False,
+                if v["voice_id"] in _voices:      # дансанд нэмсэн монгол сангийн хоолой -> тэмдэглэгээ хэвээр
+                    continue
+                _voices[v["voice_id"]] = {"id": v["voice_id"], "name": v.get("name", ""),
                                           "info": " · ".join(x for x in (labels.get("gender"), labels.get("accent"),
                                                                          labels.get("age")) if x)}
+        except Exception as exc:
+            raise RuntimeError(f"Хоолойн жагсаалт авч чадсангүй: {exc}") from exc
     return list(_voices.values())
 
 
 def voice_name(voice: str) -> str:
-    if voice == DEFAULT_VOICE:
-        return DEFAULT_NAME
-    if voice not in _voices and key():
-        try:
-            voices()
-        except RuntimeError:
-            pass
-    return _voices.get(voice, {}).get("name", "").split(" - ")[0] or "ElevenLabs"
+    return _voices.get(voice, {}).get("name", "").replace("🇲🇳 ", "")
+
+
+SAMPLE_KINDS = ("мэндчилгээ", "тодруулах", "FAQ se_duration", "FAQ se_price", "FAQ contact_phone",
+                "бүртгэл", "мэдээлэл")
 
 
 def sample_items(items: list[dict]) -> list[dict]:
-    """Хоолойг харьцуулах төлөөлөх өгүүлбэрүүд: мэндчилгээ, тодруулах, FAQ (тоотой), бүртгэлийн асуулт,
-    англи үгтэй, тоотой мэдээлэл."""
-    items = [i for i in items if not i["recorded"]]
-    latin = lambda i: len(re.findall(r"[A-Za-z]{2,}", i["text"]))           # noqa: E731
-    number = lambda i: bool(re.search(r"\d|хувь|төгрөг|мянга", i["text"]))    # noqa: E731
-    kind = lambda *names: [i for i in items if i["kind"] in names]          # noqa: E731
-    facts = kind("Мэдээлэл")
-    groups = [kind("Мэндчилгээ")[:1], kind("тодруулах")[:1],
-              sorted(kind("FAQ"), key=lambda i: (not number(i), -len(i["text"])))[:2],
-              sorted([i for i in kind("бүртгэл") if i["text"].endswith("?")], key=lambda i: -len(i["text"]))[:1],
-              sorted(facts, key=latin, reverse=True)[:1], [i for i in facts if number(i) and not latin(i)][:1]]
+    """Төлөөлөх өгүүлбэрүүд: мэндчилгээ, урт тойм, англи үгтэй, утасны дугаартай, тоотой, асуулт."""
     picked = []
-    for group in groups:
-        for i in group:
+    latin = lambda i: len(re.findall(r"[A-Za-z]{2,}", i["text"]))           # noqa: E731
+    for kind in SAMPLE_KINDS:
+        group = [i for i in items if i["kind"] == kind or (kind == "мэдээлэл" and i["kind"].startswith("мэдээлэл"))]
+        if kind == "мэдээлэл":       # англи нэр томьёо хамгийн олонтой нэг, тоотой (англигүй) нэг
+            group = (sorted(group, key=latin, reverse=True)[:1]
+                     + [i for i in group if not latin(i) and re.search(r"(хувь|төгрөг|мянга)", i["text"])][:1])
+        elif kind == "бүртгэл":      # асуултын аялга: хамгийн урт асуулт
+            group = sorted([i for i in group if i["text"].endswith("?")], key=lambda i: -len(i["text"]))[:1]
+        for i in group[:2]:
             if i["hash"] not in {p["hash"] for p in picked}:
                 picked.append(i)
     return picked[:SAMPLES]
