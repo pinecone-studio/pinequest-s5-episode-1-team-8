@@ -86,10 +86,11 @@ def add_message(path: str, uuid: str, role: str, text: str, route: str | None = 
 
 
 def add_lead(path: str, call_uuid: str, name: str | None, phone: str | None, phone_raw: str | None = None,
-             caller: str | None = None, reason: str = "lead", question: str | None = None, ts: float | None = None):
+             caller: str | None = None, reason: str = "lead", question: str | None = None, ts: float | None = None,
+             course: str | None = None):
     """-> шинэ бүртгэлийн id (people.ensure_code-д)."""
     with connect(path) as con:
-        cur = con.execute("INSERT INTO leads (call_uuid, created_at, name, phone, phone_raw, caller, reason, question) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (call_uuid, ts or time.time(), name, phone, phone_raw, caller, reason, question))
+        cur = con.execute("INSERT INTO leads (call_uuid, created_at, name, phone, phone_raw, caller, reason, question, "
+                          "course) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                          (call_uuid, ts or time.time(), name, phone, phone_raw, caller, reason, question, course))
         return cur.lastrowid

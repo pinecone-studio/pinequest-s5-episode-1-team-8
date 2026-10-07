@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS lead_changes (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     lead_id   INTEGER,
     ts        REAL,
-    field     TEXT,       -- phone | appointment | code
+    field     TEXT,       -- phone | appointment | status
     old       TEXT,
     new       TEXT,
     source    TEXT,       -- ai | web
@@ -59,7 +59,8 @@ CREATE INDEX IF NOT EXISTS idx_changes_lead ON lead_changes(lead_id);
 """
 BOOKING = {"days": [0, 1, 2, 3, 4], "start": 10, "end": 17, "capacity": 1, "horizon": 14}
 CANCELED = ("declined", "canceled")          # эдгээр төлөвтэй сануулга цаг эзлэхгүй
-STATUS_WORDS = {"new": "шинэ, ажилтан удахгүй холбогдоно", "contacted": "ажилтан холбогдсон", "done": "дууссан"}
+STATUS_WORDS = {"new": "шинэ, ажилтан удахгүй холбогдоно", "contacted": "ажилтан холбогдсон", "done": "дууссан",
+                "canceled": "цуцлагдсан"}
 
 WEEKDAYS = ["Даваа", "Мягмар", "Лхагва", "Пүрэв", "Баасан", "Бямба", "Ням"]
 MONTHS = ["нэгдүгээр", "хоёрдугаар", "гуравдугаар", "дөрөвдүгээр", "тавдугаар", "зургаадугаар", "долоодугаар",
@@ -384,6 +385,20 @@ def cancel_appointment(tdir: str, lead_id: int, source: str = "ai", call_uuid: s
     return old
 
 
+def cancel_registration(tdir: str, lead_id: int, source: str = "ai", call_uuid: str | None = None) -> str | None:
+    """Хөтөлбөр/эвентийн бүртгэлийг цуцална ("Эвентэд очиж чадахгүй боллоо"): төлөв canceled + товлосон цаг
+    суллагдана -> хуучин төлөв."""
+    with connect(tdir) as con:
+        row = con.execute("SELECT status FROM leads WHERE id=?", (lead_id,)).fetchone()
+        if not row:
+            raise KeyError(lead_id)
+        con.execute("UPDATE leads SET status='canceled' WHERE id=?", (lead_id,))
+        log_change(con, lead_id, "status", row["status"], "canceled", source, call_uuid)
+    cancel_appointment(tdir, lead_id, source, call_uuid)
+    docs(tdir, lead_id)
+    return row["status"]
+
+
 def changes(tdir: str, lead_id: int | None = None, limit: int = 200) -> list[dict]:
     with connect(tdir) as con:
         if lead_id is None:
@@ -410,7 +425,7 @@ def doc_texts(tdir: str, lead_id: int) -> dict[str, str]:
                           else "Танд товлосон уулзалтын цаг алга")
     out["status"] = f"Таны бүртгэлийн төлөв {STATUS_WORDS.get(row.get('status') or 'new', row.get('status'))}"
     if row.get("course"):
-        out["course"] = f"Таны бүртгүүлсэн хөтөлбөр {row['course']}"
+        out["course"] = f"Таны бүртгүүлсэн хөтөлбөр, эвент: {row['course']}"
     return out
 
 
