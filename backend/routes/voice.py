@@ -31,13 +31,7 @@ from tenant import Tenant, load_faq
 
 router = APIRouter(prefix="/api/voice", tags=["voice"])
 
-HOLDS = ["Түр хүлээгээрэй.", "Одоохон хэлье.", "Мэдээллийг нь шалгаж байна.",
-         "Бага зэрэг хүлээгээрэй.", "Одоохон олчихлоо.", "Түр хором хүлээгээрэй."]
-SYSTEM = {"алдаа": "Энэ мэдээллийг баталгаатай олж чадсангүй. Манай ажилтан тан руу эргэж холбогдох уу?",
-          "дахин асуух": "Уучлаарай, сайн ойлгосонгүй. Та дахин хэлж өгнө үү?",
-          "тодруулах": "Та юуны талаар мэдэхийг хүсэж байна вэ? Асуултаа арай тодорхой хэлж өгнө үү?"}
-LEAD = ["Та нэрээ хэлж өгнө үү?", "Тантай холбогдох утасны дугаараа хэлж өгнө үү.",
-        "Таны дугаар", "Зөв үү?", "Таны мэдээллийг амжилттай бүртгэлээ."]
+# SIM-TRUNK lead.DIGITS (утасны дугаарыг цифр бүрээр уншина)
 DIGITS = ["тэг", "нэг", "хоёр", "гурав", "дөрөв", "тав", "зургаа", "долоо", "найм", "ес"]
 
 
@@ -52,21 +46,24 @@ def load_json(path: str, default):
 def all_texts(t: Tenant) -> list[tuple[str, str]]:
     """Залгагчид тоглогдох бүх өгүүлбэр (SIM-TRUNK scripts/record.py · all_texts).
     Хэллэгүүдийг (хүлээлгэх, алдаа, бүртгэл, цифр) "Аудио бэлдэх"-ийн бичсэн faq_index.json-оос авна —
-    SIM-TRUNK байгууллагын нэр, утсыг оруулж бэлддэг тул яг тоглогдох бичвэр. Бэлдээгүй бол доорх загвар."""
+    SIM-TRUNK байгууллагын нэр, утсыг оруулж бэлддэг тул яг тоглогдох бичвэр. Бэлдээгүй бол t.phrases()
+    (SIM-TRUNK-ийн DEFAULT_PHRASES + config["phrases"]) — бэлдэхэд яг эдгээр үүснэ."""
     src = load_faq(t)
     built = load_json(os.path.join(t.faq_index_dir, "faq_index.json"), {})
     one = lambda key: (built.get(key) or {}).get("text")                                    # noqa: E731
     many = lambda key: [c.get("text", "") for c in (built.get(key) or [])]                   # noqa: E731
-    system_keys = {"алдаа": "error", "дахин асуух": "repeat", "тодруулах": "clarify"}
+    ph = t.phrases()
+    system = {"алдаа": "error", "дахин асуух": "repeat", "тодруулах": "clarify"}
     rows: list[tuple[str, str]] = []
-    greeting = src.get("greeting") or one("greeting")
+    greeting = src.get("greeting") or one("greeting") or ph["greeting"]
     if greeting:
         rows.append(("Мэндчилгээ", greeting))
-    rows += [("Хүлээлгэх", text) for text in (src.get("fillers") or many("fillers"))]
-    rows += [("hold", text) for text in (many("holds") or HOLDS)]
-    rows += [(kind, one(system_keys[kind]) or text) for kind, text in SYSTEM.items()]
+    rows += [("Хүлээлгэх", text) for text in (src.get("fillers") or many("fillers") or ph["fillers"])]
+    rows += [("hold", text) for text in (many("holds") or ph["holds"])]
+    rows += [(kind, one(key) or ph[key]) for kind, key in system.items()]
     rows += [("bridge", row.get("bridge", "")) for row in src.get("topics", {}).values()]
-    rows += [("бүртгэл", text) for text in ([c.get("text", "") for c in (built.get("lead") or {}).values()] or LEAD)]
+    lead = [c.get("text", "") for c in (built.get("lead") or {}).values()] or list(ph["lead"].values())
+    rows += [("бүртгэл", text) for text in lead]
     rows += [("цифр", text) for text in (many("digits") or DIGITS)]
     rows += [("FAQ", row.get("answer", "")) for row in src.get("faq", [])
              if row.get("answer") and "TODO" not in row.get("answer", "")]
