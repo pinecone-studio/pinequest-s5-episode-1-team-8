@@ -9,3 +9,4 @@ scipy==1.18.1            # resample_poly (бичлэг 24kHz, утасны ча�
 soundfile==0.14.0
 pypdf==6.19.0            # .pdf мэдээлэл
 python-docx==1.2.0       # .docx мэдээлэл
+sounddevice==0.5.6       # гарах дуудлага: iMac + iPhone (BlackHole)
