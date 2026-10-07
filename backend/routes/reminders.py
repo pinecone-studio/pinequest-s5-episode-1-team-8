@@ -30,7 +30,11 @@ admin_router = APIRouter(prefix="/api/admin/outbound", tags=["outbound"], depend
 @router.get("")
 def list_reminders(t: Tenant = Depends(current_tenant)):
     cfg = dialer.load()
-    return {"items": reminders.load(t)["items"], "template": reminders.template(t),
+    items = reminders.load(t)["items"]
+    for key, item in items.items():          # утасны AI сольсон цаг (people.py) -> текстийг загвараар
+        if not item.get("text") and item.get("appointment"):
+            item["text"] = reminders.item_text(t, reminders.lead_of(t, int(key)) or {}, item)
+    return {"items": items, "template": reminders.template(t),
             "default_template": reminders.DEFAULT_TEMPLATE, "dialer": {"mode": cfg["mode"]},
             "hours": list(reminders.HOURS)}
 

@@ -29,7 +29,8 @@ CALLS = [
                      ("user", "Болд", None), ("assistant", "Тантай холбогдох утасны дугаараа хэлж өгнө үү.", "lead_ask_phone"),
                      ("user", "ерэн тав тав тав дөчин гурав гучин гурав", None),
                      ("assistant", "Таны мэдээллийг амжилттай бүртгэлээ.", "lead_done")],
-     {"name": "Болд", "phone": "95554433", "phone_raw": "ерэн тав тав тав дөчин гурав гучин гурав", "reason": "lead"}),
+     {"name": "Болд", "phone": "95554433", "phone_raw": "ерэн тав тав тав дөчин гурав гучин гурав", "reason": "lead",
+      "course": "Software Engineer Bootcamp хөтөлбөр"}),
     (2, "80112233", [("user", "Хүүхдэд зориулсан сургалт байгаа юу", None),
                      ("assistant", "Энэ мэдээллийг баталгаатай олж чадсангүй. Манай ажилтан тан руу эргэж холбогдох уу?", "handoff"),
                      ("user", "Тийм", None), ("assistant", "За, манай ажилтан тан руу эргэж залгана. Та нэрээ хэлж өгнө үү?", "faq"),
@@ -56,7 +57,7 @@ def seed(t: tenants.Tenant) -> int:
                            stt_sec=0.6 if user else None, latency=None if user else 1.2, ts=ts + 4 * i + 2)
         if lead:
             db.add_lead(t.db_path, cid, lead["name"], lead["phone"], lead["phone_raw"], caller,
-                        lead["reason"], lead.get("question"), ts=ts + 4 * len(msgs))
+                        lead["reason"], lead.get("question"), ts=ts + 4 * len(msgs), course=lead.get("course"))
         db.end_call(t.db_path, cid, ts=ts + 4 * len(msgs) + 3)
     return len(CALLS)
 
