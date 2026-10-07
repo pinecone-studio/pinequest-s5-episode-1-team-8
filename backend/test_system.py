@@ -150,6 +150,10 @@ def test_signup():
     check("утсыг цэвэрлэж хадгална, дотуур дугаар олгоно", cfg.get("phone") == "72700800" and me["extension"].isdigit(), cfg)
     check("загвар FAQ (утастай -> contact_phone, хаяггүй -> location алга)",
           "contact_phone" in ids and "location" not in ids and "Гэрэл шүдний эмнэлэг" in faq["greeting"], ids)
+    by_id = {x["id"]: x["answer"] for x in faq["faq"]}
+    check("SIM-TRUNK-ийн шинэ нэр асуух, үдэх хэллэг",
+          "Та нэрээ" in by_id["register"] and "Та нэрээ" in by_id["human_request"]
+          and by_id["smalltalk_bye"] == "Манайхаар үйлчлүүлсэнд баярлалаа. Өдрийг сайхан өнгөрүүлээрэй.")
     check("мэдээллийн хавтас үүснэ", os.path.isdir(t.knowledge_dir))
 
     bad = [signup(TestClient(app), email="bad-email").status_code,
@@ -363,6 +367,67 @@ def test_unanswered():
     check("тоо нь самбартай таарна", len(items) == a.get("/api/stats").json()["unanswered"])
     check("limit", len(a.get("/api/unanswered?limit=1").json()) == 1)
     check("өөр байгууллага харахгүй", owner_client("Асуулт 2", "unans2@example.mn").get("/api/unanswered").json() == [])
+
+    import routes.unanswered as unanswered_api
+    import knowledge_jobs
+
+    class FakeReviewResponse:
+        status_code = 200
+
+        def __init__(self, questions):
+            self.questions = questions
+
+        def json(self):
+            result = []
+            for question in self.questions:
+                if "зогсоол" in question:
+                    result.append({"q": question, "text": question, "route": "repeat", "reply": "Дахин хэлнэ үү",
+                                   "suggest": [{"kind": "faq", "id": "smalltalk_hello",
+                                                "text": "Сайн байна уу", "score": 0.81}]})
+                elif "Хүүхдэд" in question:
+                    result.append({"q": question, "text": question, "noise": True})
+                else:
+                    result.append({"q": question, "text": question, "route": "faq",
+                                   "reply": "Одоо хариулдаг болсон", "suggest": []})
+            return result
+
+    old_post, old_enqueue = unanswered_api.httpx.post, knowledge_jobs.enqueue
+    unanswered_api.httpx.post = lambda _url, json, timeout: FakeReviewResponse(json["questions"])
+    try:
+        reviewed = a.get("/api/unanswered/review").json()
+        suggestion = next(x for x in reviewed["items"] if "зогсоол" in x["q"])["now"]["suggest"][0]
+        check("live review: одоогийн route, noise, санал болгосон answer value",
+              reviewed["live"] and len(reviewed["items"]) == 3 and suggestion["value"] == "faq:smalltalk_hello"
+              and sum(bool(x.get("now", {}).get("noise")) for x in reviewed["items"]) == 1, reviewed)
+
+        r = a.post("/api/unanswered/hide", json={"q": "Хүүхдэд зориулсан сургалт байгаа юу"})
+        check("чимээ/шийдсэн асуултыг нуух", r.status_code == 200
+              and len(a.get("/api/unanswered/review").json()["items"]) == 2, r.text)
+
+        answer = "Манай хүүхдийн сургалтын мэдээллийг ажилтан утсаар дэлгэрэнгүй өгнө."
+        body = {"q": "Мэдээлэл авъя", "answer": answer, "questions": ["Хүүхдийн сургалт бий юу"]}
+        first = a.post("/api/unanswered/answer", json=body)
+        second = a.post("/api/unanswered/answer", json={**body, "questions": ["Хүүхдийн анги байдаг уу"]})
+        faq_rows = [x for x in tenant.load_faq(tenant.Tenant(a.get("/api/me").json()["tenant"]))["faq"]
+                    if x["answer"] == answer]
+        check("шинэ хариулт нэг FAQ болж, асуултын хувилбар давхардахгүй",
+              first.status_code == second.status_code == 200 and len(faq_rows) == 1
+              and {"Хүүхдийн сургалт бий юу", "Хүүхдийн анги байдаг уу"} <= set(faq_rows[0]["questions"]), faq_rows)
+
+        taught = a.post("/api/unanswered/teach", json={"q": "Машины зогсоол бий юу", "answer": "faq:smalltalk_hello"})
+        pending = a.get("/api/unanswered/review").json()
+        check("байгаа хариултыг зааж, pending-д давхардалгүй тэмдэглэнэ",
+              taught.status_code == 200 and len(pending["pending"]) == 2 and pending["items"] == [], pending)
+
+        knowledge_jobs.enqueue = lambda t, task="build": {"state": "queued", "task": task, "running": True,
+                                                            "ahead": 0, "log": []}
+        applied = a.post("/api/unanswered/apply")
+        check("Хэрэгжүүлэх -> answers audio+training job, амжилттай бол pending цэвэрлэнэ",
+              applied.status_code == 200 and applied.json()["task"] == "answers"
+              and a.get("/api/unanswered/review").json()["pending"] == [], applied.text)
+    finally:
+        unanswered_api.httpx.post = old_post
+        knowledge_jobs.enqueue = old_enqueue
 
 
 FAKE_SIM_TENANT = """

@@ -82,13 +82,22 @@ class TeachBody(BaseModel):
 
 @router.post("/examples")
 def teach(body: TeachBody, t: Tenant = Depends(current_tenant)):
-    question = " ".join(body.q.split())[:300]
-    kind, _, value = body.answer.partition(":")
+    return save_example(t, body.q, body.answer)
+
+
+def save_example(t: Tenant, question: str, answer: str) -> dict:
+    """Сургалтын жишээг нэг газар баталгаажуулж хадгална.
+
+    AI сургалтын хуудас болон "Хариулж чадаагүй" урсгал хоёулаа үүнийг ашигласнаар
+    зөвшөөрөгдөөгүй answer value эсвэл давхардсан жишээ үүсэхгүй.
+    """
+    question = " ".join(question.split())[:300]
+    kind, _, value = answer.partition(":")
     if not question:
         raise HTTPException(400, "Асуулт хоосон байна")
     available = answers(t)
     choices = {x["value"] for group in available.values() for x in group}
-    if body.answer not in choices:
+    if answer not in choices:
         raise HTTPException(400, "Зөв хариулт олдсонгүй")
     row = {"q": question, "source": "web", "ts": int(time.time())}
     if kind == "faq": row["faq"] = value

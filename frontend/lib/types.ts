@@ -89,6 +89,39 @@ export type Unanswered = {
   score: number | null;
 };
 
+export type UnansweredSuggestion = {
+  kind: "faq" | "fact";
+  id?: string;
+  text: string;
+  score: number;
+  value: string;
+};
+
+export type UnansweredReviewNow = {
+  q: string;
+  text: string;
+  fixed?: string | null;
+  noise?: boolean;
+  route?: string | null;
+  reply?: string;
+  faq_id?: string | null;
+  suggest?: UnansweredSuggestion[];
+};
+
+export type UnansweredReviewItem = {
+  q: string;
+  ts: number;
+  call_uuid: string;
+  route: string;
+  now?: UnansweredReviewNow;
+};
+
+export type UnansweredReview = {
+  items: UnansweredReviewItem[];
+  live: boolean;
+  pending: string[];
+};
+
 // backend/routes/leads.py
 export type LeadStatus = "new" | "contacted" | "done";
 
@@ -113,7 +146,7 @@ export type KnowledgeFact = { text: string; source: string | null; hash: string;
 export type KnowledgeResponse = { files: KnowledgeFile[]; facts: KnowledgeFact[]; indexed_at?: number | string | null };
 export type JobStatus = {
   state: "idle" | "queued" | "running" | "done" | "error";
-  task?: "build" | "train" | "english" | "regen";
+  task?: "build" | "train" | "english" | "regen" | "answers";
   running: boolean;
   ahead: number;
   log: string[];
@@ -122,7 +155,15 @@ export type JobStatus = {
 };
 export type BuildStatus = JobStatus;
 
-export type FaqItem = { id: string; questions: string[]; answer: string; topic?: string | null; auto?: boolean };
+export type FaqItem = {
+  id: string;
+  questions: string[];
+  answer: string;
+  topic?: string | null;
+  auto?: boolean;
+  source?: string | null;
+  created_at?: number | null;
+};
 export type FaqData = { greeting: string; fillers: string[]; topics: Record<string, unknown>; faq: FaqItem[] };
 
 export type VoiceItem = {
