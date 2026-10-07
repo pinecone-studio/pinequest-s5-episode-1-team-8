@@ -41,6 +41,7 @@ export const NAV: { title?: string; items: NavItem[] }[] = [
     title: "Систем",
     items: [
       { href: "/admin", label: "Байгууллагууд", adminOnly: true, icon: <><rect x="3" y="4" width="18" height="6" rx="1" /><rect x="3" y="14" width="18" height="6" rx="1" /></> },
+      { href: "/database", label: "Өгөгдлийн сан", icon: <><ellipse cx="12" cy="5" rx="8" ry="3" /><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5" /><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" /></> },
       { href: "/settings", label: "Тохиргоо", icon: <><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1" /></> },
     ],
   },

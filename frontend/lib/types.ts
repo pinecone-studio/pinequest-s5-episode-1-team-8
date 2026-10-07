@@ -370,6 +370,13 @@ export type AssistantReply = {
   staff: boolean;
 };
 
+// backend/routes/database.py — өгөгдлийн сан (зөвхөн унших)
+export type DbTable = { name: string; rows: number; columns: string[]; about: string };
+export type DbOverview = { file: string; bytes: number; tables: DbTable[] };
+export type DbVector = { dims: number; preview: number[] };
+export type DbCell = string | number | null | DbVector;
+export type DbRows = { table: string; columns: string[]; rows: DbCell[][]; total: number; offset: number; page: number; about: string };
+
 // backend/routes/rag.py — нэг өгөгдлийн сан (receptionist.db): байгууллагын RAG + хувийн RAG + дуудлага
 export type RagStats = {
   facts: number;
