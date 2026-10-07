@@ -255,7 +255,10 @@ export type Status = {
   documents: number;
   facts: number;
   faq: number;
-  ready: boolean; // мэдээлэл + FAQ аудио бэлдсэн
+  indexed_at?: string | null;
+  ready: boolean; // мэдээлэл + FAQ-ийн индекс бэлдсэн (SIM-TRUNK шиг)
+  recorded?: number; // өөрийн хоолойгоор бичсэн өгүүлбэр
+  voice_total?: number; // тоглогдох бүх өгүүлбэр
   build_running: boolean;
   selector: { enabled: boolean | null; eval: { selector?: [number, number]; rules?: [number, number] } | null } | null;
   new_leads: number;
