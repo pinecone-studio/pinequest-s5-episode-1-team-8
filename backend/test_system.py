@@ -537,6 +537,17 @@ def test_status():
     check("бэлдсэн -> бэлэн, шалгалтын үр дүн", st["ready"] is True and st["facts"] == 2 and st["faq"] == 1
           and st["selector"] == {"enabled": True, "eval": {"selector": [41, 42]}}, st)
     check("өөр байгууллагад нөлөөлөхгүй", owner_client("Төлөв 2", "status2@example.mn").get("/api/status").json()["ready"] is False)
+    st = a.get("/api/status").json()
+    check("өөрийн хоолойгоор бичсэн: recorded / voice_total", st["recorded"] == 0 and st["voice_total"] > 20, st)
+    b = owner_client("Төлөв 3", "status3@example.mn")
+    tb = tenant.Tenant(b.get("/api/me").json()["tenant"])
+    tenant.write_json(tb.path("knowledge_index", "facts.json"), {"facts": [], "indexed_at": "x"})
+    tenant.write_json(tb.path("faq_audio", "faq_index.json"), {"faq": [{"id": "x"}]})
+    check("мэдээллийн өгүүлбэргүй ч хоёр индекс бэлдсэн бол бэлэн (SIM-TRUNK шиг)", b.get("/api/status").json()["ready"] is True)
+    faq = tenant.load_faq(tb)
+    tenant.write_json(tb.faq_path, {"_note": "тайлбар", **faq})
+    b.put("/api/faq", json=b.get("/api/faq").json())
+    check("FAQ хадгалахад _note тайлбар хэвээр", tenant.load_faq(tb).get("_note") == "тайлбар")
 
 
 def test_training_model():
