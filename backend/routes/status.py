@@ -2,7 +2,8 @@
 AI ресепшний төлөв (sidebar, самбар, Тохируулах). Вэб 10 секунд тутам асууна.
 
   GET /api/status -> AI сервер / SIP асаалттай эсэх, мэдээлэл бэлдсэн эсэх, бэлдэлт явагдаж байгаа эсэх,
-                     sidebar-ын тоо (шинэ бүртгэл, хариулж чадаагүй), автомат шалгалтын үр дүн
+                     sidebar-ын тоо (шинэ бүртгэл, хариулж чадаагүй), автомат шалгалтын үр дүн,
+                     өөрийн хоолойгоор бичсэн өгүүлбэр (recorded / voice_total) — SIM-TRUNK web/app.py · status
 
 AI сервер (AudioSocket) AI_PORT=9092, SIP SIP_PORT=5060 (UDP) — SIM-TRUNK-тэй ижил.
 """
@@ -14,7 +15,9 @@ from fastapi import APIRouter, Depends
 
 import db
 import knowledge_jobs
+from audio_files import recording_for
 from deps import current_tenant
+from routes.voice import all_texts
 from tenant import Tenant
 
 router = APIRouter(prefix="/api/status", tags=["status"])
@@ -47,8 +50,10 @@ def load_json(path: str) -> dict:
 @router.get("")
 def status(t: Tenant = Depends(current_tenant)):
     # Бэлдэлтийн үр дүн (SIM-TRUNK-ийн ingest, build_faq_audio, train_selector бичнэ)
-    facts = load_json(t.path("knowledge_index", "facts.json")).get("facts", [])
-    faq = load_json(t.path("faq_audio", "faq_index.json")).get("faq", [])
+    facts_index = load_json(t.path("knowledge_index", "facts.json"))
+    faq_index = load_json(t.path("faq_audio", "faq_index.json"))
+    facts, faq = facts_index.get("facts", []), faq_index.get("faq", [])
+    texts = [text for _, text in all_texts(t)]
     selector = load_json(t.path("knowledge_index", "selector.json"))
     docs = [n for n in os.listdir(t.knowledge_dir) if n.lower().endswith(DOC_EXT)] \
         if os.path.isdir(t.knowledge_dir) else []
@@ -60,7 +65,9 @@ def status(t: Tenant = Depends(current_tenant)):
     return {
         "ai_server": port_open(int(os.getenv("AI_PORT", "9092"))),
         "sip": port_open(int(os.getenv("SIP_PORT", "5060")), udp=True),
-        "documents": len(docs), "facts": len(facts), "faq": len(faq), "ready": bool(facts) and bool(faq),
+        "documents": len(docs), "facts": len(facts), "faq": len(faq), "indexed_at": facts_index.get("indexed_at"),
+        "ready": bool(facts_index) and bool(faq_index),          # SIM-TRUNK: хоёр индекс бэлдсэн бол (өгүүлбэргүй ч)
+        "recorded": sum(1 for text in texts if recording_for(t.recordings_dir, text)), "voice_total": len(texts),
         "build_running": knowledge_jobs.status(t)["running"],
         "selector": {"enabled": selector.get("enabled"), "eval": selector.get("eval")} if selector else None,
         "new_leads": new_leads, "unanswered": unanswered,
