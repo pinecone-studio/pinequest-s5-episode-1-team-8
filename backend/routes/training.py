@@ -7,13 +7,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from deps import current_tenant
+import knowledge_jobs
 from tenant import Tenant, load_faq, write_json
 
 router = APIRouter(prefix="/api/train", tags=["training"])
 
 
 def examples_path(t: Tenant) -> str:
-    return t.path("training", "examples.json")
+    return t.training_path
 
 
 def load_examples(t: Tenant) -> dict:
@@ -33,23 +34,45 @@ def status(t: Tenant = Depends(current_tenant)):
             model = json.load(f)
     except (OSError, ValueError):
         model = None
-    return {"model": model, "seed": sum(x.get("source") != "web" for x in rows),
+    auto = load_json(t.auto_training_path, {"examples": []})
+    return {**knowledge_jobs.status(t), "model": model,
+            "auto": len(auto.get("examples", [])),
+            "seed": sum(x.get("source") != "web" for x in rows),
             "taught": [{"i": i, **x} for i, x in enumerate(rows) if x.get("source") == "web"][::-1]}
+
+
+def load_json(path: str, default):
+    try:
+        with open(path, encoding="utf-8") as file:
+            return json.load(file)
+    except (OSError, ValueError):
+        return default
+
+
+@router.post("")
+def start_training(t: Tenant = Depends(current_tenant)):
+    try:
+        return knowledge_jobs.enqueue(t, "train")
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 @router.get("/answers")
 def answers(t: Tenant = Depends(current_tenant)):
     faq = load_faq(t).get("faq", [])
-    facts = []
-    if os.path.isdir(t.knowledge_dir):
+    facts = load_json(os.path.join(t.kb_index_dir, "facts.json"), {}).get("facts", [])
+    texts = [row.get("text", "") for row in facts if row.get("text")]
+    if not texts and os.path.isdir(t.knowledge_dir):
         for name in sorted(os.listdir(t.knowledge_dir)):
             if name.lower().endswith((".md", ".txt")):
                 with open(os.path.join(t.knowledge_dir, name), encoding="utf-8") as f:
-                    facts += [line.strip() for line in f if line.strip() and not line.lstrip().startswith("#")]
-    return {"faq": [{"value": f"faq:{x['id']}", "title": x["answer"][:100]} for x in faq],
-            "facts": [{"value": f"fact:{i}", "title": text[:100]} for i, text in enumerate(facts[:500])],
-            "special": [{"value": "label:other", "title": "Мэдээлэлд алга"},
-                        {"value": "label:clarify", "title": "Тодруулах шаардлагатай"}]}
+                    texts += [line.strip() for line in f if line.strip() and not line.lstrip().startswith("#")]
+    return {"faq": [{"value": f"faq:{x['id']}", "title": f"{x['id']} — {x['answer'][:100]}"}
+                    for x in faq if "TODO" not in x.get("answer", "")],
+            "facts": [{"value": f"fact:{i}", "title": text[:120], "text": text}
+                      for i, text in enumerate(texts[:500])],
+            "special": [{"value": "label:other", "title": "Мэдээлэлд алга / хамааралгүй"},
+                        {"value": "label:clarify", "title": "Хэт ерөнхий — тодруулах шаардлагатай"}]}
 
 
 class TeachBody(BaseModel):
@@ -69,10 +92,11 @@ def teach(body: TeachBody, t: Tenant = Depends(current_tenant)):
         raise HTTPException(400, "Зөв хариулт олдсонгүй")
     row = {"q": question, "source": "web", "ts": int(time.time())}
     if kind == "faq": row["faq"] = value
-    elif kind == "fact": row["fact"] = available["facts"][int(value)]["title"]
+    elif kind == "fact": row["fact"] = available["facts"][int(value)].get("text", available["facts"][int(value)]["title"])
     else: row["label"] = value
     data = load_examples(t)
-    if not any(x.get("q") == question and body.answer.endswith(str(x.get(kind, x.get("label", "")))) for x in data["examples"]):
+    comparable = {k: v for k, v in row.items() if k not in {"source", "ts"}}
+    if not any(all(x.get(k) == v for k, v in comparable.items()) for x in data["examples"]):
         data["examples"].append(row)
         write_json(examples_path(t), data)
     return {"ok": True}
