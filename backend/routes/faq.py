@@ -10,6 +10,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+import knowledge_jobs
 from deps import current_tenant
 from tenant import Tenant
 
@@ -46,6 +47,7 @@ def put_faq(data: dict, t: Tenant = Depends(current_tenant)):
         data["greeting_custom"] = True
     with open(t.faq_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+    knowledge_jobs.schedule_build(t)          # автомат бэлдэлт асаалттай бол
     return {"ok": True}
 
 
@@ -65,5 +67,6 @@ def add_question(body: AddQuestion, t: Tenant = Depends(current_tenant)):
                 item["questions"].append(q)
             with open(t.faq_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
+            knowledge_jobs.schedule_build(t)          # автомат бэлдэлт асаалттай бол
             return {"ok": True}
     raise HTTPException(404, "FAQ олдсонгүй")

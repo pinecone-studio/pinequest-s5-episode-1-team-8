@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 import accounts
 import tenant as tenants
+import knowledge_jobs
 from deps import current_tenant
 from tenant import Tenant
 
@@ -56,4 +57,5 @@ def put_org(body: OrgBody, t: Tenant = Depends(current_tenant)):
                hours=body.hours.strip()[:200])
     t.save_config({k: v for k, v in cfg.items() if v != ""})
     tenants.refresh_faq(t)
+    knowledge_jobs.schedule_build(t)          # автомат бэлдэлт асаалттай бол
     return org_info(t)

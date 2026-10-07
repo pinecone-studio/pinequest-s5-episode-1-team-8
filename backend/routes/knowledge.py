@@ -78,6 +78,7 @@ def write_file(name: str, body: DocumentBody, t: Tenant = Depends(current_tenant
     os.makedirs(t.knowledge_dir, exist_ok=True)
     with open(os.path.join(t.knowledge_dir, name), "w", encoding="utf-8") as f:
         f.write(body.content)
+    knowledge_jobs.schedule_build(t)          # автомат бэлдэлт асаалттай бол
     return {"ok": True, "name": name}
 
 
@@ -90,6 +91,7 @@ async def upload_file(file: UploadFile = File(...), t: Tenant = Depends(current_
     os.makedirs(t.knowledge_dir, exist_ok=True)
     with open(os.path.join(t.knowledge_dir, name), "wb") as f:
         f.write(data)
+    knowledge_jobs.schedule_build(t)          # автомат бэлдэлт асаалттай бол
     return {"ok": True, "name": name}
 
 
@@ -99,6 +101,7 @@ def delete_file(name: str, t: Tenant = Depends(current_tenant)):
     if not os.path.isfile(path):
         raise HTTPException(404, "Файл олдсонгүй")
     os.remove(path)
+    knowledge_jobs.schedule_build(t)          # автомат бэлдэлт асаалттай бол
     return {"ok": True}
 
 
@@ -113,6 +116,28 @@ def start_build(t: Tenant = Depends(current_tenant)):
 @router.get("/build")
 def build_status(t: Tenant = Depends(current_tenant)):
     return knowledge_jobs.status(t)
+
+
+ESTIMATE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tts_estimate.py")
+
+
+@router.get("/build/estimate")
+def build_estimate(t: Tenant = Depends(current_tenant)):
+    """Нэмэлт: "Бэлдэх"-ийн өмнө ElevenLabs-аар шинээр үүсэх өгүүлбэр, тэмдэгтийн тоо (токен үрэхгүйн тулд).
+    Ойролцоо: бэлдэх үед мэдээллээс шинэ FAQ/сэдэв үүсвэл нэмэгдэж болно."""
+    import subprocess
+    from config import DATA_DIR, TENANTS_DIR
+    python = os.path.join(knowledge_jobs.sim_root(), ".venv", "bin", "python")
+    if not os.path.isfile(python):
+        raise HTTPException(503, "SIM-TRUNK орчин олдсонгүй")
+    root = knowledge_jobs.runtime_root()
+    env = {**os.environ, "DATA_DIR": DATA_DIR, "TENANT": t.slug, "HF_HUB_OFFLINE": "1"}
+    try:
+        r = subprocess.run([python, "-W", "ignore", knowledge_jobs.RUNNER, root, TENANTS_DIR, ESTIMATE], cwd=root,
+                           env=env, capture_output=True, text=True, timeout=120)
+        return json.loads(r.stdout.strip().splitlines()[-1])
+    except (subprocess.TimeoutExpired, ValueError, IndexError):
+        raise HTTPException(500, "Тооцоолж чадсангүй") from None
 
 
 @router.get("/audio/{fact_hash}")
