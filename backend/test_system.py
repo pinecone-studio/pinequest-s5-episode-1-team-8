@@ -544,10 +544,15 @@ def test_training_model():
     a = owner_client("Сургалт тест", "train@example.mn")
     t = tenant.Tenant(a.get("/api/me").json()["tenant"])
     check("сургаагүй үед model алга", a.get("/api/train").json()["model"] is None)
-    meta = {"enabled": True, "examples": 120, "eval": {"selector": [41, 42], "rules": [40, 42]}}
+    meta = {"enabled": True, "examples": 120, "eval": {"selector": [41, 42], "rules": [40, 42]},
+            "labels": ["faq:price", "fact:0a1b2c3d4e5f", "clarify"], "answers": {"faq:price": {"kind": "faq", "id": "price"}},
+            "label_stems": {"faq:price": ["үнэ"]}, "per_label": {"faq:price": 1.0}}       # бодит selector.json шиг
     tenant.write_json(t.path("knowledge_index", "selector.json"), meta)   # train_selector.py-ийн бичдэг газар
     model = a.get("/api/train").json()["model"]
-    check("train_selector.py-ийн үр дүн харагдана", model == meta, model)
+    check("train_selector.py-ийн үр дүн харагдана", model["enabled"] is True and model["examples"] == 120
+          and model["eval"] == meta["eval"], model)
+    check("хариултын тоо (dict биш), том талбарууд илгээхгүй", model["answers"] == 3
+          and "label_stems" not in model and "per_label" not in model, model)
 
 
 def test_admin():
