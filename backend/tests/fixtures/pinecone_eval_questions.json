@@ -1,0 +1,39 @@
+{
+  "_note": "Сургалт болон FAQ-д оруулахгүй, зөвхөн AI-ийн хариултын чанарыг хэмжих 30 асуулт.",
+  "questions": [
+    {"q": "сайн байна уу", "expect": "Та хөтөлбөрийн хугацаа", "category": "conversation"},
+    {"q": "баярлалаа", "expect": "Зүгээр зүгээр", "category": "conversation"},
+    {"q": "баяртай", "expect": "үйлчлүүлсэнд баярлалаа", "category": "conversation"},
+    {"q": "бүртгүүлмээр байна", "expect": "Та нэрээ", "category": "conversation"},
+    {"q": "ажилтантай ярьмаар байна", "expect": "эргэж залгана", "category": "conversation"},
+
+    {"q": "хэдэн сар сурдаг вэ", "expect": "найман сар", "category": "duration_payment"},
+    {"q": "хэдэн сард сардаг вэ", "expect": "найман сар", "category": "duration_payment", "note": "Бодит дуудлагын STT алдаа"},
+    {"q": "төлбөр хэд вэ", "expect": "яг дүнг", "category": "duration_payment"},
+    {"q": "төлбөр ид вэ", "expect": "яг дүнг", "category": "duration_payment", "note": "Бодит дуудлагын STT алдаа"},
+    {"q": "хуваан төлж болох уу", "expect": "хувааж төлж", "category": "duration_payment"},
+    {"q": "зээлээр төлж болох уу", "expect": "зээлийн үйлчилгээгээр", "category": "duration_payment"},
+    {"q": "бүтэн төлбөл хөнгөлөлт байдаг уу", "expect": "таван хувийн", "category": "duration_payment"},
+    {"q": "энэ зээл болсон тэгээд л за яах вэ ээ тэр хөлбөр хэдэн сэд байдаг вэ", "expect": "найман сар", "category": "duration_payment", "note": "Урт өгүүлбэр болон бодит STT алдаа"},
+
+    {"q": "хаана байрладаг вэ", "expect": "Сүхбаатар дүүргийн", "category": "knowledge"},
+    {"q": "утасны дугаар хэд вэ", "expect": "далан хоёр", "category": "knowledge"},
+    {"q": "и-мэйл хаяг нь юу вэ", "expect": "social@pinecone.mn", "category": "knowledge"},
+    {"q": "дадлага хийдэг үү", "expect": "дадлага", "category": "knowledge"},
+    {"q": "хэдэн төсөл хийдэг вэ", "expect": "арван төсөл", "category": "knowledge"},
+    {"q": "AI сурах уу", "expect": ["AI feature", "AI & Machine Learning"], "category": "knowledge"},
+    {"q": "PineQuest гэж юу вэ", "expect": "төслийн уралдаан", "category": "knowledge"},
+    {"q": "төгсөгчид хэд байдаг вэ", "expect": "Мянга гаруй", "category": "knowledge"},
+
+    {"q": "сургалтын талаар мэдээлэл", "expect": "CLARIFY", "category": "unknown_clarify"},
+    {"q": "тэтгэлэг байдаг уу", "expect": "REPEAT", "category": "unknown_clarify", "note": "Мэдээлэлд байхгүй"},
+    {"q": "өнөөдөр цаг агаар ямар байна", "expect": "REPEAT", "category": "unknown_clarify", "note": "Байгууллагад хамааралгүй"},
+    {"q": "хичээл хэдэн цагт эхэлдэг вэ", "expect": "REPEAT", "category": "unknown_clarify", "note": "Хуваарь мэдээлэлд байхгүй"},
+    {"q": "а а а", "expect": "REPEAT", "category": "unknown_clarify", "note": "Агуулгагүй яриа"},
+
+    {"q": "таны дуу тасраад сонсогдохгүй байна", "expect": "холболт муу", "category": "phone_stt"},
+    {"q": "уучлаарай юу гэсэн бэ дахиад хэлээд өгөөч", "expect": "дахин хэлье", "category": "phone_stt"},
+    {"q": "энэ пайнкон академи мөн үү", "expect": "Тийм, Pinecone Academy байна", "category": "phone_stt", "note": "Pinecone нэрийн STT хэлбэр"},
+    {"q": "пайнкустийн шагнал хэд вэ", "expect": "зургаан сая", "category": "phone_stt", "note": "PineQuest нэрийн STT хэлбэр"}
+  ]
+}
