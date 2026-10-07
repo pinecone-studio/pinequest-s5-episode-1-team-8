@@ -25,6 +25,7 @@ from starlette.background import BackgroundTask
 
 import eleven
 import knowledge_jobs
+import people
 from audio_files import phone_quality, recording_for, recording_path, save_recording, text_hash
 from deps import current_tenant
 from ingest_text import read_file, split_facts
@@ -56,6 +57,8 @@ def all_texts(t: Tenant) -> list[tuple[str, str]]:
     items += [("bridge", x["bridge"]) for x in src.get("topics", {}).values()]
     items += [("бүртгэл", x) for x in ph["lead"].values()]
     items += [("цифр", d) for d in DIGITS]
+    items += [("бүртгэлээ шалгах", x) for x in ph["account"].values()]
+    items += [("огноо", x) for x in people.all_date_texts(people.booking(t.dir))]
     items += [(f"FAQ {x['id']}", x["answer"]) for x in src.get("faq", []) if "TODO" not in x["answer"]]
 
     kdir = t.knowledge_dir

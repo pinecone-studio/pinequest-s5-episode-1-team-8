@@ -174,7 +174,8 @@ def call(t: Tenant, lead_id: int) -> str:
         number = number_of(lead)
         if not number:
             raise SipError("failed", "утасны дугаар алга")
-        audio = clips(t, item["text"])
+        # Утасны AI цагийг сольсон бол текст хоосон -> загвараар дахин бичнэ
+        audio = clips(t, item.get("text") or render(t, lead, item["appointment"]))
         io = dialer.dial(number)
         try:
             outcome, pressed = session.run(io, audio)

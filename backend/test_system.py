@@ -871,8 +871,9 @@ def test_voice_texts():
     t = tenant.Tenant(a.get("/api/me").json()["tenant"])
     items = a.get("/api/voice").json()["items"]
     kinds = list(dict.fromkeys(x["kind"] for x in items))
-    check("төрлүүд SIM-TRUNK-ийн дарааллаар", kinds[:9] == ["мэндчилгээ", "filler", "hold", "алдаа", "дахин асуух",
-                                                         "тодруулах", "бүртгэл", "цифр", "FAQ smalltalk_hello"], kinds)
+    check("төрлүүд SIM-TRUNK-ийн дарааллаар", kinds[:11] == ["мэндчилгээ", "filler", "hold", "алдаа", "дахин асуух",
+                                                          "тодруулах", "бүртгэл", "цифр", "бүртгэлээ шалгах", "огноо",
+                                                          "FAQ smalltalk_hello"], kinds)
     lead = [x["text"] for x in items if x["kind"] == "бүртгэл"]
     check("бүртгэлийн хэллэг байгууллагын хэллэгээс (нэр орсон)", lead == list(t.phrases()["lead"].values())
           and "Таны мэдээллийг амжилттай бүртгэлээ. Манай ажилтан тантай удахгүй холбогдоно. Өөр асуух зүйл байна уу?" in lead, lead)
@@ -907,6 +908,46 @@ def test_tenant_sim_parity():
     check("мэндчилгээ config phrases-аас, гараар нэмсэн FAQ хэвээр",
           after["greeting"] == "Сайн байна уу, Загвар тест. Юугаар туслах вэ?"
           and any(x["id"] == "custom_1" for x in after["faq"]), after["greeting"])
+
+
+def test_personal_rag():
+    print("\n[21] Хувийн RAG: бүртгэлийн код, AI-ийн өөрчлөлт")
+    import json
+    from datetime import datetime
+    import db
+    import people
+    import reminders
+    a = owner_client("Хувийн RAG", "people@example.mn")
+    t = tenant.Tenant(a.get("/api/me").json()["tenant"])
+    ids = [db.add_lead(t.db_path, "c1", "Болд", "99112233"), db.add_lead(t.db_path, "c2", "Сараа", "88776655")]
+    r = a.get("/api/people").json()
+    codes = r["codes"]
+    check("бүртгэл бүрт автоматаар 4 оронтой код", set(codes) == {str(i) for i in ids}
+          and all(len(c) == 4 and c.isdigit() for c in codes.values()) and len(set(codes.values())) == len(codes), codes)
+    check("дахин уншихад код өөрчлөгдөхгүй", a.get("/api/people").json()["codes"] == codes)
+    check("сул цагийн анхны тохиргоо (Даваа-Баасан 10-17)", r["booking"]["start"] == 10 and r["booking"]["end"] == 17)
+    lead_id = ids[0]
+    found = people.find(t.dir, codes[str(lead_id)])
+    check("кодоор хүнийг олно", found and found["id"] == lead_id)
+    now = datetime.now(people.TZ)
+    slot = people.free_slots(t.dir, now)[0]
+    people.set_appointment(t.dir, lead_id, slot, "ai", "call-9", now=now)
+    people.set_phone(t.dir, lead_id, "95551234", "ai", "call-9")
+    ch = a.get("/api/people").json()["changes"]
+    check("утасны AI-ийн өөрчлөлт вэбэд харагдана", [c["field"] for c in ch] == ["phone", "appointment"]
+          and all(c["source"] == "ai" and c["call_uuid"] == "call-9" for c in ch), ch)
+    check("бүртгэлийн утас шинэчлэгдсэн", any(x["phone"] == "95551234" for x in a.get("/api/leads").json()))
+    item = a.get("/api/reminders").json()["items"][str(lead_id)]
+    check("AI сольсон цагийн сануулгын текст загвараар", item["appointment"] == people.fmt(slot)
+          and reminders.date_words(slot) in item["text"] and "Болд" in item["text"], item.get("text"))
+    raw = json.load(open(reminders.path(t), encoding="utf-8"))["items"][str(lead_id)]
+    check("reminders.json-д AI өөрчилсөн тэмдэг", raw["changed_by"] == "ai")
+    check("people.date_words = reminders.date_words", people.date_words(slot) == reminders.date_words(slot))
+    with db.connect(t.db_path) as con:
+        n = con.execute("SELECT COUNT(*) FROM person_docs WHERE lead_id=?", (lead_id,)).fetchone()[0]
+    check("хувийн баримтууд receptionist.db-д (person_docs)", n >= 4, n)
+    texts = [x["text"] for x in a.get("/api/voice").json()["items"] if x["kind"] == "огноо"]
+    check("огнооны клипүүд аудио бэлдэх жагсаалтад", people.slot_parts(slot)[0] in texts and len(texts) >= 60, len(texts))
 
 
 FAKE_ESTIMATE_SIM = {
@@ -1007,5 +1048,6 @@ if __name__ == "__main__":
     test_voice_texts()
     test_tenant_sim_parity()
     test_auto_build()
+    test_personal_rag()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)

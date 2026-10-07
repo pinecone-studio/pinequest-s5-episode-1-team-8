@@ -30,7 +30,7 @@ import accounts  # noqa: E402
 import auth  # noqa: E402  (буруу оролдлогын хязгаар, cookie)
 import config  # noqa: E402
 import tenant as tenants  # noqa: E402
-from routes import account, admin, calls, eleven, english, faq, knowledge, leads, org, reminders, report, settings, stats, status, training, unanswered, voice  # noqa: E402
+from routes import account, admin, calls, eleven, english, faq, knowledge, leads, org, people, reminders, report, settings, stats, status, training, unanswered, voice  # noqa: E402
 
 LOCAL = {"127.0.0.1", "::1"}
 
@@ -190,6 +190,7 @@ app.include_router(settings.router)
 app.include_router(calls.router)
 app.include_router(stats.router)
 app.include_router(leads.router)
+app.include_router(people.router)
 app.include_router(unanswered.router)
 app.include_router(knowledge.router)
 app.include_router(faq.router)
