@@ -42,6 +42,11 @@ class Tenant:
     knowledge_dir = property(lambda self: self.path("knowledge"))
     faq_path = property(lambda self: self.path("faq.json"))
     config_path = property(lambda self: self.path("config.json"))
+    training_path = property(lambda self: self.path("training", "examples.json"))
+    auto_training_path = property(lambda self: self.path("training", "auto.json"))
+    faq_index_dir = property(lambda self: self.path("faq_audio"))
+    kb_index_dir = property(lambda self: self.path("knowledge_index"))
+    recordings_dir = property(lambda self: self.path("recordings"))
     db_path = property(lambda self: self.path("data", "receptionist.db"))
     settings_path = property(lambda self: self.path("data", "settings.json"))
 
