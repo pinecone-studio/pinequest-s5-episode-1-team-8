@@ -20,6 +20,7 @@ Backend-ийн тест. Кодыг өөрчилсний дараа, PR-ийн �
 15. Өөрийн хоолойгоор бичих: бичлэг хадгалах, сонсох, устгах, WAV шалгалт, байгууллага хооронд тусгаарлалт
 16. ElevenLabs хоолой (admin): түлхүүр, хоолойнууд, жишээ үүсгэх, сонгох (ElevenLabs, SIM-TRUNK-ийг дуурайна)
 17. Хоолой (Oron-гүй): одоогийн хоолой, ElevenLabs-ийн дахин үүсгэх, аудиог шинэчлэх, ZIP татах
+18. Хоолойн жагсаалт: бэлдсэний дараа яг тоглогдох хэллэгүүд (SIM-TRUNK-ийн faq_index.json)
 
 Түр хавтсанд (DATA_DIR) ажиллана — backend/data/-ийн жинхэнэ хэрэглэгчдэд хүрэхгүй.
 """
@@ -631,27 +632,31 @@ def test_recordings():
     t = tenant.Tenant(a.get("/api/me").json()["tenant"])
     items = a.get("/api/voice").json()["items"]
     greet = next(x for x in items if x["kind"] == "Мэндчилгээ")
-    check("өгүүлбэр бүр бичлэггүй (TTS) эхэлнэ", items and not any(x["recorded"] for x in items), items[:2])
-    up = lambda h, data: a.post(f"/api/voice/{h}", files={"file": ("rec.wav", data, "audio/wav")})  # noqa: E731
+    check("өгүүлбэр бүр бичлэггүй (ElevenLabs) эхэлнэ", items and not any(x["recorded"] for x in items), items[:2])
+    up = lambda h, data: a.post(f"/api/voice/recording/{h}", files={"file": ("rec.wav", data, "audio/wav")})  # noqa: E731
     r = up(greet["hash"], wav_bytes(1.2))
-    check("бичлэг хадгална", r.status_code == 200 and r.json()["seconds"] == 1.2, r.text)
+    check("бичлэг хадгална", r.status_code == 200 and abs(r.json()["seconds"] - 1.2) < 0.05, r.text)
     check("SIM-TRUNK-тэй ижил газар (recordings/<hash>.wav) — Бэлдэхэд TTS-ийн оронд",
           os.path.exists(t.path("recordings", f"{greet['hash']}.wav")))
     check("жагсаалтад бичлэгтэй гэж харагдана", next(x for x in a.get("/api/voice").json()["items"]
                                                     if x["hash"] == greet["hash"])["recorded"] is True)
-    r = a.get(f"/api/voice/{greet['hash']}/audio")
+    r = a.get(f"/api/voice/audio/{greet['hash']}")
     check("сонсох -> WAV", r.status_code == 200 and r.content[:4] == b"RIFF", r.status_code)
-    bad = [up(greet["hash"], b"not a wav").status_code, up(greet["hash"], wav_bytes(1, rate=44100)).status_code,
-           up(greet["hash"], wav_bytes(1, channels=2)).status_code, up(greet["hash"], wav_bytes(0.1)).status_code]
-    check("WAV биш / 44.1kHz / stereo / хэт богино -> 400", bad == [400, 400, 400, 400], bad)
+    bad = [up(greet["hash"], b"not a wav").status_code, up(greet["hash"], wav_bytes(0.1)).status_code]
+    check("WAV биш / хэт богино -> 400", bad == [400, 400], bad)
+    import wave
+    r = up(greet["hash"], wav_bytes(1, rate=44100, channels=2))
+    with wave.open(t.path("recordings", f"{greet['hash']}.wav"), "rb") as w:
+        fmt = (w.getframerate(), w.getnchannels())
+    check("44.1kHz stereo -> 24kHz mono болгоно", r.status_code == 200 and fmt == (24000, 1), (r.status_code, fmt))
     check("байхгүй өгүүлбэр -> 404, буруу hash -> 400", up("0" * 12, wav_bytes()).status_code == 404
-          and up("../../x", wav_bytes()).status_code in (400, 404))
+          and a.get("/api/voice/audio/..%2F..%2Fx").status_code in (400, 404))
     other = owner_client("Хоолой 2", "voice2@example.mn")
-    check("өөр байгууллага сонсох / устгах боломжгүй", other.get(f"/api/voice/{greet['hash']}/audio").status_code == 404
-          and other.delete(f"/api/voice/{greet['hash']}").status_code == 404)
-    r = a.delete(f"/api/voice/{greet['hash']}")
-    check("устгахад TTS руу буцна", r.status_code == 200 and not os.path.exists(t.path("recordings", f"{greet['hash']}.wav"))
-          and a.get(f"/api/voice/{greet['hash']}/audio").status_code == 404)
+    check("өөр байгууллага сонсох / устгах боломжгүй", other.get(f"/api/voice/audio/{greet['hash']}").status_code == 404
+          and other.delete(f"/api/voice/recording/{greet['hash']}").status_code == 404)
+    r = a.delete(f"/api/voice/recording/{greet['hash']}")
+    check("устгахад ElevenLabs руу буцна", r.status_code == 200 and not os.path.exists(t.path("recordings", f"{greet['hash']}.wav"))
+          and a.get(f"/api/voice/audio/{greet['hash']}").status_code == 404)
     tenant.write_json(t.path("knowledge_index", "facts.json"), {"facts": [{"text": "Сургалт 6 сар."}]})
     check("бэлдсэн мэдээллийн өгүүлбэр жагсаалтад", any(x["kind"] == "Мэдээлэл" and x["text"] == "Сургалт 6 сар."
                                                           for x in a.get("/api/voice").json()["items"]))
@@ -836,6 +841,30 @@ def test_voice_eleven_only():
             os.environ["SIM_TRUNK_DIR"] = old_env
 
 
+def test_voice_texts():
+    print("\n[18] Хоолойн жагсаалт = яг тоглогдох хэллэгүүд")
+    import json
+    a = owner_client("Хэллэг тест", "phrases@example.mn")
+    t = tenant.Tenant(a.get("/api/me").json()["tenant"])
+    before = [x["text"] for x in a.get("/api/voice").json()["items"] if x["kind"] == "бүртгэл"]
+    check("бэлдээгүй үед загвар хэллэг", "Зөв үү?" in before, before)
+    clip = lambda text: {"text": text, "audio": "/tmp/x.wav"}  # noqa: E731
+    lead = {"ask_phone": "Баярлалаа. Тантай холбогдох утасны дугаараа хэлж өгнө үү. Эсвэл утасныхаа товчлуураар бичиж болно.",
+            "confirm": "Зөв үү?", "done": "Таны мэдээллийг амжилттай бүртгэлээ. Хэллэг тест-ийн ажилтан тантай удахгүй холбогдоно.",
+            "ask_name_again": "Та нэрээ хэлж өгнө үү?"}
+    os.makedirs(t.faq_index_dir, exist_ok=True)
+    json.dump({"holds": [clip("Түр хүлээгээрэй.")], "error": clip("Хэллэг тест-ийн ажилтан тан руу эргэж холбогдох уу?"),
+               "lead": {k: clip(v) for k, v in lead.items()}, "digits": [clip("тэг"), clip("нэг")]},
+              open(os.path.join(t.faq_index_dir, "faq_index.json"), "w", encoding="utf-8"), ensure_ascii=False)
+    items = a.get("/api/voice").json()["items"]
+    by_kind = lambda kind: [x["text"] for x in items if x["kind"] == kind]  # noqa: E731
+    check("бүртгэлийн хэллэг бэлдсэн аудиотой яг ижил (нэр орсон)", by_kind("бүртгэл") == list(lead.values()), by_kind("бүртгэл"))
+    check("хуучин загвар хэллэг үлдэхгүй", "Таны нэрийг хэлж өгнө үү?" not in by_kind("бүртгэл"))
+    check("алдаа, хүлээлгэх, цифр бэлдсэнээс", by_kind("алдаа") == ["Хэллэг тест-ийн ажилтан тан руу эргэж холбогдох уу?"]
+          and by_kind("hold") == ["Түр хүлээгээрэй."] and by_kind("цифр") == ["тэг", "нэг"], items[:12])
+    check("бэлдээгүй хэллэг загвараараа (дахин асуух)", by_kind("дахин асуух") == ["Уучлаарай, сайн ойлгосонгүй. Та дахин хэлж өгнө үү?"])
+
+
 if __name__ == "__main__":
     test_login()
     test_signup()
@@ -853,5 +882,6 @@ if __name__ == "__main__":
     test_recordings()
     test_eleven()
     test_voice_eleven_only()
+    test_voice_texts()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)
