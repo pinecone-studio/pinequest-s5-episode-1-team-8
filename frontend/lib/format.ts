@@ -1,10 +1,13 @@
 const TZ = "Asia/Ulaanbaatar";
 const WEEK = ["Ням", "Даваа", "Мягмар", "Лхагва", "Пүрэв", "Баасан", "Бямба"];
 
+const DAY = new Intl.DateTimeFormat("en-US", { timeZone: TZ, year: "numeric", month: "numeric", day: "numeric" });
+
 /** "Мягмар, 10-р сарын 6" хэсгүүд (Улаанбаатарын цагаар) */
 export function todayParts(now = new Date()) {
-  const ub = new Date(now.toLocaleString("en-US", { timeZone: TZ }));
-  return { weekday: WEEK[ub.getDay()], month: ub.getMonth() + 1, day: ub.getDate() };
+  const p = Object.fromEntries(DAY.formatToParts(now).map((x) => [x.type, Number(x.value)]));
+  const weekday = new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay();   // UB-ийн огнооны гараг
+  return { weekday: WEEK[weekday], month: p.month, day: p.day };
 }
 
 // "mn-MN"-ийг Node ("X/06 12:00"), хөтөч ("10/06, 12:00 PM") өөрөөр форматалж client component-д
