@@ -1,6 +1,8 @@
-"""Бодит асуултыг зөв FAQ/мэдээлэлтэй холбох сургалтын жишээнүүд."""
+"""Бодит асуултыг зөв FAQ/мэдээлэлтэй холбох сургалтын жишээнүүд — SIM-TRUNK web/app.py (AI сургалт)-тай ЯГ ижил:
+шалгах дүрэм, мессеж, хариултын жагсаалт, examples.json-ийн формат (мөр бүрт нэг жишээ)."""
 import json
 import os
+import threading
 import time
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,7 +10,7 @@ from pydantic import BaseModel
 
 from deps import current_tenant
 import knowledge_jobs
-from tenant import Tenant, load_faq, write_json
+from tenant import Tenant
 
 router = APIRouter(prefix="/api/train", tags=["training"])
 
@@ -17,12 +19,26 @@ def examples_path(t: Tenant) -> str:
     return t.training_path
 
 
+examples_lock = threading.Lock()
+NOTE = ("Хариулт сонгогчийн сургалтын жишээ: залгагчийн асуулт -> зөв хариулт. faq | fact | facts | "
+        "label (other, clarify). source: seed | web.")
+
+
 def load_examples(t: Tenant) -> dict:
-    try:
-        with open(examples_path(t), encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return {"examples": []}
+    return load_json(examples_path(t), {"examples": []})
+
+
+def save_examples(t: Tenant, data: dict):
+    """Мөр бүрт нэг жишээ (git diff, гараар засахад уншигдахуйц)."""
+    path = examples_path(t)
+    rows = ",\n".join("    " + json.dumps(ex, ensure_ascii=False) for ex in data["examples"])
+    body = (f'{{\n  "_note": {json.dumps(data.get("_note") or NOTE, ensure_ascii=False)},\n'
+            f'  "examples": [\n{rows}\n  ]\n}}\n')
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(body)
+    os.replace(tmp, path)
 
 
 @router.get("")
@@ -60,25 +76,19 @@ def start_training(t: Tenant = Depends(current_tenant)):
 
 @router.get("/answers")
 def answers(t: Tenant = Depends(current_tenant)):
-    faq = load_faq(t).get("faq", [])
+    """Зөв хариултыг заахад сонгох жагсаалт: FAQ, мэдээллийн өгүүлбэр, "мэдээлэлд алга"."""
+    faq = load_json(t.faq_path, {"faq": []})
     facts = load_json(os.path.join(t.kb_index_dir, "facts.json"), {}).get("facts", [])
-    texts = [row.get("text", "") for row in facts if row.get("text")]
-    if not texts and os.path.isdir(t.knowledge_dir):
-        for name in sorted(os.listdir(t.knowledge_dir)):
-            if name.lower().endswith((".md", ".txt")):
-                with open(os.path.join(t.knowledge_dir, name), encoding="utf-8") as f:
-                    texts += [line.strip() for line in f if line.strip() and not line.lstrip().startswith("#")]
-    return {"faq": [{"value": f"faq:{x['id']}", "title": f"{x['id']} — {x['answer'][:100]}"}
-                    for x in faq if "TODO" not in x.get("answer", "")],
-            "facts": [{"value": f"fact:{i}", "title": text[:120], "text": text}
-                      for i, text in enumerate(texts[:500])],
-            "special": [{"value": "label:other", "title": "Мэдээлэлд алга / хамааралгүй"},
-                        {"value": "label:clarify", "title": "Хэт ерөнхий — тодруулах шаардлагатай"}]}
+    return {"faq": [{"value": f"faq:{f['id']}", "title": f"{f['id']} — {f['answer'][:70]}"}
+                    for f in faq["faq"] if "TODO" not in f["answer"]],
+            "facts": [{"value": f"fact:{i}", "title": f["text"][:90]} for i, f in enumerate(facts)],
+            "special": [{"value": "label:other", "title": "Мэдээлэлд алга / хамааралгүй (дахин асууна)"},
+                        {"value": "label:clarify", "title": "Хэт ерөнхий (тодруулж асууна)"}]}
 
 
 class TeachBody(BaseModel):
     q: str
-    answer: str
+    answer: str          # faq:<id> | fact:<index> | label:other | label:clarify
 
 
 @router.post("/examples")
@@ -87,36 +97,36 @@ def teach(body: TeachBody, t: Tenant = Depends(current_tenant)):
 
 
 def save_example(t: Tenant, question: str, answer: str) -> dict:
-    """Сургалтын жишээг нэг газар баталгаажуулж хадгална.
-
-    AI сургалтын хуудас болон "Хариулж чадаагүй" урсгал хоёулаа үүнийг ашигласнаар
-    зөвшөөрөгдөөгүй answer value эсвэл давхардсан жишээ үүсэхгүй.
-    """
-    question = " ".join(question.split())[:300]
+    """Бодит дуудлагын асуулт -> зөв хариулт. "AI сургах" дарахад хэрэгжинэ (AI сургалт, Хариулж чадаагүй)."""
+    q = question.strip()
     kind, _, value = answer.partition(":")
-    if not question:
-        raise HTTPException(400, "Асуулт хоосон байна")
-    available = answers(t)
-    choices = {x["value"] for group in available.values() for x in group}
-    if answer not in choices:
-        raise HTTPException(400, "Зөв хариулт олдсонгүй")
-    row = {"q": question, "source": "web", "ts": int(time.time())}
-    if kind == "faq": row["faq"] = value
-    elif kind == "fact": row["fact"] = available["facts"][int(value)].get("text", available["facts"][int(value)]["title"])
-    else: row["label"] = value
-    data = load_examples(t)
-    comparable = {k: v for k, v in row.items() if k not in {"source", "ts"}}
-    if not any(all(x.get(k) == v for k, v in comparable.items()) for x in data["examples"]):
-        data["examples"].append(row)
-        write_json(examples_path(t), data)
+    if not q or len(q) > 300:
+        raise HTTPException(400, "Асуулт хоосон эсвэл хэт урт")
+    if kind == "faq":
+        ex = {"q": q, "faq": value}
+    elif kind == "fact":
+        facts = load_json(os.path.join(t.kb_index_dir, "facts.json"), {}).get("facts", [])
+        if not value.isdigit() or int(value) >= len(facts):
+            raise HTTPException(400, "Өгүүлбэр олдсонгүй")
+        ex = {"q": q, "fact": facts[int(value)]["text"]}
+    elif kind == "label" and value in ("other", "clarify"):
+        ex = {"q": q, "label": value}
+    else:
+        raise HTTPException(400, "Хариулт буруу")
+    with examples_lock:
+        data = load_examples(t)
+        if not any(all(e.get(k) == v for k, v in ex.items()) for e in data["examples"]):
+            data["examples"].append({**ex, "source": "web", "ts": int(time.time())})
+            save_examples(t, data)
     return {"ok": True}
 
 
 @router.delete("/examples/{index}")
 def remove_example(index: int, t: Tenant = Depends(current_tenant)):
-    data = load_examples(t)
-    if not 0 <= index < len(data["examples"]) or data["examples"][index].get("source") != "web":
-        raise HTTPException(404, "Жишээ олдсонгүй")
-    data["examples"].pop(index)
-    write_json(examples_path(t), data)
+    with examples_lock:
+        data = load_examples(t)
+        if not 0 <= index < len(data["examples"]) or data["examples"][index].get("source") != "web":
+            raise HTTPException(404, "Жишээ олдсонгүй")
+        data["examples"].pop(index)
+        save_examples(t, data)
     return {"ok": True}

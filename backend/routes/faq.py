@@ -1,33 +1,32 @@
-"""Байгууллагын мэндчилгээ болон түгээмэл асуултын засвар."""
+"""Байгууллагын мэндчилгээ болон түгээмэл асуулт — SIM-TRUNK web/app.py (FAQ)-тай ЯГ ижил.
+
+  GET  /api/faq                         -> faq.json
+  PUT  /api/faq                         -> бүтнээр нь хадгална (зассан загвар FAQ "auto" тэмдгээ алдана)
+  POST /api/faq/question {faq_id, question} -> хариулж чадаагүй асуултыг FAQ-ийн асуултын хувилбар болгоно
+"""
+import json
+import os
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from deps import current_tenant
-from tenant import Tenant, load_faq, write_json
+from tenant import Tenant
 
 router = APIRouter(prefix="/api/faq", tags=["faq"])
 
 
+def load_json(path: str, default):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return default
+
+
 @router.get("")
 def get_faq(t: Tenant = Depends(current_tenant)):
-    return load_faq(t)
-
-
-class FaqItem(BaseModel):
-    id: str
-    questions: list[str]
-    answer: str
-    topic: str | None = None
-    auto: bool | None = None
-    source: str | None = None
-    created_at: int | None = None
-
-
-class FaqBody(BaseModel):
-    greeting: str
-    fillers: list[str] = []
-    topics: dict = {}
-    faq: list[FaqItem]
+    return load_json(t.faq_path, {})
 
 
 @router.put("")
@@ -76,14 +75,14 @@ class AddQuestion(BaseModel):
 
 @router.post("/question")
 def add_question(body: AddQuestion, t: Tenant = Depends(current_tenant)):
-    """Бодит дуудлагын асуултыг FAQ-ийн асуултын шинэ хувилбар болгоно."""
-    data = load_faq(t)
-    question = " ".join(body.question.split())[:300]
-    for row in data.get("faq", []):
-        if row.get("id") == body.faq_id:
-            if question and question not in row.get("questions", []):
-                row.setdefault("questions", []).append(question)
-                row.pop("auto", None)
-                write_json(t.faq_path, data)
+    """Хариулж чадаагүй асуултыг тухайн FAQ-ийн асуултын хувилбар болгон нэмнэ."""
+    data = load_json(t.faq_path, {})
+    for item in data.get("faq", []):
+        if item["id"] == body.faq_id:
+            q = body.question.strip()
+            if q and q not in item["questions"]:
+                item["questions"].append(q)
+            with open(t.faq_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
             return {"ok": True}
     raise HTTPException(404, "FAQ олдсонгүй")

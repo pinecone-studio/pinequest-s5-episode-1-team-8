@@ -27,6 +27,7 @@ import eleven
 import knowledge_jobs
 from audio_files import phone_quality, recording_for, recording_path, save_recording, text_hash
 from deps import current_tenant
+from ingest_text import read_file, split_facts
 from tenant import Tenant, load_faq
 
 router = APIRouter(prefix="/api/voice", tags=["voice"])
@@ -44,38 +45,32 @@ def load_json(path: str, default):
 
 
 def all_texts(t: Tenant) -> list[tuple[str, str]]:
-    """Залгагчид тоглогдох бүх өгүүлбэр (SIM-TRUNK scripts/record.py · all_texts).
-    Хэллэгүүдийг (хүлээлгэх, алдаа, бүртгэл, цифр) "Аудио бэлдэх"-ийн бичсэн faq_index.json-оос авна —
-    SIM-TRUNK байгууллагын нэр, утсыг оруулж бэлддэг тул яг тоглогдох бичвэр. Бэлдээгүй бол t.phrases()
-    (SIM-TRUNK-ийн DEFAULT_PHRASES + config["phrases"]) — бэлдэхэд яг эдгээр үүснэ."""
+    """(төрөл, текст) — залгагчид тоглогдох бүх өгүүлбэр. SIM-TRUNK scripts/record.py · all_texts()-тэй ЯГ ижил:
+    faq.json, байгууллагын хэллэгүүд (t.phrases()), цифр, мэдээллийн файлуудын өгүүлбэр (ingest.split_facts)."""
     src = load_faq(t)
-    built = load_json(os.path.join(t.faq_index_dir, "faq_index.json"), {})
-    one = lambda key: (built.get(key) or {}).get("text")                                    # noqa: E731
-    many = lambda key: [c.get("text", "") for c in (built.get(key) or [])]                   # noqa: E731
     ph = t.phrases()
-    system = {"алдаа": "error", "дахин асуух": "repeat", "тодруулах": "clarify"}
-    rows: list[tuple[str, str]] = []
-    greeting = src.get("greeting") or one("greeting") or ph["greeting"]
-    if greeting:
-        rows.append(("Мэндчилгээ", greeting))
-    rows += [("Хүлээлгэх", text) for text in (src.get("fillers") or many("fillers") or ph["fillers"])]
-    rows += [("hold", text) for text in (many("holds") or ph["holds"])]
-    rows += [(kind, one(key) or ph[key]) for kind, key in system.items()]
-    rows += [("bridge", row.get("bridge", "")) for row in src.get("topics", {}).values()]
-    lead = [c.get("text", "") for c in (built.get("lead") or {}).values()] or list(ph["lead"].values())
-    rows += [("бүртгэл", text) for text in lead]
-    rows += [("цифр", text) for text in (many("digits") or DIGITS)]
-    rows += [("FAQ", row.get("answer", "")) for row in src.get("faq", [])
-             if row.get("answer") and "TODO" not in row.get("answer", "")]
-    facts = load_json(os.path.join(t.kb_index_dir, "facts.json"), {}).get("facts", [])
-    rows += [("Мэдээлэл", row.get("text", "")) for row in facts]
-    seen, result = set(), []
-    for kind, text in rows:
-        text = " ".join(text.split())
-        if text and text not in seen:
+    items = [("мэндчилгээ", src.get("greeting") or ph["greeting"])]
+    items += [("filler", x) for x in (src.get("fillers") or ph["fillers"])]
+    items += [("hold", x) for x in ph["holds"]]
+    items += [("алдаа", ph["error"]), ("дахин асуух", ph["repeat"]), ("тодруулах", ph["clarify"])]
+    items += [("bridge", x["bridge"]) for x in src.get("topics", {}).values()]
+    items += [("бүртгэл", x) for x in ph["lead"].values()]
+    items += [("цифр", d) for d in DIGITS]
+    items += [(f"FAQ {x['id']}", x["answer"]) for x in src.get("faq", []) if "TODO" not in x["answer"]]
+
+    kdir = t.knowledge_dir
+    for dp, _, fs in os.walk(kdir):
+        for name in sorted(fs):
+            if name.lower().endswith((".txt", ".md", ".pdf", ".docx")) and name.lower() != "readme.md":
+                path = os.path.join(dp, name)
+                items += [(f"мэдээлэл {name}", x) for x, _ in split_facts(read_file(path))]
+
+    seen, unique = set(), []
+    for kind, text in items:
+        if text not in seen:
             seen.add(text)
-            result.append((kind, text))
-    return result
+            unique.append((kind, text))
+    return unique
 
 
 def play_counts(t: Tenant, days: int = 90) -> dict[str, int]:
@@ -104,7 +99,7 @@ def voice_items(t: Tenant) -> list[dict]:
     for kind, text in all_texts(t):
         key, check = text_hash(text), checks.get(text_hash(text), {})
         word = re.compile(rf"(?<!\w){re.escape(text)}(?!\w)")
-        result.append({"kind": kind, "text": text, "hash": key,
+        result.append({"kind": kind, "text": text, "hash": key, "engine": "eleven",
                        "recorded": bool(recording_for(t.recordings_dir, text)),
                        "flags": check.get("flags", []), "cer": check.get("cer"), "hyp": check.get("hyp"),
                        "seed": seeds.get(seed_key(key), 0),
@@ -117,7 +112,7 @@ def get_voice(t: Tenant = Depends(current_tenant)):
     cfg = t.config()
     qa = load_json(os.path.join(t.kb_index_dir, "audio_qa.json"), {})
     eng = eleven.engine(t)
-    return {"items": voice_items(t), "qa_at": qa.get("checked_at"),
+    return {"items": voice_items(t), "qa_at": qa.get("checked_at"), "oron": False, "eleven_voice": eng["name"],
             "voice": {"name": eng["name"], "id": eng["voice"], "model": eng["model"], "has_key": bool(eleven.key())},
             "settings": {"lexicon": cfg.get("lexicon", []), "speed": cfg.get("tts_speed", 0.85),
                          "pause_ms": cfg.get("pause_ms", 300)}}
@@ -160,7 +155,7 @@ def regenerate(item_hash: str, t: Tenant = Depends(current_tenant)):
         raise HTTPException(400, "Энэ өгүүлбэр таны бичлэгээр тоглогддог")
     job = knowledge_jobs.status(t)
     if job["state"] == "running":
-        raise HTTPException(409, "Аудио бэлдэж байна. Дууссаны дараа дахин дарна уу")
+        raise HTTPException(409, "Аудио бэлдэж байна. Дууссаны дараа дахин дарна уу.")
     path = t.path("data", "tts_seeds.json")
     seeds = load_json(path, {})
     seeds[seed_key(item_hash)] = seeds.get(seed_key(item_hash), 0) + 1
@@ -180,7 +175,7 @@ def regenerate(item_hash: str, t: Tenant = Depends(current_tenant)):
 async def save_voice(item_hash: str, file: UploadFile = File(...), t: Tenant = Depends(current_tenant)):
     item = next((row for row in voice_items(t) if row["hash"] == item_hash), None)
     if not item:
-        raise HTTPException(404, "Өгүүлбэр олдсонгүй")
+        raise HTTPException(404, "Өгүүлбэр олдсонгүй (текст өөрчлөгдсөн байж магадгүй)")
     try:
         seconds = save_recording(await file.read(), recording_path(t.recordings_dir, item["text"]))
     except ValueError as exc:
@@ -215,13 +210,13 @@ def audio_index(t: Tenant) -> dict[str, str]:
 
 @router.get("/audio/{item_hash}")
 def voice_audio(item_hash: str, phone: int = 0, t: Tenant = Depends(current_tenant)):
+    """Өгүүлбэрийн одоо тоглогдох аудио: хүний бичлэг байвал түүнийг, үгүй бол TTS. phone=1 -> утасны чанар."""
     if not re.fullmatch(r"[0-9a-f]{12}", item_hash):
         raise HTTPException(400, "Буруу hash")
-    item = next((row for row in voice_items(t) if row["hash"] == item_hash), None)
-    recorded = recording_path(t.recordings_dir, item["text"]) if item else ""
-    path = recorded if recorded and os.path.isfile(recorded) else audio_index(t).get(item_hash)
-    if not path or not os.path.isfile(path):
-        raise HTTPException(404, "Аудио алга. Аудио бэлдэх дарна уу")
+    rec = os.path.join(t.recordings_dir, f"{item_hash}.wav")
+    path = rec if os.path.exists(rec) else audio_index(t).get(item_hash)
+    if not path or not os.path.exists(path):
+        raise HTTPException(404, "Аудио алга (аудио бэлдээгүй байж магадгүй)")
     if phone:
         return Response(phone_quality(path), media_type="audio/wav")
     return FileResponse(path, media_type="audio/wav")
@@ -250,7 +245,7 @@ def export(t: Tenant = Depends(current_tenant)):
             name = f"audio/{item['hash']}.wav"
             z.write(path, name)
             rows.append({"file": name, "hash": item["hash"], "kind": item["kind"], "text": item["text"],
-                         "source": "бичлэг" if recorded else "ElevenLabs"})
+                         "source": "бичлэг" if recorded else "eleven"})
         z.writestr("manifest.json", json.dumps({"tenant": t.slug, "exported_at": time.time(), "clips": rows},
                                                ensure_ascii=False, indent=1))
         buf = io.StringIO()

@@ -420,8 +420,8 @@ def test_unanswered():
 
         taught = a.post("/api/unanswered/teach", json={"q": "Машины зогсоол бий юу", "answer": "faq:smalltalk_hello"})
         pending = a.get("/api/unanswered/review").json()
-        check("байгаа хариултыг зааж, pending-д давхардалгүй тэмдэглэнэ",
-              taught.status_code == 200 and len(pending["pending"]) == 2 and pending["items"] == [], pending)
+        check("байгаа хариултыг зааж, pending-д тэмдэглэнэ (SIM-TRUNK шиг үйлдэл бүрт)",
+              taught.status_code == 200 and len(pending["pending"]) == 3 and pending["items"] == [], pending)
 
         knowledge_jobs.enqueue = lambda t, task="build": {"state": "queued", "task": task, "running": True,
                                                             "ahead": 0, "log": []}
@@ -652,7 +652,7 @@ def test_recordings():
     a = owner_client("Хоолой тест", "voice@example.mn")
     t = tenant.Tenant(a.get("/api/me").json()["tenant"])
     items = a.get("/api/voice").json()["items"]
-    greet = next(x for x in items if x["kind"] == "Мэндчилгээ")
+    greet = next(x for x in items if x["kind"] == "мэндчилгээ")
     check("өгүүлбэр бүр бичлэггүй (ElevenLabs) эхэлнэ", items and not any(x["recorded"] for x in items), items[:2])
     up = lambda h, data: a.post(f"/api/voice/recording/{h}", files={"file": ("rec.wav", data, "audio/wav")})  # noqa: E731
     r = up(greet["hash"], wav_bytes(1.2))
@@ -678,9 +678,10 @@ def test_recordings():
     r = a.delete(f"/api/voice/recording/{greet['hash']}")
     check("устгахад ElevenLabs руу буцна", r.status_code == 200 and not os.path.exists(t.path("recordings", f"{greet['hash']}.wav"))
           and a.get(f"/api/voice/audio/{greet['hash']}").status_code == 404)
-    tenant.write_json(t.path("knowledge_index", "facts.json"), {"facts": [{"text": "Сургалт 6 сар."}]})
-    check("бэлдсэн мэдээллийн өгүүлбэр жагсаалтад", any(x["kind"] == "Мэдээлэл" and x["text"] == "Сургалт 6 сар."
-                                                          for x in a.get("/api/voice").json()["items"]))
+    a.put("/api/knowledge/file/info.md", json={"content": "## Хугацаа\nСургалт 6 сар үргэлжилнэ. Богино.\n"})
+    check("мэдээллийн файлын өгүүлбэр жагсаалтад (SIM-TRUNK ingest.split_facts)",
+          [(x["kind"], x["text"]) for x in a.get("/api/voice").json()["items"] if x["kind"].startswith("мэдээлэл")]
+          == [("мэдээлэл info.md", "Сургалт 6 сар үргэлжилнэ.")])
 
 
 FAKE_ELEVEN_SIM = {
@@ -771,7 +772,7 @@ def test_eleven():
               and good_key not in adm.get("/api/admin/eleven").text, (r.status_code, mode))
         st = adm.get("/api/admin/eleven").json()
         names = [v["name"] for v in st["voices"]]
-        check("анхдагч хоолой Уянга, монгол хоолой эхэнд", st["voice"] == eleven.DEFAULT_VOICE and names[0] == "Uyanga"
+        check("анхдагч хоолой Уянга, монгол хоолой эхэнд", st["voice"] == eleven.DEFAULT_VOICE and names[0] == "🇲🇳 Uyanga"
               and st["voices"][0]["library"] and len(names) == 2, st["voices"])
         samples = [i for i in st["items"] if i["sample"]]
         check("төлөөлөх жишээ өгүүлбэрүүд (≤8)", 0 < len(samples) <= eleven.SAMPLES, len(samples))
@@ -797,10 +798,11 @@ def test_eleven():
                  adm.get("/api/admin/eleven/audio/bad!/0123456789ab").status_code,
                  adm.get(f"/api/admin/eleven/audio/LauraVoice0001/{h}").status_code]
         check("буруу hash, хоолой / үүсгээгүй жишээ", wrong == [400, 400, 404], wrong)
-        r = adm.put("/api/admin/eleven/choice", json={"voice": "LauraVoice0001"})
+        r = adm.put("/api/admin/eleven/choice", json={"voice": "LauraVoice0001", "clips": {h: "eleven", "000000000000": "eleven"}})
         cfg = tenant.Tenant(adm.get("/api/me").json()["tenant"]).config()
-        check("хоолой сонгоход байгууллагын тохиргоонд", r.status_code == 200 and cfg.get("eleven_voice") == "LauraVoice0001"
-              and cfg.get("eleven_voice_name") == "Laura" and cfg.get("tts_engine") == "eleven", cfg)
+        check("хоолой сонгоход байгууллагын тохиргоонд (SIM-TRUNK шиг)", r.json() == {"ok": True, "eleven": 1}
+              and cfg.get("eleven_voice") == "LauraVoice0001" and cfg.get("eleven_voice_name") == "Laura - Enthusiastic"
+              and cfg.get("clip_engine") == {h: "eleven"}, (r.json(), cfg))
     finally:
         eleven.httpx.get = old_get
         if os.path.exists(eleven.KEY_FILE):
@@ -825,7 +827,7 @@ def test_voice_eleven_only():
         t = tenant.Tenant(a.get("/api/me").json()["tenant"])
         v = a.get("/api/voice").json()
         check("түлхүүргүй үед хоолой алга, Oron-ийн асуултын аялга алга",
-              v["voice"]["has_key"] is False and v["voice"]["name"] is None and "question" not in v, v.get("voice"))
+              v["voice"]["has_key"] is False and v["voice"]["name"] == "ElevenLabs" and "question" not in v, v.get("voice"))
         cfg = t.config()
         cfg.update(eleven_voice="LauraVoice0001", eleven_voice_name="Laura")
         t.save_config(cfg)
@@ -839,7 +841,7 @@ def test_voice_eleven_only():
                     return
                 time.sleep(0.05)
 
-        item = next(x for x in v["items"] if x["kind"] == "Мэндчилгээ")
+        item = next(x for x in v["items"] if x["kind"] == "мэндчилгээ")
         r = a.post(f"/api/voice/regenerate/{item['hash']}")
         wait()
         seeds = json.load(open(t.path("data", "tts_seeds.json"), encoding="utf-8"))
@@ -863,27 +865,25 @@ def test_voice_eleven_only():
 
 
 def test_voice_texts():
-    print("\n[18] Хоолойн жагсаалт = яг тоглогдох хэллэгүүд")
-    import json
+    print("\n[18] Хоолойн жагсаалт = SIM-TRUNK record.all_texts")
     a = owner_client("Хэллэг тест", "phrases@example.mn")
     t = tenant.Tenant(a.get("/api/me").json()["tenant"])
-    before = [x["text"] for x in a.get("/api/voice").json()["items"] if x["kind"] == "бүртгэл"]
-    check("бэлдээгүй үед загвар хэллэг", "Зөв үү?" in before, before)
-    clip = lambda text: {"text": text, "audio": "/tmp/x.wav"}  # noqa: E731
-    lead = {"ask_phone": "Баярлалаа. Тантай холбогдох утасны дугаараа хэлж өгнө үү. Эсвэл утасныхаа товчлуураар бичиж болно.",
-            "confirm": "Зөв үү?", "done": "Таны мэдээллийг амжилттай бүртгэлээ. Хэллэг тест-ийн ажилтан тантай удахгүй холбогдоно.",
-            "ask_name_again": "Та нэрээ хэлж өгнө үү?"}
-    os.makedirs(t.faq_index_dir, exist_ok=True)
-    json.dump({"holds": [clip("Түр хүлээгээрэй.")], "error": clip("Хэллэг тест-ийн ажилтан тан руу эргэж холбогдох уу?"),
-               "lead": {k: clip(v) for k, v in lead.items()}, "digits": [clip("тэг"), clip("нэг")]},
-              open(os.path.join(t.faq_index_dir, "faq_index.json"), "w", encoding="utf-8"), ensure_ascii=False)
     items = a.get("/api/voice").json()["items"]
-    by_kind = lambda kind: [x["text"] for x in items if x["kind"] == kind]  # noqa: E731
-    check("бүртгэлийн хэллэг бэлдсэн аудиотой яг ижил (нэр орсон)", by_kind("бүртгэл") == list(lead.values()), by_kind("бүртгэл"))
-    check("хуучин загвар хэллэг үлдэхгүй", "Таны нэрийг хэлж өгнө үү?" not in by_kind("бүртгэл"))
-    check("алдаа, хүлээлгэх, цифр бэлдсэнээс", by_kind("алдаа") == ["Хэллэг тест-ийн ажилтан тан руу эргэж холбогдох уу?"]
-          and by_kind("hold") == ["Түр хүлээгээрэй."] and by_kind("цифр") == ["тэг", "нэг"], items[:12])
-    check("бэлдээгүй хэллэг загвараараа (дахин асуух)", by_kind("дахин асуух") == ["Уучлаарай, сайн ойлгосонгүй. Та дахин хэлж өгнө үү?"])
+    kinds = list(dict.fromkeys(x["kind"] for x in items))
+    check("төрлүүд SIM-TRUNK-ийн дарааллаар", kinds[:9] == ["мэндчилгээ", "filler", "hold", "алдаа", "дахин асуух",
+                                                         "тодруулах", "бүртгэл", "цифр", "FAQ smalltalk_hello"], kinds)
+    lead = [x["text"] for x in items if x["kind"] == "бүртгэл"]
+    check("бүртгэлийн хэллэг байгууллагын хэллэгээс (нэр орсон)", lead == list(t.phrases()["lead"].values())
+          and "Таны мэдээллийг амжилттай бүртгэлээ. Манай ажилтан тантай удахгүй холбогдоно. Өөр асуух зүйл байна уу?" in lead, lead)
+    cfg = t.config()
+    cfg["phrases"] = {"error": "Уучлаарай, {name}-ийн ажилтан эргэж залгана."}
+    t.save_config(cfg)
+    items = a.get("/api/voice").json()["items"]
+    check("config phrases өөрчлөхөд жагсаалт шууд дагана", [x["text"] for x in items if x["kind"] == "алдаа"]
+          == ["Уучлаарай, Хэллэг тест-ийн ажилтан эргэж залгана."])
+    v = a.get("/api/voice").json()
+    check("SIM-TRUNK-ийн талбарууд (engine, eleven_voice, oron)", all(x["engine"] == "eleven" for x in v["items"])
+          and v["eleven_voice"] == "ElevenLabs" and v["oron"] is False, {k: v[k] for k in ("eleven_voice", "oron")})
 
 
 def test_tenant_sim_parity():

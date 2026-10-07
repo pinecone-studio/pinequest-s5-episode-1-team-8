@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from audio_files import recording_for
 from deps import current_tenant
 import knowledge_jobs
 from config import DATA_DIR, TENANTS_DIR
@@ -20,9 +21,9 @@ MAX_FILE = 20 * 1024 * 1024
 
 
 def safe_name(name: str) -> str:
-    name = os.path.basename(name.strip())
-    if not name or not re.fullmatch(r"[^/\\\0]{1,160}", name) or not name.lower().endswith(DOC_EXT):
-        raise HTTPException(400, "Файлын нэр эсвэл төрөл буруу (.md, .txt, .pdf, .docx)")
+    name = os.path.basename(name)
+    if not name or name.startswith(".") or not name.lower().endswith(DOC_EXT):
+        raise HTTPException(400, "Зөвхөн .md .txt .pdf .docx файл")
     return name
 
 
@@ -43,14 +44,13 @@ def list_files(t: Tenant = Depends(current_tenant)):
     except (OSError, ValueError):
         indexed = {}
     facts = []
-    recordings = os.path.realpath(t.path("recordings"))
     for fact in indexed.get("facts", []):
         text = fact.get("text", "")
         audio = fact.get("audio")
         facts.append({"text": text, "source": fact.get("source"),
                       "hash": hashlib.sha1(text.encode()).hexdigest()[:12],
                       "has_audio": bool(audio and os.path.isfile(audio)),
-                      "recorded": bool(audio and os.path.realpath(audio).startswith(recordings + os.sep))})
+                      "recorded": bool(recording_for(t.recordings_dir, text))})
     return {"files": files, "facts": facts, "indexed_at": indexed.get("indexed_at")}
 
 
@@ -58,7 +58,7 @@ def list_files(t: Tenant = Depends(current_tenant)):
 def read_file(name: str, t: Tenant = Depends(current_tenant)):
     name = safe_name(name)
     if not name.lower().endswith(TEXT_EXT):
-        raise HTTPException(400, "PDF/DOCX файлыг веб дээр засах боломжгүй")
+        raise HTTPException(400, "PDF/DOCX-ийг энд засах боломжгүй. Шинээр оруулна уу.")
     path = os.path.join(t.knowledge_dir, name)
     if not os.path.isfile(path):
         raise HTTPException(404, "Файл олдсонгүй")
@@ -67,7 +67,7 @@ def read_file(name: str, t: Tenant = Depends(current_tenant)):
 
 
 class DocumentBody(BaseModel):
-    content: str = ""
+    content: str
 
 
 @router.put("/file/{name}")
@@ -75,21 +75,16 @@ def write_file(name: str, body: DocumentBody, t: Tenant = Depends(current_tenant
     name = safe_name(name)
     if not name.lower().endswith(TEXT_EXT):
         raise HTTPException(400, "Зөвхөн .md, .txt файл засна")
-    data = body.content.encode("utf-8")
-    if len(data) > MAX_FILE:
-        raise HTTPException(413, "20MB-аас том файл")
     os.makedirs(t.knowledge_dir, exist_ok=True)
-    path = os.path.join(t.knowledge_dir, name)
-    with open(path + ".tmp", "wb") as f:
-        f.write(data)
-    os.replace(path + ".tmp", path)
+    with open(os.path.join(t.knowledge_dir, name), "w", encoding="utf-8") as f:
+        f.write(body.content)
     return {"ok": True, "name": name}
 
 
 @router.post("/upload")
 async def upload_file(file: UploadFile = File(...), t: Tenant = Depends(current_tenant)):
     name = safe_name(file.filename or "")
-    data = await file.read(MAX_FILE + 1)
+    data = await file.read()
     if len(data) > MAX_FILE:
         raise HTTPException(413, "20MB-аас том файл")
     os.makedirs(t.knowledge_dir, exist_ok=True)

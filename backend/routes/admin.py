@@ -20,7 +20,6 @@ import db
 import knowledge_jobs
 import tenant as tenants
 from deps import current_user
-from routes.status import load_json
 
 
 def require_admin(user: dict = Depends(current_user)) -> dict:
@@ -51,16 +50,14 @@ def list_tenants():
         if os.path.exists(t.db_path):
             with db.connect(t.db_path) as con:
                 calls = con.execute("SELECT COUNT(*) FROM calls").fetchone()[0]
-        ready = bool(load_json(t.path("knowledge_index", "facts.json")).get("facts")) \
-            and bool(load_json(t.path("faq_audio", "faq_index.json")).get("faq"))
-        out.append({"slug": t.slug, "name": cfg.get("name", t.slug), "address": cfg.get("address"),
+        ready = os.path.exists(os.path.join(t.faq_index_dir, "faq_index.json"))   # SIM-TRUNK admin_tenants-тэй ижил
+        out.append({"slug": t.slug, "name": cfg.get("name"), "address": cfg.get("address"),
                     "email": cfg.get("email"),
                     "extension": cfg.get("extension"),
                     "plan": cfg.get("plan", "trial"), "created_at": cfg.get("created_at"), "calls": calls,
                     "ready": ready, "users": [u["email"] for u in accounts.users_of(t.slug)],
                     "job": (knowledge_jobs.JOBS.get(t.slug) or {}).get("state", "idle")})
-    # дотуур дугаараар: Pinecone (1000) эхэнд, бусад нь нэмэгдсэн дарааллаараа
-    return sorted(out, key=lambda x: int(x["extension"] or 0))
+    return out          # SIM-TRUNK шиг хавтасны нэрийн дарааллаар (tenant.all_tenants)
 
 
 class NewTenantBody(BaseModel):
@@ -128,9 +125,9 @@ class PlanBody(BaseModel):
 @router.post("/plan")
 def set_plan(body: PlanBody):
     if body.plan not in tenants.PLANS:
-        raise HTTPException(400, "Эрх: trial | active | suspended")
+        raise HTTPException(400, "plan: trial | active | suspended")
     t = find(body.slug)
     cfg = t.config()
     cfg["plan"] = body.plan
     t.save_config(cfg)
-    return {"ok": True, "slug": t.slug, "plan": body.plan}
+    return {"ok": True}

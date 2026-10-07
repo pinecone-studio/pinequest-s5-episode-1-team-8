@@ -1,4 +1,6 @@
-"""Хариулж чадаагүй асуултыг дахин шалгах, зөв хариулт заах, шинэ FAQ болгох."""
+"""Хариулж чадаагүй асуултыг дахин шалгах, зөв хариулт заах, шинэ FAQ болгох —
+SIM-TRUNK web/app.py ("хариулж чадаагүй: шалгах, хариулт бэлдэх")-тэй ЯГ ижил.
+AI сервер (phone_server REVIEW_PORT) асуулт бүрийг ОДОО ямар хариулт авахыг шалгаж, ойр хариултуудыг санал болгоно."""
 import itertools
 import json
 import os
@@ -8,14 +10,14 @@ import time
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from audio_files import text_hash
 import db
 from deps import current_tenant
 import knowledge_jobs
 from routes import training
-from tenant import Tenant, load_faq, write_json
+from tenant import Tenant
 
 router = APIRouter(prefix="/api/unanswered", tags=["unanswered"])
 REVIEW_URL = os.getenv("REVIEW_URL", f"http://127.0.0.1:{os.getenv('REVIEW_PORT', '9093')}/review")
@@ -63,42 +65,26 @@ def unanswered(limit: int = Query(200, ge=1, le=1000), t: Tenant = Depends(curre
 
 @router.get("/review")
 def review(t: Tenant = Depends(current_tenant)):
-    """Асуулт бүрийг ажиллаж буй SIM-TRUNK AI-аар одоо дахин шалгуулна.
-
-    AI унтарсан үед raw жагсаалт хэвээр ирнэ (live=false), тиймээс хэрэглэгч хариулт
-    заах/шинээр бичих ажлаа үргэлжлүүлж чадна.
-    """
     hidden = set(load_json(hidden_path(t), []))
-    seen: set[str] = set()
-    items = []
-    for row in rows(t, 500):
-        question = (row.get("question") or "").strip()
-        if question and question not in seen and question not in hidden:
-            seen.add(question)
-            items.append({"q": question, "ts": row["ts"], "call_uuid": row["call_uuid"], "route": row["route"]})
-
+    seen, items = set(), []
+    for r in rows(t, 500):
+        q = (r["question"] or "").strip()
+        if q and q not in seen and q not in hidden:
+            seen.add(q)
+            items.append({"q": q, "ts": r["ts"], "call_uuid": r["call_uuid"], "route": r["route"]})
     live = False
-    if items:
-        try:
-            response = httpx.post(REVIEW_URL, json={"tenant": t.slug, "questions": [item["q"] for item in items]},
-                                  timeout=180)
-            if response.status_code == 200 and isinstance(response.json(), list):
-                for item, current in zip(items, response.json()):
-                    item["now"] = current
-                live = True
-        except (httpx.HTTPError, ValueError):
-            pass
-
-    choices = training.answers(t)
-    faq_values = {row["value"] for row in choices["faq"]}
-    fact_values = {row.get("text"): row["value"] for row in choices["facts"]}
-    for item in items:
-        for suggestion in (item.get("now") or {}).get("suggest", []):
-            if suggestion.get("kind") == "faq":
-                value = f"faq:{suggestion.get('id', '')}"
-                suggestion["value"] = value if value in faq_values else ""
-            else:
-                suggestion["value"] = fact_values.get(suggestion.get("text"), "")
+    try:
+        res = httpx.post(REVIEW_URL, json={"tenant": t.slug, "questions": [i["q"] for i in items]}, timeout=180)
+        if res.status_code == 200:
+            for i, rv in zip(items, res.json()):
+                i["now"] = rv
+            live = True
+    except httpx.HTTPError:
+        pass
+    idx = {f["text"]: n for n, f in enumerate(load_json(os.path.join(t.kb_index_dir, "facts.json"), {}).get("facts", []))}
+    for i in items:
+        for s in (i.get("now") or {}).get("suggest", []):
+            s["value"] = f"faq:{s['id']}" if s["kind"] == "faq" else (f"fact:{idx[s['text']]}" if s["text"] in idx else "")
     return {"items": items, "live": live, "pending": load_json(pending_path(t), [])}
 
 
@@ -108,23 +94,22 @@ class QuestionBody(BaseModel):
 
 @router.post("/hide")
 def hide(body: QuestionBody, t: Tenant = Depends(current_tenant)):
-    question = " ".join(body.q.split())[:500]
-    if not question:
-        raise HTTPException(400, "Асуулт хоосон байна")
-    with LOCK:
-        hidden = load_json(hidden_path(t), [])
-        if question not in hidden:
-            hidden.append(question)
-            write_json(hidden_path(t), hidden)
+    """Жагсаалтаас нуух (чимээ, шийдэгдсэн). Дуудлагын лог хэвээр."""
+    hidden = load_json(hidden_path(t), [])
+    if body.q not in hidden:
+        hidden.append(body.q)
+        os.makedirs(os.path.dirname(hidden_path(t)), exist_ok=True)
+        with open(hidden_path(t), "w", encoding="utf-8") as f:
+            json.dump(hidden, f, ensure_ascii=False, indent=1)
     return {"ok": True}
 
 
 def add_pending(t: Tenant, note: str):
-    with LOCK:
-        pending = load_json(pending_path(t), [])
-        if note not in pending:
-            pending.append(note)
-            write_json(pending_path(t), pending)
+    pending = load_json(pending_path(t), [])
+    pending.append(note)
+    os.makedirs(os.path.dirname(pending_path(t)), exist_ok=True)
+    with open(pending_path(t), "w", encoding="utf-8") as f:
+        json.dump(pending, f, ensure_ascii=False, indent=1)
 
 
 def clean_question(t: Tenant, text: str) -> str:
@@ -147,54 +132,57 @@ def clean_question(t: Tenant, text: str) -> str:
 class NewAnswerBody(BaseModel):
     q: str
     answer: str
-    questions: list[str] = Field(default_factory=list)
+    questions: list[str] = []        # нэмэлт хувилбарууд (заавал биш)
 
 
 @router.post("/answer")
 def add_answer(body: NewAnswerBody, t: Tenant = Depends(current_tenant)):
-    """Байгууллагын бичсэн шинэ хариултыг FAQ болгоно. Ижил хариултыг давхар үүсгэхгүй."""
+    """Шинэ хариулт -> шинэ FAQ (асуулт + хариулт). "Хэрэгжүүлэх"-д ElevenLabs аудио үүсгэж AI-г сургана.
+    Хариултыг байгууллага өөрөө бичнэ — AI зохиохгүй."""
     answer = " ".join(body.answer.split())
     if not 5 <= len(answer) <= 400:
         raise HTTPException(400, "Хариулт 5-400 тэмдэгт байна")
-    questions = [clean_question(t, body.q)] + [" ".join(question.split()) for question in body.questions]
-    questions = [question[:300] for question in dict.fromkeys(questions) if question][:20]
-    if not questions:
-        raise HTTPException(400, "Асуулт хоосон байна")
-
+    q = clean_question(t, body.q)                    # stt.clean + байгууллагын stt_fixes (FAQRouter.fix_stt)
+    questions = [x for x in dict.fromkeys([q] + [" ".join(x.split()) for x in body.questions]) if x][:20]
     with LOCK:
-        data = load_faq(t) or {"greeting": "", "fillers": [], "topics": {}, "faq": []}
-        item = next((row for row in data.get("faq", []) if " ".join(row.get("answer", "").split()) == answer), None)
+        data = load_json(t.faq_path, {"faq": []})
+        fid = "web_" + text_hash(answer)[:8]
+        item = next((x for x in data["faq"] if x["id"] == fid), None)
         if item:
-            item["questions"] = list(dict.fromkeys(item.get("questions", []) + questions))[:40]
-            item.pop("auto", None)
+            item["questions"] = list(dict.fromkeys(item["questions"] + questions))
         else:
-            item = {"id": f"web_{text_hash(answer)}", "questions": questions, "answer": answer,
-                    "source": "web", "created_at": int(time.time())}
-            data.setdefault("faq", []).append(item)
-        write_json(t.faq_path, data)
+            data["faq"].append({"id": fid, "questions": questions, "answer": answer, "source": "web",
+                                "created_at": int(time.time())})
+        tmp = t.faq_path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, t.faq_path)
     add_pending(t, f"шинэ хариулт: {answer[:60]}")
     hide(QuestionBody(q=body.q), t)
-    return {"ok": True, "id": item["id"]}
+    return {"ok": True, "id": fid}
 
 
 class TeachBody(BaseModel):
     q: str
-    answer: str
+    answer: str          # faq:<id> | fact:<index> | label:other | label:clarify
 
 
 @router.post("/teach")
 def teach(body: TeachBody, t: Tenant = Depends(current_tenant)):
-    result = training.save_example(t, clean_question(t, body.q), body.answer)
+    """Байгаа хариултыг заах (AI сургалтын жишээ) + жагсаалтаас нуух."""
+    training.save_example(t, body.q, body.answer)
     add_pending(t, f"заасан: {body.q[:60]}")
     hide(QuestionBody(q=body.q), t)
-    return result
+    return {"ok": True}
 
 
 @router.post("/apply")
 def apply_answers(t: Tenant = Depends(current_tenant)):
+    """Бичсэн хариултын аудио (ElevenLabs) + сургалт. AI зогсохгүй."""
     try:
-        result = knowledge_jobs.enqueue(t, "answers")
+        status = knowledge_jobs.enqueue(t, "answers")
     except RuntimeError as exc:
         raise HTTPException(409, str(exc)) from exc
-    write_json(pending_path(t), [])
-    return result
+    with open(pending_path(t), "w", encoding="utf-8") as f:
+        json.dump([], f)
+    return status
