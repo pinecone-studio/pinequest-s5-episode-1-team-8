@@ -289,7 +289,7 @@ export type AdminTenant = {
 };
 
 // backend/routes/reminders.py — AI-аас гарах сануулгын дуудлага
-export type ReminderStatus = "scheduled" | "calling" | "confirmed" | "declined" | "unconfirmed" | "no_answer" | "busy" | "failed";
+export type ReminderStatus = "scheduled" | "calling" | "confirmed" | "declined" | "unconfirmed" | "no_answer" | "busy" | "failed" | "canceled";
 export type Reminder = {
   lead_id: number;
   appointment: string; // "2026-10-15T10:00" (Улаанбаатар)
@@ -322,7 +322,24 @@ export type OutboundConfig = {
 export const REMINDER_STATUS: Record<ReminderStatus, [string, "ok" | "warn" | "bad" | "gray"]> = {
   scheduled: ["Товлосон", "gray"], calling: ["Залгаж байна…", "warn"], confirmed: ["✅ Баталгаажсан", "ok"],
   declined: ["❌ Цуцалсан", "bad"], unconfirmed: ["Хариу өгөөгүй", "warn"], no_answer: ["📵 Утсаа аваагүй", "warn"],
-  busy: ["📵 Завгүй", "warn"], failed: ["⚠️ Залгаж чадсангүй", "bad"],
+  busy: ["📵 Завгүй", "warn"], failed: ["⚠️ Залгаж чадсангүй", "bad"], canceled: ["❌ Утсаар цуцалсан", "bad"],
+};
+
+// backend/routes/people.py — хувийн RAG: бүртгэлийн код, утасны AI-ийн өөрчлөлт
+export type LeadChange = {
+  id: number;
+  lead_id: number;
+  ts: number;
+  field: "phone" | "appointment" | "code";
+  old: string | null;
+  new: string | null;
+  source: "ai" | "web";
+  call_uuid: string | null;
+};
+export type PeopleData = {
+  codes: Record<string, string>;
+  changes: LeadChange[];
+  booking: { days: number[]; start: number; end: number; capacity: number; horizon: number };
 };
 
 // backend/routes/report.py — долоо хоногийн тайлан
