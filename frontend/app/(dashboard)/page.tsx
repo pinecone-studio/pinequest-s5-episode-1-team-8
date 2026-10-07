@@ -80,9 +80,12 @@ export default async function DashboardPage() {
             <div className="text-[34px] font-extrabold">{status.facts}</div>
             <div className="text-sm text-muted">Аудиотой өгүүлбэр</div>
           </Link>
-          <Link href="/faq" className="rounded-[14px] bg-panel px-[22px] py-5 hover:bg-panel-2">
-            <div className="text-[34px] font-extrabold">{status.faq}</div>
-            <div className="text-sm text-muted">Аудиотой FAQ</div>
+          <Link href="/voice" className="rounded-[14px] bg-panel px-[22px] py-5 hover:bg-panel-2">
+            <div className="text-[34px] font-extrabold">
+              {status.recorded ?? 0}
+              <span className="font-mono text-base font-normal text-muted"> / {status.voice_total ?? "—"}</span>
+            </div>
+            <div className="text-sm text-muted">Өөрийн хоолойгоор бичсэн</div>
           </Link>
           <Link href="/leads" className="rounded-[14px] bg-panel px-[22px] py-5 hover:bg-panel-2">
             <div className="text-[34px] font-extrabold">{stats.new_leads}</div>
