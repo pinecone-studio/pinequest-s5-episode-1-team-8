@@ -538,8 +538,27 @@ def docs(tdir: str, lead_id: int) -> list[dict]:
                             "VALUES (?, ?, ?, NULL, ?)", (lead_id, field, text, now))
         for field in set(old) - set(texts):
             con.execute("DELETE FROM person_docs WHERE lead_id=? AND field=?", (lead_id, field))
-        rows = con.execute("SELECT field, text, emb FROM person_docs WHERE lead_id=?", (lead_id,)).fetchall()
-    return [dict(r) for r in rows]
+        rows = [dict(r) for r in con.execute("SELECT field, text, emb FROM person_docs WHERE lead_id=?", (lead_id,))]
+    _embed_missing(tdir, lead_id, rows)
+    return rows
+
+
+def _embed_missing(tdir: str, lead_id: int, rows: list[dict]):
+    """Шинэ/өөрчлөгдсөн баримтын векторыг тэр даруй тооцоолж DB-д хадгална (RAG хайлтад бэлэн)."""
+    missing = [r for r in rows if r["emb"] is None]
+    if not missing:
+        return
+    try:
+        import embedder
+        vecs = embedder.embed([r["text"] for r in missing])
+    except Exception as exc:                  # вектор нь хайлтын үед дахин тооцоологдоно
+        print(f"  [хувийн RAG вектор] {exc}")
+        return
+    with connect(tdir) as con:
+        for r, v in zip(missing, vecs):
+            r["emb"] = v.astype("float32").tobytes()
+            con.execute("UPDATE person_docs SET emb=? WHERE lead_id=? AND field=? AND text=?",
+                        (r["emb"], lead_id, r["field"], r["text"]))
 
 
 def save_emb(tdir: str, lead_id: int, field: str, text: str, emb: bytes):
