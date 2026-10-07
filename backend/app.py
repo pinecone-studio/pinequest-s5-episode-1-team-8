@@ -28,6 +28,7 @@ from pydantic import BaseModel
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import accounts  # noqa: E402
 import auth  # noqa: E402  (буруу оролдлогын хязгаар, cookie)
+import config  # noqa: E402
 import tenant as tenants  # noqa: E402
 from routes import account, admin, calls, eleven, english, faq, knowledge, leads, org, settings, stats, status, training, unanswered, voice  # noqa: E402
 
@@ -210,4 +211,6 @@ if __name__ == "__main__":
         print(f"Анхны хэрэглэгч үүслээ -> нэвтрэх нэр: admin, нууц үг: {password}")
         print("  (дахин хэвлэгдэхгүй. Солих: .venv/bin/python backend/accounts.py admin admin)")
     print(f"API: http://{host}:{port}  (вэб: frontend/ -> bun dev -> http://localhost:3000)")
+    if config.LIVE:
+        print(f"SIM-TRUNK-ийн БОДИТ өгөгдөл дээр: {config.TENANTS_DIR} (дуудлага, мэдээлэл, аудио утасны системтэй нэг)")
     uvicorn.run(app, host=host, port=port, log_level="warning")

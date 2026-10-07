@@ -18,6 +18,17 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 
 Порт 8100 (SIM-TRUNK-ийн вэб 8000 дээр ажилладаг тул давхцахгүй). Солих: `API_PORT=...`
 
+### SIM-TRUNK-ийн бодит өгөгдөл дээр (`./dev.sh --sim`)
+
+`SIM_TRUNK_LIVE=1` үед байгууллагуудыг `SIM-TRUNK/tenants`-аас шууд уншиж бичнэ — утасны систем (sip_bridge,
+phone_server) яг эдгээрийг ашигладаг тул **бодит дуудлага, бүртгэл шууд харагдаж**, мэдээлэл/FAQ/хоолойн өөрчлөлт
+утсанд хэрэгжинэ. SIM-TRUNK-ийн вэбийн (8000) оронд ажиллана — хоёуланг зэрэг бүү ашигла (бэлдэх ажлын дараалал тусдаа).
+
+- ElevenLabs түлхүүр, TTS кэш: `SIM-TRUNK/data/`
+- "Аудио бэлдэх", "Аудиог шинэчлэх", англи аудио: AI серверийг түр зогсооно (8GB; SIM-TRUNK-тэй ижил). Болиулах: `BUILD_STOP_AI=0`
+- Хэрэглэгчид (`accounts.db`) манай `backend/data`-д хэвээр
+- SIM-TRUNK өөр газар бол: `SIM_TRUNK_DIR=/зам/SIM-TRUNK ./dev.sh --sim`
+
 ## API
 
 | Хүсэлт | Юу хийх вэ |
@@ -102,6 +113,7 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 
 ```bash
 .venv/bin/python backend/test_system.py     # -> ТЭНЦЛЭЭ ✓
+.venv/bin/python backend/test_live.py       # бодит горим (хуурамч SIM-TRUNK дээр)
 ```
 
 Түр хавтсанд ажиллана — жинхэнэ хэрэглэгчдэд хүрэхгүй.

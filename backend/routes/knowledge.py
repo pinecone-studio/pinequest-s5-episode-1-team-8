@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from deps import current_tenant
 import knowledge_jobs
-from config import DATA_DIR
+from config import DATA_DIR, TENANTS_DIR
 from tenant import Tenant
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
@@ -133,7 +133,7 @@ def fact_audio(fact_hash: str, t: Tenant = Depends(current_tenant)):
     audio = next((row.get("audio") for row in facts
                   if hashlib.sha1(row.get("text", "").encode()).hexdigest()[:12] == fact_hash), None)
     # Манай өгөгдөл (хүний бичлэг) эсвэл SIM-TRUNK-ийн нийтлэг TTS кэш доторх файл л
-    allowed = [os.path.realpath(DATA_DIR), os.path.realpath(knowledge_jobs.tts_cache())]
+    allowed = [os.path.realpath(DATA_DIR), os.path.realpath(TENANTS_DIR), os.path.realpath(knowledge_jobs.tts_cache())]
     real = os.path.realpath(audio) if audio else ""
     if not audio or not os.path.isfile(audio) or not any(real.startswith(root + os.sep) for root in allowed):
         raise HTTPException(404, "Аудио олдсонгүй")

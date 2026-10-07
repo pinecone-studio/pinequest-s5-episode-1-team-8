@@ -1,6 +1,7 @@
 """SIM-TRUNK-ийн бодит knowledge/audio pipeline-ийг tenant бүрээр дараалалд ажиллуулна.
 
-Скрипт бүр sim_runner.py-ээр дамжиж МАНАЙ байгууллагын хавтас (backend/data/tenants/<slug>) дээр ажиллана."""
+Скрипт бүр sim_runner.py-ээр дамжиж МАНАЙ байгууллагын хавтас (backend/data/tenants/<slug>) дээр ажиллана.
+Бодит горимд (config.LIVE) SIM-TRUNK-ийн хавтас дээр шууд, бэлдэх үед AI серверийг түр зогсооно."""
 import os
 import queue
 import re
@@ -8,7 +9,7 @@ import subprocess
 import threading
 import time
 
-from config import DATA_DIR, TENANTS_DIR
+from config import DATA_DIR, LIVE, TENANTS_DIR
 from tenant import Tenant
 
 JOBS: dict[str, dict] = {}
@@ -29,6 +30,11 @@ TASK_STEPS = {
 }
 OPTIONAL = {"scripts/audio_qa.py"}
 RUNNER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sim_runner.py")
+# 8GB: AI сервер ажиллаж байхад TTS/загварууд swap-д орно -> бэлдэх хугацаанд түр зогсооно (бүх дуудлага тасарна!).
+# SIM-TRUNK web/app.py-тэй ижил. Том серверт BUILD_STOP_AI=0.
+AI_LABEL = "mn.pinecone.ai"
+AI_PLIST = os.path.expanduser(f"~/Library/LaunchAgents/{AI_LABEL}.plist")
+STOP_AI_TASKS = {"build", "regen", "english"}
 
 
 def sim_root() -> str:
@@ -48,14 +54,24 @@ def log_path(t: Tenant) -> str:
     return t.path("data", "job.log")
 
 
+def stop_ai(task: str) -> bool:
+    return LIVE and task in STOP_AI_TASKS and os.path.exists(AI_PLIST) and os.getenv("BUILD_STOP_AI", "1") == "1"
+
+
+def launchctl(args: list[str], log) -> int:
+    return subprocess.call(["launchctl", *args], stdout=log, stderr=subprocess.STDOUT)
+
+
 def runtime_root() -> str:
-    """SIM-TRUNK кодыг ашиглахдаа өгөгдлийг энэ төслийн DATA_DIR руу холбоно.
+    """SIM-TRUNK кодыг ашиглахдаа өгөгдлийг энэ төслийн DATA_DIR руу холбоно (бодит горимд SIM-TRUNK өөрөө).
 
     SIM-TRUNK-ийн tenant.py нь өөрийн ROOT/tenants замыг ашигладаг тул эх кодыг
     symlink-ээр runtime хавтсанд харуулж, tenants/data-г манай backend/data руу
     холбоно. Ингэснээр эх SIM-TRUNK-ийн өгөгдлийг өөрчлөхгүй.
     """
     source = sim_root()
+    if LIVE:
+        return source
     runtime = os.path.join(DATA_DIR, ".sim-runtime")
     os.makedirs(runtime, exist_ok=True)
     for name in os.listdir(source):
@@ -103,18 +119,28 @@ def _run(slug: str):
             env = {**os.environ, "DATA_DIR": DATA_DIR, "TENANT": slug, "HF_HUB_OFFLINE": "1",
                    "PYTHONUNBUFFERED": "1", "TTS_CANDIDATES": os.getenv("TTS_CANDIDATES", "1")}
             task = job.get("task", "build")
-            # BUILD_STEPS нь хуучин integration test болон гаднын тохиргоонд
-            # солигдож болдог нийцтэй нэр тул build үед шууд ашиглана.
-            for step in BUILD_STEPS if task == "build" else TASK_STEPS[task]:
-                log.write(f"\n=== {' '.join(step)} ===\n")
+            stopped = stop_ai(task)
+            if stopped:
+                launchctl(["bootout", f"gui/{os.getuid()}/{AI_LABEL}"], log)
+                log.write("AI сервер түр зогслоо (санах ой чөлөөлөх)\n")
                 log.flush()
-                code = subprocess.call([python, "-W", "ignore", RUNNER, root, TENANTS_DIR, *step], cwd=root, env=env,
-                                       stdout=log, stderr=subprocess.STDOUT)
-                if code and step[0] in OPTIONAL:
-                    log.write(f"({step[0]} алдаатай дууслаа, алгаслаа)\n")
-                    code = 0
-                if code:
-                    break
+            try:
+                # BUILD_STEPS нь хуучин integration test болон гаднын тохиргоонд
+                # солигдож болдог нийцтэй нэр тул build үед шууд ашиглана.
+                for step in BUILD_STEPS if task == "build" else TASK_STEPS[task]:
+                    log.write(f"\n=== {' '.join(step)} ===\n")
+                    log.flush()
+                    code = subprocess.call([python, "-W", "ignore", RUNNER, root, TENANTS_DIR, *step], cwd=root, env=env,
+                                           stdout=log, stderr=subprocess.STDOUT)
+                    if code and step[0] in OPTIONAL:
+                        log.write(f"({step[0]} алдаатай дууслаа, алгаслаа)\n")
+                        code = 0
+                    if code:
+                        break
+            finally:
+                if stopped:
+                    launchctl(["bootstrap", f"gui/{os.getuid()}", AI_PLIST], log)
+                    log.write("AI сервер дахин асав\n")
     job.update(state="done" if code == 0 else "error", finished=time.time(), code=code)
 
 

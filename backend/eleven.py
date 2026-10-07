@@ -2,7 +2,7 @@
 ElevenLabs: залгагчид тоглогдох аудиог зөвхөн БЭЛДЭХЭД үүсгэнэ (дуудлагын үед бэлэн аудио тоглогдоно).
 Oron TTS ашиглахгүй. Байгууллага хоолой сонгоогүй бол Уянга (монгол, халх аялга).
 
-Түлхүүр: DATA_DIR/elevenlabs_key (600, git-д орохгүй). SIM-TRUNK-ийн бэлдэх скриптүүд
+Түлхүүр: DATA_DIR/elevenlabs_key (600, git-д орохгүй; бодит горимд SIM-TRUNK/data/). SIM-TRUNK-ийн бэлдэх скриптүүд
 (.sim-runtime/data -> DATA_DIR) яг энэ файлыг уншина.
 Жишээ аудио: tenants/<slug>/data/eleven_samples/<tag>/<hash>.wav — "Аудио бэлдэх" эндээс шууд хуулна,
 ElevenLabs-ийг дахин дуудахгүй (SIM-TRUNK stream_voice.eleven_sample_path).
@@ -16,10 +16,11 @@ import threading
 import httpx
 
 import knowledge_jobs
-from config import DATA_DIR, TENANTS_DIR
+from config import DATA_DIR, LIVE, SIM_TRUNK_DIR, TENANTS_DIR
 from tenant import Tenant
 
-KEY_FILE = os.path.join(DATA_DIR, "elevenlabs_key")
+# бэлдэх скриптүүдийн уншдаг газар: .sim-runtime/data -> DATA_DIR, бодит горимд SIM-TRUNK/data
+KEY_FILE = os.path.join(SIM_TRUNK_DIR, "data", "elevenlabs_key") if LIVE else os.path.join(DATA_DIR, "elevenlabs_key")
 URL = "https://api.elevenlabs.io/v1"
 MODEL = "eleven_v4"                      # монгол хэл дэмждэг (v3, multilingual v2 дэмждэггүй)
 DEFAULT_VOICE = os.getenv("ELEVEN_VOICE", "2cecqSnkajrth9sJSoEH")   # Уянга (ElevenLabs-ийн нийтийн сан)
@@ -51,7 +52,7 @@ def save_key(value: str):
     r = httpx.get(f"{URL}/voices", headers={"xi-api-key": value}, timeout=30)
     if r.status_code != 200:
         raise ValueError(f"ElevenLabs түлхүүрийг хүлээж авсангүй ({r.status_code}). Voices (Read) эрх хэрэгтэй.")
-    os.makedirs(DATA_DIR, exist_ok=True)
+    os.makedirs(os.path.dirname(KEY_FILE), exist_ok=True)
     fd = os.open(KEY_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
         f.write(value)
