@@ -1,6 +1,7 @@
 # pinequest-s5-episode-1-team-8
 
 Монгол утасны AI ресепшн — вэб удирдлага. `backend/` (Python FastAPI) + `frontend/` (Next.js, bun).
+Утасны AI/RAG runtime нь `backend/ai_runtime/` дотор багтсан; тусдаа SIM-TRUNK хавтас шаардахгүй.
 
 ## Ажиллуулах
 

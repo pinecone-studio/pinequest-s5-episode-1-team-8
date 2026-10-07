@@ -2,8 +2,8 @@
 ElevenLabs: залгагчид тоглогдох аудиог зөвхөн БЭЛДЭХЭД үүсгэнэ (дуудлагын үед бэлэн аудио тоглогдоно).
 Oron TTS ашиглахгүй. Байгууллага хоолой сонгоогүй бол Уянга (монгол, халх аялга).
 
-Түлхүүр: DATA_DIR/elevenlabs_key (600, git-д орохгүй; бодит горимд SIM-TRUNK/data/). SIM-TRUNK-ийн бэлдэх скриптүүд
-(.sim-runtime/data -> DATA_DIR) яг энэ файлыг уншина.
+Түлхүүр: DATA_DIR/elevenlabs_key (600, git-д орохгүй). Дотоод AI runtime-ийн бэлдэх скриптүүд
+(.ai-runtime/data -> DATA_DIR) яг энэ файлыг уншина.
 Жишээ аудио: tenants/<slug>/data/eleven_samples/<tag>/<hash>.wav — "Аудио бэлдэх" эндээс шууд хуулна,
 ElevenLabs-ийг дахин дуудахгүй (SIM-TRUNK stream_voice.eleven_sample_path).
 """
@@ -16,11 +16,11 @@ import threading
 import httpx
 
 import knowledge_jobs
-from config import DATA_DIR, LIVE, SIM_TRUNK_DIR, TENANTS_DIR
+from config import DATA_DIR, TENANTS_DIR
 from tenant import Tenant
 
-# бэлдэх скриптүүдийн уншдаг газар: .sim-runtime/data -> DATA_DIR, бодит горимд SIM-TRUNK/data
-KEY_FILE = os.path.join(SIM_TRUNK_DIR, "data", "elevenlabs_key") if LIVE else os.path.join(DATA_DIR, "elevenlabs_key")
+# Бэлдэх скриптүүдийн уншдаг газар: .ai-runtime/data -> DATA_DIR.
+KEY_FILE = os.path.join(DATA_DIR, "elevenlabs_key")
 URL = "https://api.elevenlabs.io/v1"
 MODEL = "eleven_v4"                      # монгол хэл дэмждэг (v3, multilingual v2 дэмждэггүй)
 DEFAULT_VOICE = os.getenv("ELEVEN_VOICE", "2cecqSnkajrth9sJSoEH")   # Уянга (ElevenLabs-ийн нийтийн сан)
@@ -129,12 +129,12 @@ def sample_items(items: list[dict]) -> list[dict]:
 
 
 def _run(t: Tenant, voice: str, todo: list[dict]):
-    """SIM-TRUNK-ийн орчинд eleven_samples.py: бэлдэлттэй яг адил (тоог үгээр, дуудлагын толь, дууны түвшин)."""
+    """Дотоод AI runtime-д eleven_samples.py ажиллуулна."""
     source = knowledge_jobs.sim_root()
-    python = os.path.join(source, ".venv", "bin", "python")
+    python = knowledge_jobs.python_executable(source)
     try:
         if not os.path.isfile(python):
-            raise RuntimeError(f"SIM-TRUNK Python орчин олдсонгүй: {python}")
+            raise RuntimeError(f"AI Python орчин олдсонгүй: {python}")
         root = knowledge_jobs.runtime_root()
         env = {**os.environ, "DATA_DIR": DATA_DIR, "TENANT": t.slug, "HF_HUB_OFFLINE": "1", "PYTHONUNBUFFERED": "1"}
         proc = subprocess.Popen([python, "-W", "ignore", knowledge_jobs.RUNNER, root, TENANTS_DIR, SCRIPT],

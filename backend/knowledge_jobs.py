@@ -1,15 +1,16 @@
-"""SIM-TRUNK-ийн бодит knowledge/audio pipeline-ийг tenant бүрээр дараалалд ажиллуулна.
+"""Дотоод AI runtime-ийн knowledge/audio pipeline-ийг tenant бүрээр дараалалд ажиллуулна.
 
-Скрипт бүр sim_runner.py-ээр дамжиж МАНАЙ байгууллагын хавтас (backend/data/tenants/<slug>) дээр ажиллана.
-Бодит горимд (config.LIVE) SIM-TRUNK-ийн хавтас дээр шууд, бэлдэх үед AI серверийг түр зогсооно."""
+Скрипт бүр sim_runner.py-ээр дамжиж backend/data/tenants/<slug> дээр ажиллана.
+AI engine backend/ai_runtime-д хамт хадгалагддаг тул гаднын repository шаардахгүй."""
 import os
 import queue
 import re
 import subprocess
+import sys
 import threading
 import time
 
-from config import DATA_DIR, LIVE, TENANTS_DIR
+from config import AI_RUNTIME_DIR, DATA_DIR, LIVE, TENANTS_DIR
 from tenant import Tenant
 
 JOBS: dict[str, dict] = {}
@@ -38,16 +39,25 @@ STOP_AI_TASKS = {"build", "regen", "english"}
 
 
 def sim_root() -> str:
+    """AI runtime-ийн эх код. Env override нь хуучин integration test-д үлдсэн."""
     configured = os.getenv("SIM_TRUNK_DIR")
     if configured:
         return os.path.abspath(configured)
-    project = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(os.path.dirname(project), "SIM-TRUNK")
+    return AI_RUNTIME_DIR
+
+
+def python_executable(source: str | None = None) -> str:
+    """Энэ төслийн Python-ийг ашиглана; fake/legacy runtime өөрийн venv-тэй бол түүнийг хүндэтгэнэ."""
+    configured = os.getenv("AI_PYTHON")
+    if configured:
+        return os.path.abspath(configured)
+    bundled = os.path.join(source or sim_root(), ".venv", "bin", "python")
+    return bundled if os.path.isfile(bundled) else sys.executable
 
 
 def tts_cache() -> str:
-    """SIM-TRUNK-ийн нийтлэг TTS кэш (ingest аудиог энд бичнэ)"""
-    return os.path.join(sim_root(), "data", "tts_cache")
+    """Бүх байгууллагын нийтлэг TTS кэш."""
+    return os.path.join(sim_root(), "data", "tts_cache") if LIVE else os.path.join(DATA_DIR, "tts_cache")
 
 
 def log_path(t: Tenant) -> str:
@@ -63,16 +73,15 @@ def launchctl(args: list[str], log) -> int:
 
 
 def runtime_root() -> str:
-    """SIM-TRUNK кодыг ашиглахдаа өгөгдлийг энэ төслийн DATA_DIR руу холбоно (бодит горимд SIM-TRUNK өөрөө).
+    """Дотоод AI кодыг DATA_DIR-тэй холбоод тусгаарлагдсан runtime үүсгэнэ.
 
-    SIM-TRUNK-ийн tenant.py нь өөрийн ROOT/tenants замыг ашигладаг тул эх кодыг
-    symlink-ээр runtime хавтсанд харуулж, tenants/data-г манай backend/data руу
-    холбоно. Ингэснээр эх SIM-TRUNK-ийн өгөгдлийг өөрчлөхгүй.
+    AI tenant.py нь ROOT/tenants зам ашигладаг тул кодыг дотоод runtime хавтсанд
+    symlink-ээр харуулж, tenants/data-г backend/data руу холбоно.
     """
     source = sim_root()
     if LIVE:
         return source
-    runtime = os.path.join(DATA_DIR, ".sim-runtime")
+    runtime = os.path.join(DATA_DIR, ".ai-runtime")
     os.makedirs(runtime, exist_ok=True)
     for name in os.listdir(source):
         if name in {"tenants", "data", "logs", "voices", ".git", "__pycache__"}:
@@ -105,14 +114,14 @@ def runtime_root() -> str:
 
 def _run(slug: str):
     source, tenant = sim_root(), Tenant(slug)
-    python = os.path.join(source, ".venv", "bin", "python")
+    python = python_executable(source)
     job = JOBS[slug]
     job.update(state="running", started=time.time())
     os.makedirs(os.path.dirname(log_path(tenant)), exist_ok=True)
     code = 0
     with open(log_path(tenant), "w", encoding="utf-8") as log:
         if not os.path.isfile(python):
-            log.write(f"SIM-TRUNK Python орчин олдсонгүй: {python}\n")
+            log.write(f"AI Python орчин олдсонгүй: {python}\n")
             code = -1
         else:
             root = runtime_root()

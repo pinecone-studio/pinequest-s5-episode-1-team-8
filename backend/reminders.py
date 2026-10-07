@@ -125,9 +125,9 @@ def audio_dir(t: Tenant) -> str:
 
 
 def _synth_sim(t: Tenant, todo: list[dict], out_dir: str):
-    """SIM-TRUNK-ийн ElevenTTS-ээр (тоо, цаг үгээр; байгууллагын хоолой)."""
+    """Дотоод AI runtime-ийн ElevenTTS-ээр (тоо, цаг үгээр; байгууллагын хоолой)."""
     source = knowledge_jobs.sim_root()
-    python = os.path.join(source, ".venv", "bin", "python")
+    python = knowledge_jobs.python_executable(source)
     root = knowledge_jobs.runtime_root()
     env = {**os.environ, "DATA_DIR": DATA_DIR, "TENANT": t.slug, "HF_HUB_OFFLINE": "1"}
     r = subprocess.run([python, "-W", "ignore", knowledge_jobs.RUNNER, root, TENANTS_DIR, SCRIPT], cwd=root, env=env,

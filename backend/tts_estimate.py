@@ -1,5 +1,5 @@
-"""Нэмэлт (SIM-TRUNK-д алга): "Бэлдэх"-ийн өмнө ElevenLabs-аар ШИНЭЭР үүсэх өгүүлбэрийг тоолно — API дуудахгүй.
-SIM-TRUNK-ийн орчинд sim_runner.py-ээр ажиллана (backend/routes/knowledge.py · build_estimate дуудна).
+""""Бэлдэх"-ийн өмнө ElevenLabs-аар шинээр үүсэх өгүүлбэрийг тоолно — API дуудахгүй.
+Дотоод AI runtime-д sim_runner.py-ээр ажиллана (backend/routes/knowledge.py · build_estimate дуудна).
 Бэлдэхтэй ижил дүрэм: хүний бичлэг -> TTS кэш (clip_key) -> харьцуулалтын жишээ -> үгүй бол ElevenLabs.
 stdout-ын сүүлийн мөр: {"total", "recorded", "cached", "new", "chars", "texts": [...]}
 """
