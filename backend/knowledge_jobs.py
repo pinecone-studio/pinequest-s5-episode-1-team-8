@@ -141,8 +141,20 @@ def _run(slug: str):
                 if stopped:
                     launchctl(["bootstrap", f"gui/{os.getuid()}", AI_PLIST], log)
                     log.write("AI сервер дахин асав\n")
+    if code == 0:
+        sync_rag(tenant)
     job.update(state="done" if code == 0 else "error", finished=time.time(), code=code)
     notify_done(tenant, job.get("task", "build"), code)
+
+
+def sync_rag(t: Tenant):
+    """Байгууллагын RAG-ийг нэг өгөгдлийн санд (receptionist.db · knowledge_docs). SIM-TRUNK-ийн скрипт өөрөө
+    бичдэг ч хуучин хувилбартай SIM-TRUNK дээр ажиллаж байсан ч заавал шинэчлэгдэнэ."""
+    import rag_store
+    try:
+        rag_store.sync(t.dir)
+    except Exception as exc:
+        print(f"  [RAG өгөгдлийн сан] {t.slug}: {exc}")
 
 
 # ---------------- нэмэлт (SIM-TRUNK-д алга): бэлэн болмогц мэдэгдэл, автомат бэлдэлт ----------------

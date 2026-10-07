@@ -952,6 +952,20 @@ def test_personal_rag():
     check("ажилтны код шинэчлэхэд хуучин нь хүчингүй", new != pin and people.check_staff_pin(t.dir, new)
           and not people.check_staff_pin(t.dir, pin))
     check("ажилтан нэрээр хайна (Болдын цагийг...)", [x["id"] for x in people.find_by_name(t.dir, "Болдын цагийг шилжүүл")] == [lead_id])
+    st = a.get("/api/rag").json()
+    check("нэг DB: хувийн баримт, бүртгэл, өөрчлөлт", st["person_docs"] >= 4 and st["leads"] == 2 and st["changes"] == 2, st)
+    import numpy as np
+    kb = os.path.join(t.dir, "knowledge_index")
+    os.makedirs(kb, exist_ok=True)
+    emb = np.eye(3, 8, dtype=np.float32)
+    np.savez(os.path.join(kb, "facts.npz"), emb=emb)
+    json.dump({"embed_model": "BAAI/bge-m3", "facts": [{"text": f"Өгүүлбэр {i}", "source": "a.md", "audio": f"/x/{i}.wav"}
+                                                      for i in range(3)]}, open(os.path.join(kb, "facts.json"), "w"))
+    st = a.get("/api/rag").json()
+    check("бэлдсэн индекс DB-д (knowledge_docs, вектортой)", st["facts"] == 3 and st["dim"] == 8
+          and st["embed_model"] == "BAAI/bge-m3", st)
+    import rag_store
+    check("DB-ээс вектороор хайна", rag_store.search(t.dir, emb[1], "fact", 1)[0][0] == "Өгүүлбэр 1")
     texts = [x["text"] for x in a.get("/api/voice").json()["items"] if x["kind"] == "огноо"]
     check("огнооны клипүүд аудио бэлдэх жагсаалтад", people.slot_parts(slot)[0] in texts and len(texts) >= 60, len(texts))
 
