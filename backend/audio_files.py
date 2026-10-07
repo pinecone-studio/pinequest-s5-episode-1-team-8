@@ -1,16 +1,24 @@
-"""Хөтчөөс ирсэн PCM WAV бичлэгийг хадгалах, тоглуулахад бэлдэх жижиг хэрэгслүүд.
-
-Хүнд numpy/scipy сан backend-д шаардахгүй. AI/TTS pipeline өөрийн SIM-TRUNK
-орчноор ажилладаг; энд зөвхөн browser-ийн 16-bit WAV-г mono 24 kHz болгоно.
+"""Бичлэг хадгалах, утасны чанараар тоглуулах — SIM-TRUNK-тэй ЯГ ижил алгоритм:
+scripts/record.py · clean() (чимээгүй тайрах, 24kHz, түвшин тэнцүүлэх) ба web/app.py · phone_quality() (8kHz μ-law).
 """
-import audioop
 import hashlib
 import io
 import os
-import wave
+import warnings
+from math import gcd
 
-OUT_RATE = 24_000
-TARGET_RMS = int(0.08 * 32767)
+import numpy as np
+import soundfile as sf
+from scipy.signal import resample_poly
+
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore", DeprecationWarning)
+    import audioop
+
+MIC_SR = 48000
+OUT_SR = 24000          # TTS-тэй ижил -> phone_server 8kHz болгож хөрвүүлнэ
+TARGET_RMS = 0.08       # ~ -22 dBFS
+PAD_START, PAD_END = 0.15, 0.25
 
 
 def text_hash(text: str) -> str:
@@ -26,78 +34,54 @@ def recording_for(directory: str, text: str) -> str | None:
     return path if os.path.isfile(path) else None
 
 
-def _pcm(data: bytes) -> tuple[bytes, int]:
-    try:
-        with wave.open(io.BytesIO(data), "rb") as src:
-            channels, width, rate = src.getnchannels(), src.getsampwidth(), src.getframerate()
-            if src.getcomptype() != "NONE" or channels not in (1, 2) or width not in (1, 2, 3, 4):
-                raise ValueError
-            frames = src.readframes(src.getnframes())
-    except (wave.Error, EOFError, ValueError) as exc:
-        raise ValueError("Зөв PCM WAV бичлэг оруулна уу") from exc
-    if width != 2:
-        frames = audioop.lin2lin(frames, width, 2)
-    if channels == 2:
-        frames = audioop.tomono(frames, 2, 0.5, 0.5)
-    return frames, rate
+def clean(audio: np.ndarray, sr: int = MIC_SR) -> np.ndarray | None:
+    """Чимээгүйг тайрч, 24kHz болгож, дууны түвшинг тэнцүүлнэ (вэб бичлэгт ч ашиглана)."""
+    if len(audio) < sr * 0.3:
+        return None
+    frame = int(sr * 0.02)
+    n = len(audio) // frame
+    rms = np.sqrt((audio[:n * frame].reshape(n, frame) ** 2).mean(axis=1))
+    thresh = max(0.01, 0.1 * np.percentile(rms, 95))
+    voiced = np.where(rms > thresh)[0]
+    if len(voiced) == 0:
+        return None
+    start = max(0, voiced[0] * frame - int(PAD_START * sr))
+    end = min(len(audio), (voiced[-1] + 1) * frame + int(PAD_END * sr))
+    g = gcd(OUT_SR, sr)
+    audio = resample_poly(audio[start:end], OUT_SR // g, sr // g).astype(np.float32)
 
-
-def _clean(frames: bytes, rate: int) -> bytes:
-    if len(frames) < int(rate * 0.3) * 2:
-        raise ValueError("Бичлэг хэт богино байна")
-    frame_bytes = max(1, int(rate * 0.02)) * 2
-    levels = [audioop.rms(frames[i:i + frame_bytes], 2)
-              for i in range(0, len(frames) - frame_bytes + 1, frame_bytes)]
-    if not levels:
-        raise ValueError("Дуу сонсогдсонгүй")
-    threshold = max(int(0.01 * 32767), int(max(levels) * 0.1))
-    voiced = [i for i, level in enumerate(levels) if level > threshold]
-    if not voiced:
-        raise ValueError("Дуу сонсогдсонгүй")
-    start = max(0, voiced[0] * frame_bytes - int(rate * 0.15) * 2)
-    end = min(len(frames), (voiced[-1] + 1) * frame_bytes + int(rate * 0.25) * 2)
-    frames = frames[start:end]
-    if rate != OUT_RATE:
-        frames, _ = audioop.ratecv(frames, 2, 1, rate, OUT_RATE, None)
-    level = audioop.rms(frames, 2)
-    if not level:
-        raise ValueError("Дуу сонсогдсонгүй")
-    return audioop.mul(frames, 2, min(8.0, TARGET_RMS / level))
-
-
-def wav_bytes(frames: bytes, rate: int) -> bytes:
-    out = io.BytesIO()
-    with wave.open(out, "wb") as dst:
-        dst.setnchannels(1)
-        dst.setsampwidth(2)
-        dst.setframerate(rate)
-        dst.writeframes(frames)
-    return out.getvalue()
+    speech = audio[np.abs(audio) > 0.02]
+    level = np.sqrt((speech ** 2).mean()) if len(speech) else np.sqrt((audio ** 2).mean())
+    audio = audio * (TARGET_RMS / max(level, 1e-4))
+    peak = np.abs(audio).max()
+    if peak > 0.95:
+        audio *= 0.95 / peak
+    fade = int(OUT_SR * 0.01)
+    audio[:fade] *= np.linspace(0, 1, fade)
+    audio[-fade:] *= np.linspace(1, 0, fade)
+    return audio
 
 
 def save_recording(data: bytes, path: str) -> float:
-    frames, rate = _pcm(data)
-    frames = _clean(frames, rate)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "wb") as file:
-        file.write(wav_bytes(frames, OUT_RATE))
-    os.replace(tmp, path)
-    return len(frames) / 2 / OUT_RATE
-
-
-def duration(path: str) -> float:
+    """Хөтчөөс ирсэн аудио -> clean() -> 24kHz WAV (SIM-TRUNK web/app.py · save_voice). Секунд буцаана."""
     try:
-        with wave.open(path, "rb") as src:
-            return src.getnframes() / src.getframerate()
-    except (OSError, wave.Error):
-        return 0.0
+        wav, sr = sf.read(io.BytesIO(data), dtype="float32", always_2d=True)
+    except (sf.LibsndfileError, RuntimeError, TypeError) as exc:
+        raise ValueError("Аудио файл уншигдсангүй (WAV оруулна уу)") from exc
+    audio = clean(wav.mean(axis=1), sr)
+    if audio is None:
+        raise ValueError("Дуу сонсогдсонгүй. Микрофоноо шалгана уу.")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    sf.write(path, audio, OUT_SR)
+    return len(audio) / OUT_SR
 
 
 def phone_quality(path: str) -> bytes:
-    with open(path, "rb") as file:
-        frames, rate = _pcm(file.read())
-    if rate != 8000:
-        frames, _ = audioop.ratecv(frames, 2, 1, rate, 8000, None)
-    frames = audioop.ulaw2lin(audioop.lin2ulaw(frames, 2), 2)
-    return wav_bytes(frames, 8000)
+    """Утсаар сонсогдох шиг: 8kHz руу буулгаж, PCMU (μ-law) кодлоод буцааж задална (sip_bridge-тэй адил)."""
+    wav, sr = sf.read(path, dtype="float32", always_2d=True)
+    g = gcd(8000, sr)
+    pcm = (np.clip(resample_poly(wav.mean(axis=1), 8000 // g, sr // g), -1, 1) * 32767).astype("<i2").tobytes()
+    pcm = audioop.ulaw2lin(audioop.lin2ulaw(pcm, 2), 2)
+    buf = io.BytesIO()
+    sf.write(buf, np.frombuffer(pcm, "<i2"), 8000, format="WAV", subtype="PCM_16")
+    return buf.getvalue()
