@@ -22,6 +22,14 @@ DEFAULT_NAME = "Pinecone Academy"
 SLUG = re.compile(r"[a-z0-9][a-z0-9-]{1,31}")
 PLANS = ("trial", "active", "suspended")
 LOCK = threading.Lock()  # шинэ байгууллага үүсгэх (slug, дотуур дугаар давхцахгүй)
+STANDARD_ANSWER_MIGRATIONS = {
+    "Хандсанд баярлалаа. Сайхан өдөр өнгөрүүлээрэй.":
+        "Манайхаар үйлчлүүлсэнд баярлалаа. Өдрийг сайхан өнгөрүүлээрэй.",
+    "За, манай ажилтан тан руу эргэж залгана. Таны нэрийг хэлж өгнө үү?":
+        "За, манай ажилтан тан руу эргэж залгана. Та нэрээ хэлж өгнө үү?",
+    "Бүртгэлд тань туслъя. Таны нэрийг хэлж өгнө үү?":
+        "Бүртгэлд тань туслъя. Та нэрээ хэлж өгнө үү?",
+}
 
 # {name} -> байгууллагын нэр. Нэрийн араас нөхцөл залгахгүй байхаар бичсэн.
 GREETING = ("Сайн байна уу. {name} байна. Үйлчилгээний чанарыг сайжруулах зорилгоор яриаг хадгална. "
@@ -153,7 +161,7 @@ def standard_faq(cfg: dict, topics: str) -> list[dict]:
          "answer": "Зүгээр зүгээр. Өөр асуух зүйл байна уу?"},
         {"id": "smalltalk_bye", "auto": True,
          "questions": ["Баяртай", "За баяртай", "Өөр асуух зүйл алга", "Байхгүй ээ", "Үгүй баярлалаа", "Болоо"],
-         "answer": "Хандсанд баярлалаа. Сайхан өдөр өнгөрүүлээрэй."},
+         "answer": "Манайхаар үйлчлүүлсэнд баярлалаа. Өдрийг сайхан өнгөрүүлээрэй."},
         {"id": "smalltalk_capabilities", "auto": True,
          "questions": ["Юу асууж болох вэ", "Та юу мэдэх вэ", "Та хэн бэ", "Чи робот уу", "Ямар мэдээлэл өгөх вэ"],
          "answer": (f"Би {cfg['name']} байгууллагын AI туслах байна. {topics[:1].upper() + topics[1:]} талаар "
@@ -161,11 +169,11 @@ def standard_faq(cfg: dict, topics: str) -> list[dict]:
         {"id": "human_request", "auto": True,
          "questions": ["Ажилтантай холбогдмоор байна", "Хүнтэй ярьмаар байна", "Оператортой холбоно уу",
                        "Менежертэй ярья", "Ажилтан руу шилжүүлээч", "Надруу эргэж залгаарай"],
-         "answer": "За, манай ажилтан тан руу эргэж залгана. Таны нэрийг хэлж өгнө үү?"},
+         "answer": "За, манай ажилтан тан руу эргэж залгана. Та нэрээ хэлж өгнө үү?"},
         {"id": "register", "auto": True,
          "questions": ["Бүртгүүлмээр байна", "Бүртгүүлэх", "Бүртгүүлж болох уу", "Захиалга өгмөөр байна",
                        "Цаг захиалмаар байна", "Хүсэлт өгмөөр байна"],
-         "answer": "Бүртгэлд тань туслъя. Таны нэрийг хэлж өгнө үү?"},
+         "answer": "Бүртгэлд тань туслъя. Та нэрээ хэлж өгнө үү?"},
     ]
     if cfg.get("phone"):
         faq.append({"id": "contact_phone", "auto": True,
@@ -188,9 +196,20 @@ def standard_faq(cfg: dict, topics: str) -> list[dict]:
 def load_faq(t: Tenant) -> dict:
     try:
         with open(t.faq_path, encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
     except (OSError, ValueError):
         return {}
+    # SIM-TRUNK-ийн стандарт хэллэг шинэчлэгдэхэд зөвхөн untouched auto FAQ-г шилжүүлнэ.
+    # Гараар зассан хариулт (auto тэмдэггүй)-д хүрэхгүй.
+    changed = False
+    for row in data.get("faq", []):
+        replacement = STANDARD_ANSWER_MIGRATIONS.get(row.get("answer")) if row.get("auto") else None
+        if replacement:
+            row["answer"] = replacement
+            changed = True
+    if changed:
+        write_json(t.faq_path, data)
+    return data
 
 
 def refresh_faq(t: Tenant):
