@@ -548,6 +548,10 @@ def test_status():
     tenant.write_json(tb.faq_path, {"_note": "тайлбар", **faq})
     b.put("/api/faq", json=b.get("/api/faq").json())
     check("FAQ хадгалахад _note тайлбар хэвээр", tenant.load_faq(tb).get("_note") == "тайлбар")
+    cfg = tb.config()
+    cfg["eleven_voice_name"] = "Uyanga - Kind Khalkha Friend"
+    tb.save_config(cfg)
+    check("хоолойн нэр сангийн тайлбаргүй (SIM-TRUNK шиг)", b.get("/api/voice").json()["voice"]["name"] == "Uyanga")
 
 
 def test_training_model():
