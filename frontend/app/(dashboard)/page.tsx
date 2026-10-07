@@ -6,23 +6,25 @@ import { AnswerRate } from "@/components/dashboard/AnswerRate";
 import { CallsByDay } from "@/components/dashboard/CallsByDay";
 import { RouteBreakdown } from "@/components/dashboard/RouteBreakdown";
 import { SetupBanner } from "@/components/dashboard/SetupBanner";
+import { TopTopics } from "@/components/dashboard/TopTopics";
 import { PageHeader } from "@/components/PageHeader";
 import { Section } from "@/components/Section";
 import { Card } from "@/components/ui/Card";
 import { apiGet } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { requireUser } from "@/lib/session";
-import type { Call, Stats, Status, Unanswered } from "@/lib/types";
+import type { Call, Stats, Status, Unanswered, WeeklyReport } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Самбар" };
 
 export default async function DashboardPage() {
   await requireUser();
-  const [stats, calls, unanswered, status] = await Promise.all([
+  const [stats, calls, unanswered, status, report] = await Promise.all([
     apiGet<Stats>("/api/stats"),
     apiGet<Call[]>("/api/calls?limit=6"),
     apiGet<Unanswered[]>("/api/unanswered?limit=5"),
     apiGet<Status>("/api/status"),
+    apiGet<WeeklyReport>("/api/report?days=7"),
   ]);
 
   return (
@@ -53,6 +55,12 @@ export default async function DashboardPage() {
         <RouteBreakdown routes={stats.routes} />
         <CallsByDay days={stats.days} />
       </section>
+
+      <Section title="Энэ 7 хоногт" aside={<Link href="/settings" className="hover:underline">Долоо хоногийн тайлан →</Link>}>
+        <Card>
+          <TopTopics report={report} />
+        </Card>
+      </Section>
 
       <Section title="Сүүлийн дуудлагууд" aside={<Link href="/calls" className="hover:underline">Бүгдийг харах</Link>}>
         <Card>
