@@ -946,6 +946,12 @@ def test_personal_rag():
     with db.connect(t.db_path) as con:
         n = con.execute("SELECT COUNT(*) FROM person_docs WHERE lead_id=?", (lead_id,)).fetchone()[0]
     check("хувийн баримтууд receptionist.db-д (person_docs)", n >= 4, n)
+    pin = r["staff_pin"]
+    check("ажилтны 6 оронтой код автоматаар", len(pin) == 6 and pin.isdigit() and people.check_staff_pin(t.dir, pin))
+    new = a.post("/api/people/staff-pin").json()["staff_pin"]
+    check("ажилтны код шинэчлэхэд хуучин нь хүчингүй", new != pin and people.check_staff_pin(t.dir, new)
+          and not people.check_staff_pin(t.dir, pin))
+    check("ажилтан нэрээр хайна (Болдын цагийг...)", [x["id"] for x in people.find_by_name(t.dir, "Болдын цагийг шилжүүл")] == [lead_id])
     texts = [x["text"] for x in a.get("/api/voice").json()["items"] if x["kind"] == "огноо"]
     check("огнооны клипүүд аудио бэлдэх жагсаалтад", people.slot_parts(slot)[0] in texts and len(texts) >= 60, len(texts))
 
