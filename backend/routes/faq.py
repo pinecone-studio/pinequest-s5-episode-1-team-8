@@ -19,6 +19,8 @@ class FaqItem(BaseModel):
     answer: str
     topic: str | None = None
     auto: bool | None = None
+    source: str | None = None
+    created_at: int | None = None
 
 
 class FaqBody(BaseModel):
@@ -44,6 +46,10 @@ def put_faq(body: FaqBody, t: Tenant = Depends(current_tenant)):
         row = {"id": key, "questions": questions, "answer": answer}
         if item.topic:
             row["topic"] = item.topic
+        if item.source:
+            row["source"] = item.source
+        if item.created_at:
+            row["created_at"] = item.created_at
         # Загвараас үүссэн FAQ-г өөрчлөөгүй бол auto тэмдгийг хадгална. Зассан бол
         # дараагийн build байгууллагын загвараар дарж бичихгүй.
         previous = old.get(key, {})
