@@ -30,6 +30,9 @@ MAX_ATTEMPTS, RETRY_MIN, POLL = 3, 30, float(os.getenv("OUTBOUND_POLL", "15"))
 FINAL = {"confirmed", "declined", "unconfirmed", "canceled"}
 RETRY = {"no_answer", "busy", "hung_up", "failed"}
 
+# Эвентийн өмнөх өдөр (people.sync_event_reminders автоматаар товлоно)
+EVENT_TEMPLATE = ("Сайн байна уу, {name}. Энэ бол {org}. Та {date} {time} цагт болох {event}-д ирэх хэвээрээ юу? "
+                  "Ирэх бол нэг, ирэхгүй бол хоёрыг дарна уу.")
 DEFAULT_TEMPLATE = ("Сайн байна уу, {name}. Энэ бол {org}. Таны бүртгэл баталгаажлаа. {date} {time} цагт ирээрэй. "
                     "Баталгаажуулах бол нэг, цуцлах бол хоёрыг дарна уу.")
 PHRASES = {
@@ -69,10 +72,11 @@ def template(t: Tenant) -> str:
     return settings(t).get("reminder_template") or DEFAULT_TEMPLATE
 
 
-def render(t: Tenant, lead: dict, appointment: str, tpl: str | None = None) -> str:
+def render(t: Tenant, lead: dict, appointment: str, tpl: str | None = None, event: str | None = None) -> str:
     when = parse_local(appointment)
-    text = (tpl or template(t)).format(name=(lead.get("name") or "").strip(), org=t.config().get("name", t.slug),
-                                       date=date_words(when), time=when.strftime("%H:%M"))
+    tpl = tpl or (EVENT_TEMPLATE if event else template(t))
+    text = tpl.format(name=(lead.get("name") or "").strip(), org=t.config().get("name", t.slug),
+                      date=date_words(when), time=when.strftime("%H:%M"), event=event or "")
     return re.sub(r",\s*\.", ".", re.sub(r"\s+", " ", text)).strip()     # нэргүй бол "Сайн байна уу, ." -> "."
 
 
@@ -175,7 +179,7 @@ def call(t: Tenant, lead_id: int) -> str:
         if not number:
             raise SipError("failed", "утасны дугаар алга")
         # Утасны AI цагийг сольсон бол текст хоосон -> загвараар дахин бичнэ
-        audio = clips(t, item.get("text") or render(t, lead, item["appointment"]))
+        audio = clips(t, item_text(t, lead, item))
         io = dialer.dial(number)
         try:
             outcome, pressed = session.run(io, audio)
@@ -185,11 +189,26 @@ def call(t: Tenant, lead_id: int) -> str:
         outcome, detail = exc.outcome, str(exc)
     except Exception as exc:                       # ElevenLabs, аудио төхөөрөмж ...
         outcome, detail = "failed", str(exc)[:200]
+    return apply_outcome(t, lead_id, outcome, pressed, detail, lead)
+
+
+def item_text(t: Tenant, lead: dict, item: dict) -> str:
+    """Сануулгын мессеж: хадгалсан текст, эсвэл загвараар (AI сольсон цаг, эвентийн автомат дуудлага)."""
+    return item.get("text") or render(t, lead, item["appointment"], event=item.get("event"))
+
+
+def apply_outcome(t: Tenant, lead_id: int, outcome: str, pressed: list[str], detail: str = "",
+                  lead: dict | None = None, call_uuid: str | None = None) -> str:
+    """Дуудлагын үр дүн -> reminders.json, бүртгэл, хувийн RAG (ирнэ/ирэхгүй), Telegram. Вэбийн туршилт ч үүнийг дуудна."""
+    import people
+    lead = lead or lead_of(t, lead_id) or {}
     with data_lock:
         data = load(t)
         item = data["items"].get(str(lead_id))
         if not item:                               # дуудлагын үеэр цуцалсан
             return outcome
+        if outcome in ("confirmed", "declined"):
+            item["attendance"] = outcome == "confirmed"
         item.setdefault("history", []).append({"ts": int(time.time()), "outcome": outcome, "pressed": pressed,
                                                "detail": detail})
         if outcome in RETRY and item["attempts"] < MAX_ATTEMPTS:
@@ -200,6 +219,8 @@ def call(t: Tenant, lead_id: int) -> str:
     if outcome == "confirmed":
         with db.connect(t.db_path) as con:
             con.execute("UPDATE leads SET status='contacted' WHERE id=? AND status='new'", (lead_id,))
+    if outcome in ("confirmed", "declined"):      # хувийн RAG-д: эвентэд ирнэ / ирэхгүй
+        people.mark_attendance(t.dir, lead_id, outcome == "confirmed", "call", call_uuid)
     _notify(t, lead, item, outcome)
     return outcome
 
@@ -212,9 +233,12 @@ def _notify(t: Tenant, lead: dict, item: dict, outcome: str):
     import notify
     when = parse_local(item["appointment"]).strftime("%m/%d %H:%M")
     retry = " (дахин залгана)" if item["status"] == "scheduled" else ""
+    what = f"{item['event']} ({when})" if item.get("event") else f"{when} уулзалт"
+    result = ({"confirmed": "✅ ирнэ гэж баталлаа", "declined": "❌ ирэхгүй — бүртгэл цуцлагдлаа"}.get(outcome)
+              if item.get("event") else None) or TEXT.get(outcome, outcome)
     try:
         notify.send(t, f"{t.config().get('name', t.slug)}: {lead.get('name') or lead.get('phone') or 'Бүртгэл'} — "
-                       f"{when} уулзалт {TEXT.get(outcome, outcome)}{retry}")
+                       f"{what} {result}{retry}")
     except Exception as exc:
         print(f"  [мэдэгдэл] {exc}")
 
@@ -239,11 +263,23 @@ def run_due(now: float | None = None, check_ready: bool = True) -> list[tuple[st
     return done
 
 
+def sync_events():
+    """Эвентэд бүртгүүлсэн шинэ хүмүүст өмнөх өдрийн дуудлагыг автоматаар товлоно (бүх байгууллага)."""
+    import people
+    for t in all_tenants():
+        try:
+            with data_lock:
+                people.sync_event_reminders(t.dir)
+        except Exception as exc:
+            print(f"  [эвент] {t.slug}: {exc}")
+
+
 def _loop():
     while True:
         _wake.wait(POLL)
         _wake.clear()
         try:
+            sync_events()
             run_due()
         except Exception as exc:
             print(f"  [сануулга] {exc}")

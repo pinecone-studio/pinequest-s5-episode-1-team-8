@@ -42,6 +42,8 @@ INTENTS = {
     "ask_phone": ["Ямар дугаар бүртгэлтэй вэ", "Миний дугаар зөв үү", "Бүртгэлтэй дугаараа шалгах"],
     "ask_status": ["Бүртгэл маань ямар байгаа вэ", "Бүртгэл баталгаажсан уу", "Хүсэлт маань хаана явж байна"],
     "ask_course": ["Би юунд бүртгүүлсэн бэ", "Ямар хөтөлбөрт бүртгүүлсэн бэ", "Ямар эвентэд бүртгүүлсэн бэ"],
+    "ask_attendance": ["Эвентэд ирэх эсэх маань бүртгэгдсэн үү", "Ирнэ гэж бүртгэгдсэн үү", "Намайг ирнэ гэж тэмдэглэсэн үү",
+                       "Ирэх эсэхээ шалгах"],
 }
 STAFF_INTENTS = {
     "cancel_registration": ["бүртгэлийг нь цуцал", "хөтөлбөрөөс хас", "эвентээс хас", "ирэхгүй гэсэн"],
@@ -53,11 +55,13 @@ STAFF_INTENTS = {
     "ask_phone": ["дугаар нь хэд вэ", "ямар дугаартай вэ"],
     "ask_status": ["бүртгэл нь ямар байгаа вэ", "төлөв нь юу вэ"],
     "ask_course": ["юунд бүртгүүлсэн бэ", "ямар хөтөлбөр вэ"],
+    "ask_attendance": ["ирэх үү", "ирнэ гэсэн үү", "ирэх эсэх нь"],
 }
 INTENT_LABELS = {"cancel_registration": "бүртгэл цуцлах", "change_phone": "дугаар солих", "change_time": "цаг солих",
                  "cancel": "цаг цуцлах", "ask_time": "цагаа асуух", "ask_phone": "дугаараа асуух",
-                 "ask_status": "төлөв асуух", "ask_course": "бүртгэлээ асуух"}
-DOC_INTENT = {"phone": "ask_phone", "appointment": "ask_time", "status": "ask_status", "course": "ask_course"}
+                 "ask_status": "төлөв асуух", "ask_course": "бүртгэлээ асуух", "ask_attendance": "ирэх эсэхээ асуух"}
+DOC_INTENT = {"phone": "ask_phone", "appointment": "ask_time", "status": "ask_status", "course": "ask_course",
+              "attendance": "ask_attendance"}
 MENU_KEYS = {"1": "change_phone", "2": "change_time", "3": "cancel", "4": "cancel_registration"}
 ORDINALS = {"нэг": 0, "эхн": 0, "хоёр": 1, "гура": 2, "гурв": 2, "сүүл": 2}
 WEEKDAY_STEMS = {"дава": 0, "мягм": 1, "лхаг": 2, "пүрэ": 3, "пүрв": 3, "баас": 4, "бямб": 5, "ням": 6}
@@ -195,9 +199,9 @@ class AccountFlow:
         return None
 
     def handle(self, text: str) -> list[str] | None:
-        if self.state == "staff_code":
+        if self.state == "staff_code":           # кодгүй бол ажилтны горимоос гаргахгүй, дахин асууна
             digits = re.sub(r"\D", "", parse_phone(text))
-            return self._staff_code(digits) if digits else None
+            return self._staff_code(digits) if digits else ["staff_ask_pin"]
         if self.state == "target":
             digits = re.sub(r"\D", "", parse_phone(text))
             if len(digits) == people.CODE_LEN:
@@ -333,6 +337,10 @@ class AccountFlow:
         if intent == "ask_status":
             status = lead.get("status") or "new"
             return [f"status_{status}" if status in people.STATUS_WORDS else "status_new", self._end()]
+        if intent == "ask_attendance":
+            coming = people.attendance(self.tdir, lead_id)
+            key = "attendance_unknown" if coming is None else "attendance_yes" if coming else "attendance_no"
+            return [key, self._end()]
         if intent == "ask_course":
             return (["course_is", "doc:course"] if lead.get("course") else ["no_course"]) + [self._end()]
         return self._appointment_keys() + [self._end()]      # ask_time
@@ -410,8 +418,9 @@ class AccountFlow:
         return ["cancel_done", self._end()]
 
 
-def render(phrases: dict, lead: dict | None, keys: list[str]) -> list[str]:
-    """Түлхүүрүүд -> вэбд харуулах өгүүлбэрүүд (утсанд эдгээр нь бэлэн аудио клипүүд)."""
+def render(phrases: dict, lead: dict | None, keys: list[str], staff: bool = False) -> list[str]:
+    """Түлхүүрүүд -> вэбд харуулах өгүүлбэрүүд (утсанд эдгээр нь бэлэн аудио клипүүд).
+    Ажилтанд гуравдагч биеэр: "Таны бүртгэл цуцлагдсан" -> "Түүний бүртгэл цуцлагдсан"."""
     out = []
     for key in keys:
         if key.startswith("digits:"):
@@ -422,13 +431,18 @@ def render(phrases: dict, lead: dict | None, keys: list[str]) -> list[str]:
         elif key.startswith("doc:"):
             out.append(str((lead or {}).get(key.split(":", 1)[1]) or "—"))
         else:
-            out.append(phrases.get(key, key))
+            text = phrases.get(key, key)
+            if staff and key not in ("staff_ask_pin", "staff_verified", "staff_next", "target_is", "target_phone",
+                                     "confirm_target", "target_not_found"):
+                text = re.sub(r"\bТаны\b", "Түүний", re.sub(r"\bТанд\b", "Түүнд", text))
+            out.append(text)
     # "Таны уулзалтын цаг" + "Пүрэв гараг ..." -> нэг өгүүлбэр
     joined, buf = [], []
-    for key, text in zip(keys, out):
+    for i, (key, text) in enumerate(zip(keys, out)):
         buf.append(text)
+        nxt = keys[i + 1] if i + 1 < len(keys) else ""
         if not (key in ("appt_is", "phone_is", "target_is", "target_phone", "new_phone_is", "you_chose", "appt_done",
-                        "course_is", "your_code") or key.startswith("press_")):
+                        "course_is", "your_code") or key.startswith("press_") or nxt == "target_phone"):
             joined.append(" ".join(buf))
             buf = []
     if buf:
