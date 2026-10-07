@@ -50,16 +50,24 @@ def load_json(path: str, default):
 
 
 def all_texts(t: Tenant) -> list[tuple[str, str]]:
+    """Залгагчид тоглогдох бүх өгүүлбэр (SIM-TRUNK scripts/record.py · all_texts).
+    Хэллэгүүдийг (хүлээлгэх, алдаа, бүртгэл, цифр) "Аудио бэлдэх"-ийн бичсэн faq_index.json-оос авна —
+    SIM-TRUNK байгууллагын нэр, утсыг оруулж бэлддэг тул яг тоглогдох бичвэр. Бэлдээгүй бол доорх загвар."""
     src = load_faq(t)
+    built = load_json(os.path.join(t.faq_index_dir, "faq_index.json"), {})
+    one = lambda key: (built.get(key) or {}).get("text")                                    # noqa: E731
+    many = lambda key: [c.get("text", "") for c in (built.get(key) or [])]                   # noqa: E731
+    system_keys = {"алдаа": "error", "дахин асуух": "repeat", "тодруулах": "clarify"}
     rows: list[tuple[str, str]] = []
-    if src.get("greeting"):
-        rows.append(("Мэндчилгээ", src["greeting"]))
-    rows += [("Хүлээлгэх", text) for text in src.get("fillers", [])]
-    rows += [("hold", text) for text in HOLDS]
-    rows += list(SYSTEM.items())
+    greeting = src.get("greeting") or one("greeting")
+    if greeting:
+        rows.append(("Мэндчилгээ", greeting))
+    rows += [("Хүлээлгэх", text) for text in (src.get("fillers") or many("fillers"))]
+    rows += [("hold", text) for text in (many("holds") or HOLDS)]
+    rows += [(kind, one(system_keys[kind]) or text) for kind, text in SYSTEM.items()]
     rows += [("bridge", row.get("bridge", "")) for row in src.get("topics", {}).values()]
-    rows += [("бүртгэл", text) for text in LEAD]
-    rows += [("цифр", text) for text in DIGITS]
+    rows += [("бүртгэл", text) for text in ([c.get("text", "") for c in (built.get("lead") or {}).values()] or LEAD)]
+    rows += [("цифр", text) for text in (many("digits") or DIGITS)]
     rows += [("FAQ", row.get("answer", "")) for row in src.get("faq", [])
              if row.get("answer") and "TODO" not in row.get("answer", "")]
     facts = load_json(os.path.join(t.kb_index_dir, "facts.json"), {}).get("facts", [])

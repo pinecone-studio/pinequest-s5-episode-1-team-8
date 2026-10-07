@@ -20,6 +20,7 @@ Backend-ийн тест. Кодыг өөрчилсний дараа, PR-ийн �
 15. Өөрийн хоолойгоор бичих: бичлэг хадгалах, сонсох, устгах, WAV шалгалт, байгууллага хооронд тусгаарлалт
 16. ElevenLabs хоолой (admin): түлхүүр, хоолойнууд, жишээ үүсгэх, сонгох (ElevenLabs, SIM-TRUNK-ийг дуурайна)
 17. Хоолой (Oron-гүй): одоогийн хоолой, ElevenLabs-ийн дахин үүсгэх, аудиог шинэчлэх, ZIP татах
+18. Хоолойн жагсаалт: бэлдсэний дараа яг тоглогдох хэллэгүүд (SIM-TRUNK-ийн faq_index.json)
 
 Түр хавтсанд (DATA_DIR) ажиллана — backend/data/-ийн жинхэнэ хэрэглэгчдэд хүрэхгүй.
 """
@@ -771,6 +772,30 @@ def test_voice_eleven_only():
             os.environ["SIM_TRUNK_DIR"] = old_env
 
 
+def test_voice_texts():
+    print("\n[18] Хоолойн жагсаалт = яг тоглогдох хэллэгүүд")
+    import json
+    a = owner_client("Хэллэг тест", "phrases@example.mn")
+    t = tenant.Tenant(a.get("/api/me").json()["tenant"])
+    before = [x["text"] for x in a.get("/api/voice").json()["items"] if x["kind"] == "бүртгэл"]
+    check("бэлдээгүй үед загвар хэллэг", "Зөв үү?" in before, before)
+    clip = lambda text: {"text": text, "audio": "/tmp/x.wav"}  # noqa: E731
+    lead = {"ask_phone": "Баярлалаа. Тантай холбогдох утасны дугаараа хэлж өгнө үү. Эсвэл утасныхаа товчлуураар бичиж болно.",
+            "confirm": "Зөв үү?", "done": "Таны мэдээллийг амжилттай бүртгэлээ. Хэллэг тест-ийн ажилтан тантай удахгүй холбогдоно.",
+            "ask_name_again": "Та нэрээ хэлж өгнө үү?"}
+    os.makedirs(t.faq_index_dir, exist_ok=True)
+    json.dump({"holds": [clip("Түр хүлээгээрэй.")], "error": clip("Хэллэг тест-ийн ажилтан тан руу эргэж холбогдох уу?"),
+               "lead": {k: clip(v) for k, v in lead.items()}, "digits": [clip("тэг"), clip("нэг")]},
+              open(os.path.join(t.faq_index_dir, "faq_index.json"), "w", encoding="utf-8"), ensure_ascii=False)
+    items = a.get("/api/voice").json()["items"]
+    by_kind = lambda kind: [x["text"] for x in items if x["kind"] == kind]  # noqa: E731
+    check("бүртгэлийн хэллэг бэлдсэн аудиотой яг ижил (нэр орсон)", by_kind("бүртгэл") == list(lead.values()), by_kind("бүртгэл"))
+    check("хуучин загвар хэллэг үлдэхгүй", "Таны нэрийг хэлж өгнө үү?" not in by_kind("бүртгэл"))
+    check("алдаа, хүлээлгэх, цифр бэлдсэнээс", by_kind("алдаа") == ["Хэллэг тест-ийн ажилтан тан руу эргэж холбогдох уу?"]
+          and by_kind("hold") == ["Түр хүлээгээрэй."] and by_kind("цифр") == ["тэг", "нэг"], items[:12])
+    check("бэлдээгүй хэллэг загвараараа (дахин асуух)", by_kind("дахин асуух") == ["Уучлаарай, сайн ойлгосонгүй. Та дахин хэлж өгнө үү?"])
+
+
 if __name__ == "__main__":
     test_login()
     test_signup()
@@ -788,5 +813,6 @@ if __name__ == "__main__":
     test_recordings()
     test_eleven()
     test_voice_eleven_only()
+    test_voice_texts()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)
