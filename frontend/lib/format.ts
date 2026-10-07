@@ -7,12 +7,17 @@ export function todayParts(now = new Date()) {
   return { weekday: WEEK[ub.getDay()], month: ub.getMonth() + 1, day: ub.getDate() };
 }
 
-/** unix секунд -> "10.13 09:30" */
+// "mn-MN"-ийг Node ("X/06 12:00"), хөтөч ("10/06, 12:00 PM") өөрөөр форматалж client component-д
+// hydration алдаа гаргадаг -> хэсгүүдийг нь аваад өөрсдөө угсарна (сервер, хөтөч яг ижил бичвэр)
+const DATE_TIME = new Intl.DateTimeFormat("en-US", {
+  timeZone: TZ, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+});
+
+/** unix секунд -> "10.13 09:30" (Улаанбаатарын цагаар) */
 export function formatDateTime(ts?: number | null) {
   if (!ts) return "—";
-  return new Date(ts * 1000).toLocaleString("mn-MN", {
-    timeZone: TZ, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
-  });
+  const p = Object.fromEntries(DATE_TIME.formatToParts(new Date(ts * 1000)).map((x) => [x.type, x.value]));
+  return `${p.month}.${p.day} ${p.hour}:${p.minute}`;
 }
 
 /** секунд -> "42с", "3м 05с" */
