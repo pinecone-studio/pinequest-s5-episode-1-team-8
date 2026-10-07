@@ -2,9 +2,17 @@
 # Backend (http://127.0.0.1:8100) + frontend (http://localhost:3000)-ийг зэрэг асаана.
 # Ctrl+C дарахад хоёулаа унтарна.
 #
-#   ./dev.sh
+#   ./dev.sh          # өөрийн туршилтын өгөгдөл (backend/data)
+#   ./dev.sh --sim    # SIM-TRUNK-ийн БОДИТ байгууллагууд дээр: дуудлага, мэдээлэл, аудио утасны системтэй нэг
 set -u
 cd "$(dirname "$0")"
+if [ "${1:-}" = "--sim" ]; then
+  export SIM_TRUNK_LIVE=1
+  if [ ! -d "${SIM_TRUNK_DIR:-../SIM-TRUNK}/tenants" ]; then
+    echo "SIM-TRUNK олдсонгүй: ${SIM_TRUNK_DIR:-../SIM-TRUNK} (SIM_TRUNK_DIR=... гэж зааж болно)"
+    exit 1
+  fi
+fi
 
 if [ ! -x .venv/bin/python ]; then
   echo "Python орчин алга. Эхлээд нэг удаа:"
