@@ -22,7 +22,7 @@ def get_settings(t: Tenant = Depends(current_tenant)):
     token = st.get("telegram_token") or ""
     return {"telegram_token_set": bool(token), "telegram_token_hint": f"…{token[-4:]}" if token else "",
             "telegram_bot": st.get("telegram_bot"), "telegram_chat_id": st.get("telegram_chat_id"),
-            "telegram_chat_title": st.get("telegram_chat_title")}
+            "telegram_chat_title": st.get("telegram_chat_title"), "auto_build": bool(st.get("auto_build"))}
 
 
 class TelegramBody(BaseModel):
@@ -75,3 +75,16 @@ def telegram_test(t: Tenant = Depends(current_tenant)):
     if not notify.send(t, f"✅ {t.config().get('name', '')} AI ресепшн: Telegram мэдэгдэл ажиллаж байна."):
         raise HTTPException(400, "Илгээж чадсангүй — токен, групп сонгосон эсэхээ шалгана уу")
     return {"ok": True}
+
+
+class AutoBuildBody(BaseModel):
+    enabled: bool
+
+
+@router.put("/auto-build")
+def put_auto_build(body: AutoBuildBody, t: Tenant = Depends(current_tenant)):
+    """Нэмэлт (SIM-TRUNK-д алга): мэдээлэл, FAQ өөрчлөгдөхөд автоматаар "Бэлдэх" (knowledge_jobs.schedule_build)."""
+    st = notify.load_settings(t)
+    st["auto_build"] = body.enabled
+    notify.save_settings(t, st)
+    return {"ok": True, "auto_build": body.enabled}

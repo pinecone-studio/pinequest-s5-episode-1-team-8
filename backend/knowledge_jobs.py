@@ -142,6 +142,61 @@ def _run(slug: str):
                     launchctl(["bootstrap", f"gui/{os.getuid()}", AI_PLIST], log)
                     log.write("AI сервер дахин асав\n")
     job.update(state="done" if code == 0 else "error", finished=time.time(), code=code)
+    notify_done(tenant, job.get("task", "build"), code)
+
+
+# ---------------- нэмэлт (SIM-TRUNK-д алга): бэлэн болмогц мэдэгдэл, автомат бэлдэлт ----------------
+
+DONE_TEXT = {"build": "AI ресепшн бэлэн боллоо ✅", "regen": "Аудио шинэчлэгдлээ ✅", "english": "Англи аудио бэлэн боллоо ✅",
+             "answers": "Шинэ хариултууд хэрэгжлээ ✅", "train": "AI сургалт дууслаа ✅"}
+
+
+def notify_done(t: Tenant, task: str, code: int):
+    """Ажил дуусахад байгууллагын Telegram групп руу (тохируулсан бол). Алдаа нь ажилд нөлөөлөхгүй."""
+    import notify
+    try:
+        name, ext = t.config().get("name", t.slug), t.config().get("extension")
+        if code == 0:
+            text = f"{name}: {DONE_TEXT.get(task, 'Ажил дууслаа ✅')}"
+            if task == "build" and ext:
+                text += f"\nТуршиж залгах: {ext}"
+        else:
+            text = f"{name}: ⚠️ ажил алдаатай дууслаа (код {code}). Вэбийн «Тохируулах» хэсгийн логийг шалгана уу."
+        notify.send(t, text)
+    except Exception as exc:                 # мэдэгдэл бэлдэлтийг хэзээ ч унагахгүй
+        print(f"  [мэдэгдэл] {t.slug}: {exc}")
+
+
+AUTO_DELAY = float(os.getenv("AUTO_BUILD_DELAY", "30"))   # сүүлийн өөрчлөлтөөс хойш хүлээх (олон файлыг нэг бэлдэлтэд)
+_timers: dict[str, threading.Timer] = {}
+_rebuild: set[str] = set()                                 # бэлдэж байх үед өөрчлөгдсөн -> дууссаны дараа дахин
+
+
+def auto_build_enabled(t: Tenant) -> bool:
+    import notify
+    return bool(notify.load_settings(t).get("auto_build"))
+
+
+def schedule_build(t: Tenant):
+    """Мэдээлэл/FAQ өөрчлөгдөхөд (автомат бэлдэлт асаалттай бол) AUTO_DELAY секундын дараа "Бэлдэх"."""
+    if not auto_build_enabled(t):
+        return
+    with JOBS_LOCK:
+        old = _timers.pop(t.slug, None)
+        if old:
+            old.cancel()
+        timer = threading.Timer(AUTO_DELAY, _auto_fire, args=(t.slug,))
+        timer.daemon = True
+        _timers[t.slug] = timer
+        timer.start()
+
+
+def _auto_fire(slug: str):
+    _timers.pop(slug, None)
+    try:
+        enqueue(Tenant(slug), "build")
+    except RuntimeError:                 # ажил явж байна -> дууссаны дараа дахин бэлдэнэ
+        _rebuild.add(slug)
 
 
 def _worker():
@@ -153,6 +208,12 @@ def _worker():
             JOBS[slug].update(state="error", finished=time.time(), code=-1, error=str(exc))
         finally:
             JOB_QUEUE.task_done()
+        if slug in _rebuild:
+            _rebuild.discard(slug)
+            try:
+                enqueue(Tenant(slug), "build")
+            except RuntimeError:
+                pass
 
 
 threading.Thread(target=_worker, daemon=True).start()

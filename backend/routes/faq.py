@@ -10,6 +10,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+import knowledge_jobs
 from deps import current_tenant
 from tenant import Tenant
 
@@ -30,42 +31,24 @@ def get_faq(t: Tenant = Depends(current_tenant)):
 
 
 @router.put("")
-def put_faq(body: FaqBody, t: Tenant = Depends(current_tenant)):
-    old_data = load_faq(t)
-    old = {row.get("id"): row for row in old_data.get("faq", [])}
-    seen: set[str] = set()
-    rows = []
-    for item in body.faq:
-        key = item.id.strip()[:80]
-        answer = item.answer.strip()[:1200]
-        questions = list(dict.fromkeys(" ".join(q.split())[:300] for q in item.questions if q.strip()))[:40]
-        if not key or key in seen or not answer or not questions:
-            raise HTTPException(400, "FAQ бүр давхцаагүй id, асуулт, хариулттай байна")
-        seen.add(key)
-        row = {"id": key, "questions": questions, "answer": answer}
-        if item.topic:
-            row["topic"] = item.topic
-        if item.source:
-            row["source"] = item.source
-        if item.created_at:
-            row["created_at"] = item.created_at
-        # Загвараас үүссэн FAQ-г өөрчлөөгүй бол auto тэмдгийг хадгална. Зассан бол
-        # дараагийн build байгууллагын загвараар дарж бичихгүй.
-        previous = old.get(key, {})
-        comparable = {k: v for k, v in previous.items() if k != "auto"}
-        if item.auto and row == comparable:
-            row["auto"] = True
-        rows.append(row)
-    greeting = " ".join(body.greeting.split())[:600]
-    if not greeting:
-        raise HTTPException(400, "Мэндчилгээ хоосон байна")
-    data = {**{k: v for k, v in old_data.items() if k.startswith("_")},   # "_note" гэх мэт тайлбар (SIM-TRUNK хадгалдаг)
-            "greeting": greeting,
-            "greeting_custom": old_data.get("greeting_custom", False) or greeting != old_data.get("greeting"),
-            "fillers": [" ".join(x.split())[:300] for x in body.fillers if x.strip()][:10],
-            "topics": body.topics, "faq": rows}
-    write_json(t.faq_path, data)
-    return data
+def put_faq(data: dict, t: Tenant = Depends(current_tenant)):
+    for key in ("greeting", "fillers", "topics", "faq"):
+        if key not in data:
+            raise HTTPException(400, f"faq.json-д '{key}' байх ёстой")
+    for item in data["faq"]:
+        if not item.get("id") or not item.get("answer") or not isinstance(item.get("questions"), list):
+            raise HTTPException(400, "FAQ бүр id, questions (жагсаалт), answer-тэй байх ёстой")
+    old = {x["id"]: x for x in load_json(t.faq_path, {}).get("faq", [])}
+    for item in data["faq"]:        # хэрэглэгч зассан загвар FAQ -> "auto" тэмдгийг авна (дахин үүсгэхэд дарагдахгүй)
+        if item.get("auto") and {k: v for k, v in item.items() if k != "auto"} != \
+                {k: v for k, v in old.get(item["id"], {}).items() if k != "auto"}:
+            item.pop("auto")
+    if data.get("greeting") != load_json(t.faq_path, {}).get("greeting"):
+        data["greeting_custom"] = True
+    with open(t.faq_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    knowledge_jobs.schedule_build(t)          # автомат бэлдэлт асаалттай бол
+    return {"ok": True}
 
 
 class AddQuestion(BaseModel):
@@ -84,5 +67,6 @@ def add_question(body: AddQuestion, t: Tenant = Depends(current_tenant)):
                 item["questions"].append(q)
             with open(t.faq_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
+            knowledge_jobs.schedule_build(t)          # автомат бэлдэлт асаалттай бол
             return {"ok": True}
     raise HTTPException(404, "FAQ олдсонгүй")
