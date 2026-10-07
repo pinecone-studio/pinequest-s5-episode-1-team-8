@@ -125,11 +125,29 @@ export type BuildStatus = JobStatus;
 export type FaqItem = { id: string; questions: string[]; answer: string; topic?: string | null; auto?: boolean };
 export type FaqData = { greeting: string; fillers: string[]; topics: Record<string, unknown>; faq: FaqItem[] };
 
-// backend/routes/voice.py — recorded: өөрийн хоолойгоор бичсэн (routes/recordings.py)
-export type VoiceItem = { kind: string; text: string; hash: string; recorded: boolean };
+export type VoiceItem = {
+  kind: string;
+  text: string;
+  hash: string;
+  recorded: boolean;
+  flags: string[];
+  cer?: number | null;
+  hyp?: string | null;
+  seed: number;
+  plays: number;
+};
 export type VoiceData = {
   items: VoiceItem[];
+  qa_at?: number | null;
   settings: { lexicon: { word: string; say: string }[]; speed: number; pause_ms: number };
+  question: { exists: boolean; text?: string | null; script: string };
+};
+export type ReferenceVoice = {
+  exists: boolean;
+  script: string;
+  text?: string | null;
+  seconds?: number | null;
+  preview: { running: boolean; code?: number | null; files: string[] };
 };
 
 export type TrainingExample = { i: number; q: string; faq?: string; fact?: string; label?: string };
@@ -137,8 +155,34 @@ export type TrainingStatus = { model: Record<string, unknown> | null; seed: numb
 export type TrainingChoice = { value: string; title: string };
 export type TrainingAnswers = { faq: TrainingChoice[]; facts: TrainingChoice[]; special: TrainingChoice[] };
 
-export type EnglishItem = { id: string | null; kind: "faq" | "knowledge"; mn: string; hash: string; en: string; questions: string[]; questions_en: string[] };
-export type EnglishData = { enabled: boolean; items: EnglishItem[]; phrases: Record<string, string> };
+export type EnglishItem = {
+  id: string | null;
+  kind: "faq" | "knowledge";
+  mn: string;
+  hash: string;
+  en: string;
+  questions: string[];
+  questions_en: string[];
+  built: boolean;
+  flags: string[];
+  hyp?: string | null;
+};
+export type EnglishPhrases = {
+  greeting_suffix: string;
+  repeat: string;
+  error: string;
+  mongolian_only: string;
+  holds: string[];
+  lead: Record<string, string>;
+};
+export type EnglishData = {
+  enabled: boolean;
+  items: EnglishItem[];
+  phrases: EnglishPhrases;
+  stale: { hash: string; mn: string; en: string }[];
+  built: boolean;
+  built_at?: number | null;
+};
 
 // backend/routes/status.py — sidebar, самбар, Тохируулах (10с тутам)
 export type Status = {
