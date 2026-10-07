@@ -12,7 +12,7 @@ from deps import current_tenant
 from tenant import Tenant
 
 router = APIRouter(prefix="/api/leads", tags=["leads"])
-STATUSES = ("new", "contacted", "done")
+STATUSES = ("new", "contacted", "done", "canceled")
 
 
 @router.get("")
@@ -30,7 +30,7 @@ class LeadUpdate(BaseModel):
 @router.patch("/{lead_id}")
 def update_lead(lead_id: int, body: LeadUpdate, t: Tenant = Depends(current_tenant)):
     if body.status is not None and body.status not in STATUSES:
-        raise HTTPException(400, "Төлөв: new | contacted | done")
+        raise HTTPException(400, "Төлөв: new | contacted | done | canceled")
     if body.notes is not None and len(body.notes) > 1000:
         raise HTTPException(400, "Тэмдэглэл 1000 тэмдэгтээс хэтрэхгүй")
     with db.connect(t.db_path) as con:
