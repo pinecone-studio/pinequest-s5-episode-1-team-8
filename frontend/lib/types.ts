@@ -287,3 +287,40 @@ export type AdminTenant = {
   users: string[];
   job: string; // idle | queued | running | done | error
 };
+
+// backend/routes/reminders.py — AI-аас гарах сануулгын дуудлага
+export type ReminderStatus = "scheduled" | "calling" | "confirmed" | "declined" | "unconfirmed" | "no_answer" | "busy" | "failed";
+export type Reminder = {
+  lead_id: number;
+  appointment: string; // "2026-10-15T10:00" (Улаанбаатар)
+  call_at: number;
+  status: ReminderStatus;
+  attempts: number;
+  text: string;
+  last_outcome?: string;
+  history: { ts: number; outcome: string; pressed: string[]; detail: string }[];
+  new_chars?: number;
+};
+export type RemindersData = {
+  items: Record<string, Reminder>;
+  template: string;
+  default_template: string;
+  dialer: { mode: "off" | "sip" | "mac" };
+  hours: [number, number];
+};
+export type OutboundConfig = {
+  mode: "off" | "sip" | "mac";
+  host?: string;
+  port?: number;
+  user?: string;
+  prefix?: string;
+  local_ip?: string;
+  ring_timeout?: number;
+  password_set: boolean;
+};
+
+export const REMINDER_STATUS: Record<ReminderStatus, [string, "ok" | "warn" | "bad" | "gray"]> = {
+  scheduled: ["Товлосон", "gray"], calling: ["Залгаж байна…", "warn"], confirmed: ["✅ Баталгаажсан", "ok"],
+  declined: ["❌ Цуцалсан", "bad"], unconfirmed: ["Хариу өгөөгүй", "warn"], no_answer: ["📵 Утсаа аваагүй", "warn"],
+  busy: ["📵 Завгүй", "warn"], failed: ["⚠️ Залгаж чадсангүй", "bad"],
+};
