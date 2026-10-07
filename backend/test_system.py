@@ -18,6 +18,7 @@ Backend-ийн тест. Кодыг өөрчилсний дараа, PR-ийн �
 13. AI сургалт: сургасан загварын мэдээлэл (SIM-TRUNK-ийн бичдэг газраас)
 14. Байгууллагууд (admin): жагсаалт, эрх солих, өөр байгууллага руу сольж харах, owner-т хаалттай
 15. Өөрийн хоолойгоор бичих: бичлэг хадгалах, сонсох, устгах, WAV шалгалт, байгууллага хооронд тусгаарлалт
+16. ElevenLabs хоолой (admin): түлхүүр, хоолойнууд, жишээ үүсгэх, сонгох (ElevenLabs, SIM-TRUNK-ийг дуурайна)
 
 Түр хавтсанд (DATA_DIR) ажиллана — backend/data/-ийн жинхэнэ хэрэглэгчдэд хүрэхгүй.
 """
@@ -590,6 +591,134 @@ def test_recordings():
                                                           for x in a.get("/api/voice").json()["items"]))
 
 
+FAKE_ELEVEN_SIM = {
+    "tenant.py": """
+import os
+TENANTS_DIR = ""
+class Tenant:
+    def __init__(self, slug):
+        self.slug, self.dir = slug, os.path.join(TENANTS_DIR, slug)
+    def path(self, *parts):
+        return os.path.join(self.dir, *parts)
+def current():
+    return Tenant(os.environ["TENANT"])
+""",
+    "soundfile.py": """
+import struct, wave
+def write(path, data, sr):
+    with wave.open(path, "wb") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
+        w.writeframes(b"".join(struct.pack("<h", int(x * 32767)) for x in data))
+""",
+    "stream_voice.py": """
+def tts_engine():
+    return {"voice": None, "model": "eleven_v4", "speed": 1.0}
+def eleven_tag(eng):
+    return f"eleven-{eng['voice']}-{eng['model']}-s{round(eng['speed'] * 100)}"
+class ElevenTTS:
+    def __init__(self, voice=None):
+        self.voice = voice
+    def synth(self, text):
+        return [0.1, -0.1] * 2400, 24000
+""",
+}
+
+
+class FakeResponse:
+    def __init__(self, status: int, data: dict):
+        self.status_code, self.data = status, data
+
+    def json(self):
+        return self.data
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            import httpx
+            raise httpx.HTTPError(f"HTTP {self.status_code}")
+
+
+def test_eleven():
+    print("\n[16] ElevenLabs хоолой (admin)")
+    import time
+    import eleven
+    import knowledge_jobs
+    sim = tempfile.mkdtemp(prefix="fake_eleven_")
+    os.makedirs(os.path.join(sim, ".venv", "bin"))
+    os.symlink(sys.executable, os.path.join(sim, ".venv", "bin", "python"))
+    for name, code in FAKE_ELEVEN_SIM.items():
+        open(os.path.join(sim, name), "w", encoding="utf-8").write(code)
+    good_key = "sk_" + "a" * 40
+
+    def fake_get(url, headers=None, params=None, timeout=None):
+        if headers.get("xi-api-key") != good_key:
+            return FakeResponse(401, {})
+        if url.endswith("/shared-voices"):
+            return FakeResponse(200, {"voices": [{"voice_id": eleven.DEFAULT_VOICE, "name": "Uyanga", "gender": "female"}]})
+        return FakeResponse(200, {"voices": [{"voice_id": "LauraVoice0001", "name": "Laura - Enthusiastic",
+                                              "labels": {"gender": "female", "accent": "american"}}]})
+
+    old_env, old_get = os.environ.get("SIM_TRUNK_DIR"), eleven.httpx.get
+    os.environ["SIM_TRUNK_DIR"], eleven.httpx.get = sim, fake_get
+    try:
+        accounts.create_user("eleven-admin", "eleven-pass-123", role="admin")
+        adm = TestClient(app)
+        login(adm, "eleven-admin", "eleven-pass-123")
+        owner = owner_client("Eleven тест", "eleven@example.mn")
+        blocked = [owner.get("/api/admin/eleven").status_code,
+                   owner.post("/api/admin/eleven/key", json={"key": good_key}).status_code]
+        check("owner-т хаалттай (403)", blocked == [403, 403], blocked)
+        st = adm.get("/api/admin/eleven").json()
+        check("түлхүүргүй үед хоолой алга", st["has_key"] is False and st["voices"] == [] and st["voice"] is None, st)
+        check("түлхүүргүй үед үүсгэхгүй",
+              adm.post("/api/admin/eleven/generate", json={"voice": eleven.DEFAULT_VOICE}).status_code == 400)
+        bad = [adm.post("/api/admin/eleven/key", json={"key": k}).status_code for k in ("abc", "sk_" + "b" * 40)]
+        check("буруу түлхүүр хадгалагдахгүй (хэлбэр, ElevenLabs 401)", bad == [400, 400] and not os.path.exists(eleven.KEY_FILE), bad)
+        r = adm.post("/api/admin/eleven/key", json={"key": good_key})
+        mode = oct(os.stat(eleven.KEY_FILE).st_mode & 0o777) if os.path.exists(eleven.KEY_FILE) else None
+        check("зөв түлхүүр хадгалагдана (600), буцааж харуулахгүй", r.status_code == 200 and mode == "0o600"
+              and good_key not in adm.get("/api/admin/eleven").text, (r.status_code, mode))
+        st = adm.get("/api/admin/eleven").json()
+        names = [v["name"] for v in st["voices"]]
+        check("анхдагч хоолой Уянга, монгол хоолой эхэнд", st["voice"] == eleven.DEFAULT_VOICE and names[0] == "Uyanga"
+              and st["voices"][0]["library"] and len(names) == 2, st["voices"])
+        samples = [i for i in st["items"] if i["sample"]]
+        check("төлөөлөх жишээ өгүүлбэрүүд (≤8)", 0 < len(samples) <= eleven.SAMPLES, len(samples))
+        r = adm.post("/api/admin/eleven/generate", json={"voice": eleven.DEFAULT_VOICE, "scope": "sample"})
+        for _ in range(100):
+            job = adm.get("/api/admin/eleven").json()["job"]
+            if not job["running"]:
+                break
+            time.sleep(0.1)
+        check("жишээ үүснэ (SIM-TRUNK-ийн ElevenTTS)", r.status_code == 200 and job["done"] == len(samples)
+              and not job["error"], job)
+        st = adm.get("/api/admin/eleven").json()
+        made = [i for i in st["items"] if eleven.DEFAULT_VOICE in i["eleven"]]
+        check("үүсгэсэн өгүүлбэр жагсаалтад тэмдэглэгдэнэ", {i["hash"] for i in made} == {i["hash"] for i in samples}, made)
+        h = samples[0]["hash"]
+        a = adm.get(f"/api/admin/eleven/audio/{eleven.DEFAULT_VOICE}/{h}")
+        p = adm.get(f"/api/admin/eleven/audio/{eleven.DEFAULT_VOICE}/{h}?phone=1")
+        check("жишээг сонсох, утасны чанараар (8kHz)", a.status_code == 200 and p.status_code == 200
+              and int.from_bytes(p.content[24:28], "little") == 8000, (a.status_code, p.status_code))
+        r = adm.post("/api/admin/eleven/generate", json={"voice": eleven.DEFAULT_VOICE, "scope": "sample"}).json()
+        check("үүсгэснийг дахин үүсгэхгүй (төлбөр хэмнэнэ)", r["total"] == 0 and not r["running"], r)
+        wrong = [adm.get(f"/api/admin/eleven/audio/{eleven.DEFAULT_VOICE}/zz").status_code,
+                 adm.get("/api/admin/eleven/audio/bad!/0123456789ab").status_code,
+                 adm.get(f"/api/admin/eleven/audio/LauraVoice0001/{h}").status_code]
+        check("буруу hash, хоолой / үүсгээгүй жишээ", wrong == [400, 400, 404], wrong)
+        r = adm.put("/api/admin/eleven/choice", json={"voice": "LauraVoice0001"})
+        cfg = tenant.Tenant(adm.get("/api/me").json()["tenant"]).config()
+        check("хоолой сонгоход байгууллагын тохиргоонд", r.status_code == 200 and cfg.get("eleven_voice") == "LauraVoice0001"
+              and cfg.get("eleven_voice_name") == "Laura" and cfg.get("tts_engine") == "eleven", cfg)
+    finally:
+        eleven.httpx.get = old_get
+        if os.path.exists(eleven.KEY_FILE):
+            os.remove(eleven.KEY_FILE)
+        if old_env is None:
+            os.environ.pop("SIM_TRUNK_DIR", None)
+        else:
+            os.environ["SIM_TRUNK_DIR"] = old_env
+
+
 if __name__ == "__main__":
     test_login()
     test_signup()
@@ -605,5 +734,6 @@ if __name__ == "__main__":
     test_training_model()
     test_admin()
     test_recordings()
+    test_eleven()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)

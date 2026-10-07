@@ -46,6 +46,11 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 | `POST /api/admin/switch` `{"slug"}` | (admin) Өөр байгууллагыг сольж харах |
 | `DELETE /api/admin/switch` | (admin) Өөрийн байгууллага руу буцах |
 | `POST /api/admin/plan` `{"slug", "plan"}` | (admin) Эрх: `trial`, `active`, `suspended` |
+| `GET /api/admin/eleven` | (admin) ElevenLabs: түлхүүртэй эсэх, хоолойнууд (монгол эхэнд), өгүүлбэр бүрийн жишээ |
+| `POST /api/admin/eleven/key` `{"key"}` | (admin) ElevenLabs түлхүүр шалгаад `data/elevenlabs_key`-д (600) |
+| `POST /api/admin/eleven/generate` `{"voice", "scope"}` | (admin) Жишээ аудио үүсгэх: `sample` (8) эсвэл `all` |
+| `PUT /api/admin/eleven/choice` `{"voice"}` | (admin) Байгууллагын хоолой (анхдагч Уянга) |
+| `GET /api/admin/eleven/audio/{voice}/{hash}` | (admin) Жишээ аудио (`?phone=1` утасны чанар) |
 | `POST /api/voice/{hash}` file=WAV | Өгүүлбэрийг өөрийн хоолойгоор (24kHz mono 16-bit WAV) — "Бэлдэх"-д TTS-ийн оронд |
 | `DELETE /api/voice/{hash}` | Бичлэг устгах (TTS руу буцна) |
 | `GET /api/voice/{hash}/audio` | Одоо тоглогдох аудио: бичлэг эсвэл TTS |
@@ -69,6 +74,7 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 | `routes/unanswered.py` | Хариулж чадаагүй асуултууд |
 | `routes/status.py` | AI ресепшний төлөв |
 | `routes/admin.py` | Платформын admin: байгууллагууд, эрх, сольж харах |
+| `routes/eleven.py`, `eleven.py` | ElevenLabs хоолой (Oron-гүй): түлхүүр, хоолой сонгох, жишээ аудио (`eleven_samples.py` SIM-TRUNK-ийн орчинд) |
 | `routes/recordings.py` | Өөрийн хоолойгоор бичих (`tenants/<slug>/recordings/<hash>.wav`, SIM-TRUNK-тэй ижил) |
 | `demo_data.py` | Жишээ дуудлага, бүртгэл үүсгэх (утасны AI бэлэн болохоос өмнө вэбийг турших) |
 | `sim_runner.py` | SIM-TRUNK-ийн скриптийг (ingest, TTS ...) манай байгууллагын хавтсаар ажиллуулна — "Аудио бэлдэх" |
