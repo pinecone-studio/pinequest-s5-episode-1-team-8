@@ -59,6 +59,8 @@ def runtime_root() -> str:
         if name in {"tenants", "data", "logs", "voices", ".git", "__pycache__"}:
             continue
         target, link = os.path.join(source, name), os.path.join(runtime, name)
+        if os.path.islink(link) and os.readlink(link) != target:   # SIM_TRUNK_DIR солигдсон -> шинэ рүү заана
+            os.unlink(link)
         if not os.path.lexists(link):
             os.symlink(target, link, target_is_directory=os.path.isdir(target))
     for name, target in (("tenants", os.path.join(DATA_DIR, "tenants")), ("data", DATA_DIR)):
