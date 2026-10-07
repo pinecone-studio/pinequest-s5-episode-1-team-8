@@ -22,6 +22,7 @@ Backend-ийн тест. Кодыг өөрчилсний дараа, PR-ийн �
 17. Хоолой (Oron-гүй): одоогийн хоолой, ElevenLabs-ийн дахин үүсгэх, аудиог шинэчлэх, ZIP татах
 18. Хоолойн жагсаалт: бэлдсэний дараа яг тоглогдох хэллэгүүд (SIM-TRUNK-ийн faq_index.json)
 19. Байгууллагын загвар SIM-TRUNK-тэй ижил: хэллэг (config phrases), утасны ярианы FAQ, мэндчилгээ
+20. Нэмэлт: автомат бэлдэлт, бэлэн болмогц Telegram мэдэгдэл, ElevenLabs-ийн токены тооцоо
 
 Түр хавтсанд (DATA_DIR) ажиллана — backend/data/-ийн жинхэнэ хэрэглэгчдэд хүрэхгүй.
 """
@@ -908,6 +909,84 @@ def test_tenant_sim_parity():
           and any(x["id"] == "custom_1" for x in after["faq"]), after["greeting"])
 
 
+FAKE_ESTIMATE_SIM = {
+    "tenant.py": FAKE_SIM_TENANT + "\ndef _p(self, *parts):\n    return os.path.join(self.dir, *parts)\nTenant.path = _p\n"
+                 "Tenant.recordings_dir = property(lambda self: os.path.join(self.dir, 'recordings'))\n",
+    "record.py": "def all_texts():\n    return [('a', 'Кэштэй өгүүлбэр.'), ('b', 'Шинэ өгүүлбэр байна.'), ('c', 'Бичсэн өгүүлбэр.')]\n",
+    "recordings.py": "import hashlib, os\ndef recording_for(text, d):\n"
+                     "    p = os.path.join(d, hashlib.sha1(text.encode()).hexdigest()[:12] + '.wav')\n    return p if os.path.exists(p) else None\n",
+    "stream_voice.py": "import hashlib\ndef tts_seeds(): return {}\ndef engine_for(t): return 'eleven'\ndef clip_seed(t, e, s): return 0\n"
+                       "def voice_tag(e): return 'v'\ndef eleven_sample_path(t): return '/nonexistent'\n"
+                       "def clip_key(t, s, tag): return hashlib.sha1((t + tag).encode()).hexdigest()\n",
+}
+
+
+def test_auto_build():
+    print("\n[20] Автомат бэлдэлт, мэдэгдэл, токены тооцоо")
+    import hashlib
+    import time
+    import knowledge_jobs
+    import notify
+    sim = tempfile.mkdtemp(prefix="fake_sim_auto_")
+    os.makedirs(os.path.join(sim, "scripts"))
+    os.makedirs(os.path.join(sim, ".venv", "bin"))
+    os.symlink(sys.executable, os.path.join(sim, ".venv", "bin", "python"))
+    open(os.path.join(sim, "tenant.py"), "w").write(FAKE_SIM_TENANT)
+    open(os.path.join(sim, "scripts", "fake_ingest.py"), "w").write(FAKE_SIM_INGEST)
+    sent: list[str] = []
+    old = (os.environ.get("SIM_TRUNK_DIR"), knowledge_jobs.BUILD_STEPS, knowledge_jobs.AUTO_DELAY, notify.send)
+    os.environ["SIM_TRUNK_DIR"], knowledge_jobs.BUILD_STEPS = sim, [["scripts/fake_ingest.py"]]
+    knowledge_jobs.AUTO_DELAY = 0.2
+    notify.send = lambda t, text: sent.append(text) or True
+
+    def wait_job(a):
+        st = {}
+        for _ in range(100):
+            st = a.get("/api/knowledge/build").json()
+            if st["state"] not in ("idle", "queued", "running"):
+                return st
+            time.sleep(0.05)
+        return st
+
+    try:
+        a = owner_client("Автомат тест", "auto@example.mn")
+        check("анхдагчаар унтраалттай (SIM-TRUNK шиг товчоор)", a.get("/api/settings").json()["auto_build"] is False)
+        a.put("/api/knowledge/file/info.md", json={"content": "Сургалт 6 сар үргэлжилнэ."})
+        time.sleep(0.5)
+        check("унтраалттай үед бэлдэлт эхлэхгүй", a.get("/api/knowledge/build").json()["state"] == "idle")
+        r = a.put("/api/settings/auto-build", json={"enabled": True})
+        check("асаах", r.json() == {"ok": True, "auto_build": True} and a.get("/api/settings").json()["auto_build"] is True)
+        a.put("/api/knowledge/file/info.md", json={"content": "Сургалт 6 сар үргэлжилнэ."})
+        a.put("/api/knowledge/file/more.md", json={"content": "Төлбөр сард нэг сая төгрөг."})
+        st = wait_job(a)
+        check("файл өөрчлөгдөхөд өөрөө бэлдэнэ (хоёр өөрчлөлт нэг бэлдэлтэд)", st.get("state") == "done"
+              and st.get("task") == "build", st)
+        check("бэлэн болмогц Telegram мэдэгдэл (нэг удаа)", len(sent) == 1 and "Автомат тест" in sent[0]
+              and "бэлэн" in sent[0] and "Туршиж залгах" in sent[0], sent)
+        sim2 = tempfile.mkdtemp(prefix="fake_sim_est_")
+        os.makedirs(os.path.join(sim2, ".venv", "bin"))
+        os.symlink(sys.executable, os.path.join(sim2, ".venv", "bin", "python"))
+        for name, code in FAKE_ESTIMATE_SIM.items():
+            open(os.path.join(sim2, name), "w", encoding="utf-8").write(code)
+        os.environ["SIM_TRUNK_DIR"] = sim2
+        t = tenant.Tenant(a.get("/api/me").json()["tenant"])
+        cache = os.path.join(os.environ["DATA_DIR"], "tts_cache")     # .sim-runtime/data -> DATA_DIR
+        os.makedirs(cache, exist_ok=True)
+        open(os.path.join(cache, hashlib.sha1("Кэштэй өгүүлбэр.v".encode()).hexdigest() + ".wav"), "wb").write(b"x")
+        os.makedirs(t.recordings_dir, exist_ok=True)
+        open(os.path.join(t.recordings_dir, hashlib.sha1("Бичсэн өгүүлбэр.".encode()).hexdigest()[:12] + ".wav"), "wb").write(b"x")
+        est = a.get("/api/knowledge/build/estimate").json()
+        check("токены тооцоо: кэш, бичлэг, шинэ (тэмдэгтээр)", {k: est.get(k) for k in ("total", "recorded", "cached", "new", "chars")}
+              == {"total": 3, "recorded": 1, "cached": 1, "new": 1, "chars": len("Шинэ өгүүлбэр байна.")}
+              and est["texts"] == ["Шинэ өгүүлбэр байна."], est)
+    finally:
+        env, knowledge_jobs.BUILD_STEPS, knowledge_jobs.AUTO_DELAY, notify.send = old
+        if env is None:
+            os.environ.pop("SIM_TRUNK_DIR", None)
+        else:
+            os.environ["SIM_TRUNK_DIR"] = env
+
+
 if __name__ == "__main__":
     test_login()
     test_signup()
@@ -927,5 +1006,6 @@ if __name__ == "__main__":
     test_voice_eleven_only()
     test_voice_texts()
     test_tenant_sim_parity()
+    test_auto_build()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)
