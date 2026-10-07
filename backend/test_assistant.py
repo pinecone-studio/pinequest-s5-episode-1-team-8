@@ -216,6 +216,10 @@ def database_view():
           and {"calls", "messages"} <= set(names) and r["file"].endswith("receptionist.db"), names)
     rows = {x["name"]: x["rows"] for x in r["tables"]}
     check("мөрийн тоо", rows["leads"] == 4 and rows["person_docs"] >= 16 and rows["lead_codes"] == 4, rows)
+    d = c.get("/api/database/person_docs").json()
+    emb_col = d["columns"].index("emb")
+    check("бүртгэл үүсэнгүүт хувийн баримт бүр вектортой", d["rows"] and all(isinstance(r[emb_col], dict) for r in d["rows"]),
+          [r[emb_col] for r in d["rows"]][:3])
     say(c, None, "Миний цаг хэзээ билээ")      # вектор DB-д хадгалагдана
     s = say(c, None, "Миний цаг хэзээ билээ")
     say(c, s["session"], dtmf=people.ensure_code(t.dir, 1))
