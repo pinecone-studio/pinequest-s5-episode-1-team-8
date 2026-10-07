@@ -9,9 +9,14 @@ SIM-TRUNK ба вэб (pinequest) хоёуланд ЯГ ижил файл — б
 Уулзалтын цаг: data/reminders.json (сануулгын дуудлагатай нэг эх сурвалж).
 Сул цаг: data/settings.json "booking" — байхгүй бол Даваа-Баасан 10-17 цаг, цагт 1 хүн, 14 хоног.
 
-AI SQL бичихгүй: зөвхөн эдгээр функцийг дуудна, залгагч кодоороо баталгаажсаны дараа л.
+Ажилтан (багш) утсаар: ажилтны кодоор нэвтэрч, БҮХ хүний баримтаас нэрээр хайж бусдын бүртгэлийг өөрчилнө
+("Болдын цагийг Баасан гараг руу шилжүүл") — өгөгдлийн сан руу гараар орох шаардлагагүй.
+
+AI SQL бичихгүй: зөвхөн эдгээр функцийг дуудна, залгагч/ажилтан кодоороо баталгаажсаны дараа л.
 Ажилтан гараар юу ч өөрчлөх шаардлагагүй: код бүртгэл үүсэхэд автоматаар, сул цаг ажлын цагаас.
 """
+import difflib
+import hmac
 import json
 import os
 import random
@@ -24,6 +29,8 @@ from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("Asia/Ulaanbaatar")
 CODE_LEN = 4
+STAFF_PIN_LEN = 6        # ажилтны код: утсаар бусдын бүртгэлийг өөрчлөх эрх (settings.json "staff_pin")
+NAME_MATCH = 0.75        # нэрээр хайх доод оноо (STT "Балд" ~ "Болд")
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS lead_codes (
     lead_id    INTEGER PRIMARY KEY,
@@ -204,6 +211,76 @@ def find(tdir: str, code: str) -> dict | None:
     with connect(tdir) as con:
         row = con.execute("SELECT lead_id FROM lead_codes WHERE code=?", (code,)).fetchone()
     return lead(tdir, row["lead_id"]) if row else None
+
+
+# ---------------- ажилтны код, нэрээр хайх ----------------
+
+def settings_path(tdir: str) -> str:
+    return os.path.join(tdir, "data", "settings.json")
+
+
+def staff_pin(tdir: str, create: bool = True) -> str | None:
+    """Ажилтны 6 оронтой код (байхгүй бол үүсгэнэ — вэбийн Бүртгэл хуудсанд харагдана)."""
+    st = _read_json(settings_path(tdir))
+    if st.get("staff_pin") or not create:
+        return st.get("staff_pin")
+    return new_staff_pin(tdir)
+
+
+def new_staff_pin(tdir: str) -> str:
+    rng = random.SystemRandom()
+    while True:
+        pin = f"{rng.randrange(10 ** STAFF_PIN_LEN):0{STAFF_PIN_LEN}d}"
+        if len(set(pin)) > 2:
+            break
+    st = _read_json(settings_path(tdir))
+    st["staff_pin"] = pin
+    _write_json(settings_path(tdir), st)
+    return pin
+
+
+def check_staff_pin(tdir: str, pin: str) -> bool:
+    real = staff_pin(tdir, create=False)
+    return bool(real) and hmac.compare_digest(real, re.sub(r"\D", "", pin or ""))
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"[а-яөүёa-z]+", (text or "").lower())
+
+
+def name_score(text: str, name: str) -> float:
+    """Ярианд хүний нэр байгаа эсэх: "Болдын цагийг" ~ "Болд" (нөхцөл, STT-ийн 1 үсгийн алдааг тэвчинэ)."""
+    best = 0.0
+    for n in _words(name):
+        if len(n) < 3:
+            continue
+        for w in _words(text):
+            best = max(best, difflib.SequenceMatcher(None, w[:len(n)], n).ratio() if len(w) >= len(n) - 1 else 0.0)
+    return best
+
+
+def find_by_name(tdir: str, text: str) -> list[dict]:
+    """Ажилтны хайлт: БҮХ хүний нэрийн баримтаас (person_docs) -> таарсан бүртгэлүүд, шинэ нь эхэндээ."""
+    ensure_all_codes(tdir)
+    with connect(tdir) as con:
+        try:
+            rows = [dict(r) for r in con.execute("SELECT * FROM leads ORDER BY created_at DESC, id DESC")]
+        except sqlite3.OperationalError:
+            return []
+    scored = [(name_score(text, r.get("name") or ""), r) for r in rows]
+    hits = [(sc, r) for sc, r in scored if sc >= NAME_MATCH]
+    hits.sort(key=lambda x: -x[0])          # sort тогтвортой -> ижил оноотойд шинэ нь эхэндээ
+    for _, r in hits:
+        docs(tdir, r["id"])
+    return [r for _, r in hits]
+
+
+def strip_name(text: str, name: str) -> str:
+    """Командаас нэрийг хасна: "Болдын цагийг солих" -> "цагийг солих" (хүсэлт таних, өдөр хайхад)."""
+    names = [n for n in _words(name) if len(n) >= 3]
+    keep = [w for w in (text or "").split()
+            if not any(difflib.SequenceMatcher(None, w.lower()[:len(n)], n).ratio() >= NAME_MATCH for n in names)]
+    return " ".join(keep)
 
 
 # ---------------- уулзалтын цаг (reminders.json) ----------------
