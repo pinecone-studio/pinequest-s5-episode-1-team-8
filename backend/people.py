@@ -1,6 +1,6 @@
 """
-Хувийн RAG: бүртгэлтэй хүн бүрийн мэдээлэл. Утасны AI дуудлагын үеэр кодоор баталгаажуулаад уншиж, өөрчилнө.
-SIM-TRUNK ба вэб (pinequest) хоёуланд ЯГ ижил файл — байгууллагын хавтсаар (tenants/<slug>/) ажиллана.
+Хувийн RAG: бүртгэлтэй хүн бүрийн мэдээлэл. AI туслах (assistant.py) кодоор баталгаажуулаад уншиж, өөрчилнө;
+сануулгын дуудлага (reminders.py) эвентэд ирэх эсэхийг асууж энд тэмдэглэнэ. Байгууллагын хавтсаар (tenants/<slug>/).
 
 Хадгалалт — байгууллагын data/receptionist.db (SQLite, дуудлагын логтой нэг файл):
   lead_codes   (lead_id, code)                    4 оронтой бүртгэлийн код -> залгагчийг таних
@@ -8,6 +8,8 @@ SIM-TRUNK ба вэб (pinequest) хоёуланд ЯГ ижил файл — б
   lead_changes (lead_id, ts, field, old, new, source, call_uuid)   өөрчлөлтийн түүх
 Уулзалтын цаг: data/reminders.json (сануулгын дуудлагатай нэг эх сурвалж).
 Сул цаг: data/settings.json "booking" — байхгүй бол Даваа-Баасан 10-17 цаг, цагт 1 хүн, 14 хоног.
+Эвентүүд: data/settings.json "events" [{"name", "at"}] — тэр эвентэд бүртгүүлсэн хүн бүрт өмнөх өдрийн 11:00-д
+"Та ирэх хэвээрээ юу?" дуудлага автоматаар товлогдоно (sync_event_reminders); хариу нь хувийн RAG-д (attendance).
 
 Ажилтан (багш) утсаар: ажилтны кодоор нэвтэрч, БҮХ хүний баримтаас нэрээр хайж бусдын бүртгэлийг өөрчилнө
 ("Болдын цагийг Баасан гараг руу шилжүүл") — өгөгдлийн сан руу гараар орох шаардлагагүй.
@@ -49,7 +51,7 @@ CREATE TABLE IF NOT EXISTS lead_changes (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     lead_id   INTEGER,
     ts        REAL,
-    field     TEXT,       -- phone | appointment | status
+    field     TEXT,       -- phone | appointment | status | attendance
     old       TEXT,
     new       TEXT,
     source    TEXT,       -- ai | web
@@ -287,8 +289,9 @@ def strip_name(text: str, name: str) -> str:
 # ---------------- уулзалтын цаг (reminders.json) ----------------
 
 def appointment(tdir: str, lead_id: int) -> datetime | None:
+    """Товлосон уулзалт (эвентийн "ирэх үү" дуудлага биш — тэр нь хөтөлбөр/эвентийн баримтад)."""
     item = _read_json(reminders_path(tdir)).get("items", {}).get(str(lead_id))
-    if not item or item.get("status") in CANCELED or not item.get("appointment"):
+    if not item or item.get("status") in CANCELED or not item.get("appointment") or item.get("event"):
         return None
     return parse_local(item["appointment"])
 
@@ -297,8 +300,8 @@ def taken(tdir: str, exclude_lead: int | None = None) -> dict[str, int]:
     """Цаг бүрт хэдэн хүн товлогдсон (цуцлагдсаныг тооцохгүй)."""
     out: dict[str, int] = {}
     for k, v in _read_json(reminders_path(tdir)).get("items", {}).items():
-        if v.get("status") in CANCELED or not v.get("appointment") or str(exclude_lead) == k:
-            continue
+        if v.get("status") in CANCELED or not v.get("appointment") or str(exclude_lead) == k or v.get("event"):
+            continue                          # эвентийн дуудлага уулзалтын сул цаг эзлэхгүй
         out[v["appointment"][:16]] = out.get(v["appointment"][:16], 0) + 1
     return out
 
@@ -348,16 +351,30 @@ def _set_reminder(tdir: str, lead_id: int, when: datetime | None, now: datetime)
 
 # ---------------- AI-ийн өөрчлөлтүүд ----------------
 
-def set_phone(tdir: str, lead_id: int, phone: str, source: str = "ai", call_uuid: str | None = None) -> str | None:
-    """-> хуучин дугаар."""
+def same_person(tdir: str, lead_id: int) -> list[int]:
+    """Тэр хүний бүх бүртгэл (Bootcamp, эвент ...): ижил баталгаажсан дугаартай бүртгэлүүд."""
     with connect(tdir) as con:
         row = con.execute("SELECT phone FROM leads WHERE id=?", (lead_id,)).fetchone()
         if not row:
             raise KeyError(lead_id)
-        con.execute("UPDATE leads SET phone=? WHERE id=?", (phone, lead_id))
-        log_change(con, lead_id, "phone", row["phone"], phone, source, call_uuid)
-    docs(tdir, lead_id)
-    return row["phone"]
+        if not row["phone"]:
+            return [lead_id]
+        ids = [r["id"] for r in con.execute("SELECT id FROM leads WHERE phone=? ORDER BY id", (row["phone"],))]
+    return ids or [lead_id]
+
+
+def set_phone(tdir: str, lead_id: int, phone: str, source: str = "ai", call_uuid: str | None = None) -> str | None:
+    """Дугаар солих -> холбогдох БҮХ газарт: тэр хүний бүх бүртгэл (ижил хуучин дугаартай), хувийн баримтууд;
+    сануулгын дуудлага шинэ дугаар руу залгана (дуудлагын үед бүртгэлээс уншдаг). -> хуучин дугаар."""
+    ids = same_person(tdir, lead_id)
+    with connect(tdir) as con:
+        old = con.execute("SELECT phone FROM leads WHERE id=?", (lead_id,)).fetchone()["phone"]
+        for i in ids:
+            con.execute("UPDATE leads SET phone=? WHERE id=?", (phone, i))
+            log_change(con, i, "phone", old, phone, source, call_uuid)
+    for i in ids:
+        docs(tdir, i)
+    return old
 
 
 def set_appointment(tdir: str, lead_id: int, when: datetime, source: str = "ai", call_uuid: str | None = None,
@@ -395,8 +412,82 @@ def cancel_registration(tdir: str, lead_id: int, source: str = "ai", call_uuid: 
         con.execute("UPDATE leads SET status='canceled' WHERE id=?", (lead_id,))
         log_change(con, lead_id, "status", row["status"], "canceled", source, call_uuid)
     cancel_appointment(tdir, lead_id, source, call_uuid)
+    path = reminders_path(tdir)                       # эвентийн "ирэх үү" дуудлага хэрэггүй болсон
+    data = _read_json(path)
+    item = data.get("items", {}).get(str(lead_id))
+    if item and item.get("event") and item.get("status") not in CANCELED:
+        item.update(status="canceled", last_outcome="canceled")
+        _write_json(path, data)
     docs(tdir, lead_id)
     return row["status"]
+
+
+def events(tdir: str) -> list[dict]:
+    """Байгууллагын эвентүүд: [{"name": "AI Hackathon эвент", "at": "2026-10-18T10:00"}]."""
+    return [e for e in _read_json(settings_path(tdir)).get("events", []) if e.get("name") and e.get("at")]
+
+
+def set_events(tdir: str, items: list[dict]):
+    st = _read_json(settings_path(tdir))
+    st["events"] = [{"name": " ".join(e["name"].split())[:120], "at": fmt(parse_local(e["at"]))} for e in items]
+    _write_json(settings_path(tdir), st)
+
+
+def event_of(tdir: str, course: str | None) -> dict | None:
+    """Бүртгэлийн хөтөлбөр/эвентийн нэр -> эвент (нэр нь агуулагдсан бол)."""
+    c = (course or "").lower()
+    return next((e for e in events(tdir) if e["name"].lower() in c or (c and c in e["name"].lower())), None)
+
+
+def sync_event_reminders(tdir: str, now: datetime | None = None) -> int:
+    """Эвентэд бүртгүүлсэн хүн бүрт өмнөх өдрийн 11:00-д "ирэх үү" дуудлага товлоно (хэн ч гараар оруулахгүй).
+    Аль хэдийн сануулгатай, цуцалсан, эвент өнгөрсөн бол алгасна. -> шинээр товлосон тоо."""
+    now = now or datetime.now(TZ)
+    if not events(tdir):
+        return 0
+    with connect(tdir) as con:
+        try:
+            rows = [dict(r) for r in con.execute("SELECT * FROM leads WHERE course IS NOT NULL AND status != 'canceled'")]
+        except sqlite3.OperationalError:
+            return 0
+    path = reminders_path(tdir)
+    data = _read_json(path)
+    data.setdefault("items", {})
+    added = 0
+    for row in rows:
+        ev = event_of(tdir, row["course"])
+        if not ev or str(row["id"]) in data["items"] or not (row.get("phone") or row.get("caller")):
+            continue
+        at = parse_local(ev["at"])
+        if at <= now:
+            continue
+        call_at = max((at - timedelta(days=1)).replace(hour=11, minute=0), now)
+        data["items"][str(row["id"])] = {"lead_id": row["id"], "appointment": fmt(at), "call_at": call_at.timestamp(),
+                                         "status": "scheduled", "attempts": 0, "text": None, "history": [],
+                                         "created_at": int(time.time()), "event": ev["name"], "changed_by": "auto"}
+        added += 1
+    if added:
+        _write_json(path, data)
+    return added
+
+
+def attendance(tdir: str, lead_id: int) -> bool | None:
+    item = _read_json(reminders_path(tdir)).get("items", {}).get(str(lead_id)) or {}
+    return item.get("attendance")
+
+
+def mark_attendance(tdir: str, lead_id: int, coming: bool, source: str = "call", call_uuid: str | None = None):
+    """Сануулгын дуудлагын хариу -> хувийн RAG: "ирнэ" / "ирэхгүй" (ирэхгүй бол бүртгэл цуцлагдана).
+    reminders.json-ийн item["attendance"]-ийг дуудагч (reminders.apply_outcome) бичнэ."""
+    with connect(tdir) as con:
+        row = con.execute("SELECT status FROM leads WHERE id=?", (lead_id,)).fetchone()
+        if not row:
+            return
+        log_change(con, lead_id, "attendance", None, "ирнэ" if coming else "ирэхгүй", source, call_uuid)
+        if not coming and row["status"] != "canceled":
+            con.execute("UPDATE leads SET status='canceled' WHERE id=?", (lead_id,))
+            log_change(con, lead_id, "status", row["status"], "canceled", source, call_uuid)
+    docs(tdir, lead_id)
 
 
 def changes(tdir: str, lead_id: int | None = None, limit: int = 200) -> list[dict]:
@@ -424,8 +515,13 @@ def doc_texts(tdir: str, lead_id: int) -> dict[str, str]:
     out["appointment"] = (f"Таны уулзалтын цаг {slot_text(when)}" if when
                           else "Танд товлосон уулзалтын цаг алга")
     out["status"] = f"Таны бүртгэлийн төлөв {STATUS_WORDS.get(row.get('status') or 'new', row.get('status'))}"
+    coming = attendance(tdir, lead_id)
+    if coming is not None:
+        out["attendance"] = f"Эвентэд ирэх эсэх: {'ирнэ' if coming else 'ирэхгүй'} (өмнөх өдөр утсаар асуусан)"
     if row.get("course"):
-        out["course"] = f"Таны бүртгүүлсэн хөтөлбөр, эвент: {row['course']}"
+        ev = event_of(tdir, row["course"])
+        when = f" ({slot_text(parse_local(ev['at']))})" if ev else ""
+        out["course"] = f"Таны бүртгүүлсэн хөтөлбөр, эвент: {row['course']}{when}"
     return out
 
 
