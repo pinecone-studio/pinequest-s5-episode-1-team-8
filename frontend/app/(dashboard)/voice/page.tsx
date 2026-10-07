@@ -3,14 +3,30 @@ import { PageHeader } from "@/components/PageHeader";
 import { VoiceSettings } from "@/components/voice/VoiceSettings";
 import { apiGet } from "@/lib/api";
 import { requireUser } from "@/lib/session";
-import type { ReferenceVoice, VoiceData } from "@/lib/types";
+import type { ElevenStatus, VoiceData } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Хоолой" };
+
 export default async function VoicePage() {
   const user = await requireUser();
-  const [data, reference] = await Promise.all([
+  const isAdmin = user.role === "admin";
+  const [data, eleven] = await Promise.all([
     apiGet<VoiceData>("/api/voice"),
-    user.role === "admin" ? apiGet<ReferenceVoice>("/api/voice/reference") : Promise.resolve(null),
+    isAdmin ? apiGet<ElevenStatus>("/api/admin/eleven").catch(() => null) : Promise.resolve(null),
   ]);
-  return <><PageHeader title="Хоолой" sub="▶ сонсох, ☎ утсаар сонсогдох чанараар, ● өөрийн хоолойгоор бичих, ↻ өөр хувилбараар дахин үүсгэх. Дууссаны дараа Аудио бэлдэх дарна." /><VoiceSettings initial={data} initialReference={reference} /></>;
+  return (
+    <>
+      <PageHeader
+        title="Хоолой"
+        sub="Залгагчид тоглогдох бүх аудио: хоолойгоо сонгох, чанарыг нь шалгах, дуудлагыг засах. ElevenLabs-ийг зөвхөн аудио бэлдэхэд ашиглана."
+        actions={
+          <a href="/api/voice/export" download
+            className="inline-flex items-center rounded-[10px] border-[1.5px] border-line-2 px-4 py-[9px] text-sm font-semibold hover:border-brand">
+            ⬇ ZIP татах
+          </a>
+        }
+      />
+      <VoiceSettings initial={data} eleven={eleven} isAdmin={isAdmin} />
+    </>
+  );
 }

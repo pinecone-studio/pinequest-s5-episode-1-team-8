@@ -139,15 +139,22 @@ export type VoiceItem = {
 export type VoiceData = {
   items: VoiceItem[];
   qa_at?: number | null;
+  voice: { name: string | null; id: string | null; model: string; has_key: boolean }; // ElevenLabs (анхдагч Уянга)
   settings: { lexicon: { word: string; say: string }[]; speed: number; pause_ms: number };
-  question: { exists: boolean; text?: string | null; script: string };
 };
-export type ReferenceVoice = {
-  exists: boolean;
-  script: string;
-  text?: string | null;
-  seconds?: number | null;
-  preview: { running: boolean; code?: number | null; files: string[] };
+
+// backend/routes/eleven.py — ElevenLabs хоолой сонгох (admin)
+export type ElevenVoice = { id: string; name: string; info: string; library: boolean };
+export type ElevenItem = { kind: string; text: string; hash: string; recorded: boolean; sample: boolean; eleven: string[] };
+export type ElevenJob = { running: boolean; done: number; total: number; chars: number; error: string | null };
+export type ElevenStatus = {
+  has_key: boolean;
+  model: string;
+  voice: string | null; // байгууллагын одоогийн хоолой
+  job: ElevenJob;
+  voices: ElevenVoice[];
+  items: ElevenItem[];
+  error: string | null;
 };
 
 export type TrainingExample = { i: number; q: string; faq?: string; fact?: string; label?: string };
