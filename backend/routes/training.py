@@ -29,11 +29,12 @@ def load_examples(t: Tenant) -> dict:
 def status(t: Tenant = Depends(current_tenant)):
     rows = load_examples(t)["examples"]
     meta_path = t.path("knowledge_index", "selector.json")   # SIM-TRUNK-ийн train_selector.py энд бичнэ
-    try:
-        with open(meta_path, encoding="utf-8") as f:
-            model = json.load(f)
-    except (OSError, ValueError):
-        model = None
+    meta = load_json(meta_path, None)
+    # SIM-TRUNK web/app.py · train_status: хураангуй л (selector.json-ийн answers нь dict, label_stems, per_label том)
+    model = None
+    if meta:
+        model = {k: meta.get(k) for k in ("trained_at", "examples", "rows", "cv_acc", "eval", "enabled", "warnings")}
+        model["answers"] = len(meta.get("labels", []))
     auto = load_json(t.auto_training_path, {"examples": []})
     return {**knowledge_jobs.status(t), "model": model,
             "auto": len(auto.get("examples", [])),

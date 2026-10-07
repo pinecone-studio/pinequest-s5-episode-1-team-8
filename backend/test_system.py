@@ -538,6 +538,21 @@ def test_status():
     check("бэлдсэн -> бэлэн, шалгалтын үр дүн", st["ready"] is True and st["facts"] == 2 and st["faq"] == 1
           and st["selector"] == {"enabled": True, "eval": {"selector": [41, 42]}}, st)
     check("өөр байгууллагад нөлөөлөхгүй", owner_client("Төлөв 2", "status2@example.mn").get("/api/status").json()["ready"] is False)
+    st = a.get("/api/status").json()
+    check("өөрийн хоолойгоор бичсэн: recorded / voice_total", st["recorded"] == 0 and st["voice_total"] > 20, st)
+    b = owner_client("Төлөв 3", "status3@example.mn")
+    tb = tenant.Tenant(b.get("/api/me").json()["tenant"])
+    tenant.write_json(tb.path("knowledge_index", "facts.json"), {"facts": [], "indexed_at": "x"})
+    tenant.write_json(tb.path("faq_audio", "faq_index.json"), {"faq": [{"id": "x"}]})
+    check("мэдээллийн өгүүлбэргүй ч хоёр индекс бэлдсэн бол бэлэн (SIM-TRUNK шиг)", b.get("/api/status").json()["ready"] is True)
+    faq = tenant.load_faq(tb)
+    tenant.write_json(tb.faq_path, {"_note": "тайлбар", **faq})
+    b.put("/api/faq", json=b.get("/api/faq").json())
+    check("FAQ хадгалахад _note тайлбар хэвээр", tenant.load_faq(tb).get("_note") == "тайлбар")
+    cfg = tb.config()
+    cfg["eleven_voice_name"] = "Uyanga - Kind Khalkha Friend"
+    tb.save_config(cfg)
+    check("хоолойн нэр сангийн тайлбаргүй (SIM-TRUNK шиг)", b.get("/api/voice").json()["voice"]["name"] == "Uyanga")
 
 
 def test_training_model():
@@ -545,10 +560,15 @@ def test_training_model():
     a = owner_client("Сургалт тест", "train@example.mn")
     t = tenant.Tenant(a.get("/api/me").json()["tenant"])
     check("сургаагүй үед model алга", a.get("/api/train").json()["model"] is None)
-    meta = {"enabled": True, "examples": 120, "eval": {"selector": [41, 42], "rules": [40, 42]}}
+    meta = {"enabled": True, "examples": 120, "eval": {"selector": [41, 42], "rules": [40, 42]},
+            "labels": ["faq:price", "fact:0a1b2c3d4e5f", "clarify"], "answers": {"faq:price": {"kind": "faq", "id": "price"}},
+            "label_stems": {"faq:price": ["үнэ"]}, "per_label": {"faq:price": 1.0}}       # бодит selector.json шиг
     tenant.write_json(t.path("knowledge_index", "selector.json"), meta)   # train_selector.py-ийн бичдэг газар
     model = a.get("/api/train").json()["model"]
-    check("train_selector.py-ийн үр дүн харагдана", model == meta, model)
+    check("train_selector.py-ийн үр дүн харагдана", model["enabled"] is True and model["examples"] == 120
+          and model["eval"] == meta["eval"], model)
+    check("хариултын тоо (dict биш), том талбарууд илгээхгүй", model["answers"] == 3
+          and "label_stems" not in model and "per_label" not in model, model)
 
 
 def test_admin():

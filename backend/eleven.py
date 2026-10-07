@@ -63,7 +63,8 @@ def engine(t: Tenant) -> dict:
     """Байгууллагын ElevenLabs тохиргоо (SIM-TRUNK stream_voice.tts_engine, Oron-гүй)."""
     cfg = t.config()
     voice = cfg.get("eleven_voice") or (DEFAULT_VOICE if key() else None)
-    name = cfg.get("eleven_voice_name") or (DEFAULT_NAME if voice == DEFAULT_VOICE else None)
+    # SIM-TRUNK: "Uyanga - Kind Khalkha Friend" -> "Uyanga" (хоолойн сангийн тайлбаргүй)
+    name = (cfg.get("eleven_voice_name") or "").split(" - ")[0] or (DEFAULT_NAME if voice == DEFAULT_VOICE else None)
     speed = min(max(float(cfg.get("eleven_speed", 1.0)), 0.7), 1.2)
     return {"voice": voice, "name": name, "model": cfg.get("eleven_model", MODEL), "speed": speed}
 

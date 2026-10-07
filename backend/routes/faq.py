@@ -60,7 +60,8 @@ def put_faq(body: FaqBody, t: Tenant = Depends(current_tenant)):
     greeting = " ".join(body.greeting.split())[:600]
     if not greeting:
         raise HTTPException(400, "Мэндчилгээ хоосон байна")
-    data = {"greeting": greeting,
+    data = {**{k: v for k, v in old_data.items() if k.startswith("_")},   # "_note" гэх мэт тайлбар (SIM-TRUNK хадгалдаг)
+            "greeting": greeting,
             "greeting_custom": old_data.get("greeting_custom", False) or greeting != old_data.get("greeting"),
             "fillers": [" ".join(x.split())[:300] for x in body.fillers if x.strip()][:10],
             "topics": body.topics, "faq": rows}
