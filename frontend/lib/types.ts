@@ -127,7 +127,7 @@ export type UnansweredReview = {
 };
 
 // backend/routes/leads.py
-export type LeadStatus = "new" | "contacted" | "done";
+export type LeadStatus = "new" | "contacted" | "done" | "canceled";
 
 export type Lead = {
   id: number;
@@ -137,13 +137,14 @@ export type Lead = {
   phone: string | null; // баталгаажсан дугаар (AI таахгүй)
   phone_raw: string | null; // STT-ийн сонссон бичвэр
   caller: string | null; // Caller ID
+  course: string | null; // бүртгүүлсэн хөтөлбөр / эвент
   reason: "lead" | "handoff";
   question: string | null;
   status: LeadStatus;
   notes: string | null;
 };
 
-export const LEAD_STATUS: Record<LeadStatus, string> = { new: "Шинэ", contacted: "Холбогдсон", done: "Дууссан" };
+export const LEAD_STATUS: Record<LeadStatus, string> = { new: "Шинэ", contacted: "Холбогдсон", done: "Дууссан", canceled: "Цуцалсан" };
 
 export type KnowledgeFile = { name: string; size: number; mtime: number; editable: boolean };
 export type KnowledgeFact = { text: string; source: string | null; hash: string; has_audio: boolean; recorded: boolean };
@@ -330,10 +331,10 @@ export type LeadChange = {
   id: number;
   lead_id: number;
   ts: number;
-  field: "phone" | "appointment" | "code";
+  field: "phone" | "appointment" | "status" | "attendance";
   old: string | null;
   new: string | null;
-  source: "ai" | "staff" | "web"; // ai — залгагч өөрөө утсаар, staff — ажилтан утсаар
+  source: "ai" | "staff" | "web" | "call"; // ai — залгагч өөрөө, staff — ажилтан, call — AI сануулгын дуудлага
   call_uuid: string | null;
 };
 export type PeopleData = {
@@ -341,6 +342,32 @@ export type PeopleData = {
   changes: LeadChange[];
   booking: { days: number[]; start: number; end: number; capacity: number; horizon: number };
   staff_pin: string;
+  events: EventItem[];
+};
+export type EventItem = { name: string; at: string }; // "2026-10-18T10:00" (Улаанбаатар)
+
+// backend/routes/assistant.py — AI туслах (хувийн RAG)
+export type PersonDoc = { field: string; text: string; vector: boolean };
+export type Person = {
+  id: number;
+  name: string | null;
+  phone: string | null;
+  course: string | null;
+  status: LeadStatus;
+  code: string;
+  appointment: string | null;
+  docs: PersonDoc[];
+};
+export type RagHit = { kind: string; key: string; text: string; score: number };
+export type AssistantReply = {
+  session: string;
+  replies: string[];
+  state: string;
+  trace: RagHit[];
+  person: Person | null;
+  changes: LeadChange[];
+  dtmf_len: number;
+  staff: boolean;
 };
 
 // backend/routes/rag.py — нэг өгөгдлийн сан (receptionist.db): байгууллагын RAG + хувийн RAG + дуудлага

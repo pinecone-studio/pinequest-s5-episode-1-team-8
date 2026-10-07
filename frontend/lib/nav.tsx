@@ -23,6 +23,7 @@ export const NAV: { title?: string; items: NavItem[] }[] = [
     title: "Үйлчилгээ",
     items: [
       { href: "/leads", label: "Бүртгэл", badge: "new_leads", icon: <><circle cx="9" cy="8" r="4" /><path d="M2 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1" /><path d="M19 8v6M16 11h6" /></> },
+      { href: "/assistant", label: "AI туршилт", icon: <><path d="M4 5h16v11H9l-5 4z" /><circle cx="9" cy="10.5" r=".6" /><circle cx="12" cy="10.5" r=".6" /><circle cx="15" cy="10.5" r=".6" /></> },
       { href: "/unanswered", label: "Хариулж чадаагүй", badge: "unanswered", icon: <><circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.7v.5M12 17h.01" /></> },
     ],
   },

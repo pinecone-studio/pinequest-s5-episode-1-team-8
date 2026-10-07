@@ -1,10 +1,11 @@
 import { formatDateTime } from "@/lib/format";
-import type { LeadChange } from "@/lib/types";
+import { LEAD_STATUS, type LeadChange, type LeadStatus } from "@/lib/types";
 
 const SOURCE: Record<LeadChange["source"], [string, string]> = {
   ai: ["🤖", "Залгагч өөрөө утсаар, AI өөрчилсөн"],
   staff: ["🧑‍🏫", "Ажилтан утсаар, AI өөрчилсөн"],
   web: ["✏️", "Вэбээр"],
+  call: ["📞", "AI сануулгын дуудлагаар асуусан"],
 };
 const short = (iso: string) => `${iso.slice(5, 7)}.${iso.slice(8, 10)} ${iso.slice(11, 16)}`;
 
@@ -13,6 +14,11 @@ function describe(c: LeadChange) {
   if (c.field === "appointment") {
     if (!c.new) return `Цаг цуцалсан (${c.old ? short(c.old) : "—"})`;
     return c.old ? `Цаг ${short(c.old)} → ${short(c.new)}` : `Цаг товлосон ${short(c.new)}`;
+  }
+  if (c.field === "attendance") return c.new === "ирнэ" ? "Эвентэд ирнэ гэж баталсан" : "Эвентэд ирэхгүй";
+  if (c.field === "status") {
+    const label = (v: string | null) => (v ? LEAD_STATUS[v as LeadStatus] ?? v : "—");
+    return c.new === "canceled" ? "Бүртгэл цуцалсан" : `Төлөв ${label(c.old)} → ${label(c.new)}`;
   }
   return `${c.field}: ${c.old ?? "—"} → ${c.new ?? "—"}`;
 }

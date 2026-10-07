@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LeadRow } from "@/components/leads/LeadRow";
+import { EventsCard } from "@/components/leads/EventsCard";
 import { StaffPin } from "@/components/leads/StaffPin";
 import { EmptyState, PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -25,6 +26,9 @@ export default async function LeadsPage() {
       />
       <Card className="mb-5">
         <StaffPin initial={people.staff_pin} />
+      </Card>
+      <Card className="mb-5">
+        <EventsCard initial={people.events} />
       </Card>
       <Card>
         {leads.length ? (
