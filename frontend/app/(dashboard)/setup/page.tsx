@@ -1,21 +1,23 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
+import { AutoBuildToggle } from "@/components/setup/AutoBuildToggle";
 import { BuildPanel } from "@/components/setup/BuildPanel";
 import { OrgForm } from "@/components/setup/OrgForm";
 import { Step } from "@/components/setup/Step";
 import { apiGet } from "@/lib/api";
 import { requireUser } from "@/lib/session";
-import { PLAN_LABEL, type BuildStatus, type Org, type Status } from "@/lib/types";
+import { PLAN_LABEL, type BuildStatus, type Org, type Settings, type Status } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Тохируулах" };
 
 export default async function SetupPage() {
   await requireUser();
-  const [org, status, build] = await Promise.all([
+  const [org, status, build, settings] = await Promise.all([
     apiGet<Org>("/api/org"),
     apiGet<Status>("/api/status"),
     apiGet<BuildStatus>("/api/knowledge/build"),
+    apiGet<Settings>("/api/settings"),
   ]);
   const minutes = Math.max(5, Math.round(((status.facts || 40) * 6) / 60)); // өгүүлбэр бүр ~6с
 
@@ -48,6 +50,7 @@ export default async function SetupPage() {
           Мэдээллээс асуултын хэлбэр, тодруулах сэдэв, FAQ-г үүсгэж, бүх хариултыг аудио болгоод AI-г сургана.
           ~{minutes}+ минут (өгүүлбэрийн тооноос хамаарна). Өөрийн бичлэгтэй өгүүлбэрт TTS хийхгүй.
         </p>
+        <AutoBuildToggle initial={settings.auto_build} telegram={Boolean(settings.telegram_chat_id)} />
         <BuildPanel initial={build} />
       </Step>
 

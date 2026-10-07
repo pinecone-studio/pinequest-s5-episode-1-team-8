@@ -39,7 +39,11 @@ export type Settings = {
   telegram_bot: string | null;
   telegram_chat_id: number | string | null;
   telegram_chat_title: string | null;
+  auto_build: boolean; // нэмэлт: мэдээлэл өөрчлөгдөхөд автоматаар бэлдэх
 };
+
+// backend/routes/knowledge.py · build_estimate — бэлдэхэд ElevenLabs-аар шинээр үүсэх
+export type BuildEstimate = { total: number; recorded: number; cached: number; new: number; chars: number; texts: string[] };
 
 // backend/routes/calls.py
 export type Call = {
