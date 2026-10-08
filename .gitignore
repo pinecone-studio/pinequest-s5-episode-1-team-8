@@ -5,3 +5,7 @@ __pycache__/
 logs/
 # Хэрэглэгчид, нууц үгийн хэш, session-ий нууц түлхүүр — git-д орохгүй
 data/
+
+# Cloudflare worker (infra/macos/install_services.sh npm ci хийнэ)
+infra/cloudflare/node_modules/
+infra/cloudflare/.wrangler/
