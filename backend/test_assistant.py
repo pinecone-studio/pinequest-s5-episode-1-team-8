@@ -10,6 +10,7 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ["DATA_DIR"] = tempfile.mkdtemp(prefix="pc_asst_")
 os.environ["OUTBOUND_SCHEDULER"] = "0"
+os.environ["BACKUP_SCHEDULER"] = "0"
 
 import app as server  # noqa: E402
 import assistant  # noqa: E402
@@ -235,6 +236,49 @@ def database_view():
     check("хүснэгт эвдрээгүй", c.get("/api/database/leads").json()["total"] == 4)
     other = TestClient(server.app)
     check("нэвтрээгүй бол харахгүй", other.get("/api/database").status_code == 401)
+
+    print("\n[11] Ил тод байдал: юу хадгалагддаг, татах, устгах, нөөцлөлт")
+    import io
+    import sqlite3
+    import zipfile
+    import backup
+    import reminders
+    inf = c.get("/api/database/info").json()
+    check("юу хадгалагддаг (тоотой), дуу бичлэг хадгалахгүй", any(x["what"] == "Бүртгэл" and x["count"] == 4 for x in inf["stored"])
+          and inf["not_stored"] and inf["location"]["file"].endswith("receptionist.db"), inf["stored"][:3])
+    check("гадагш юу явдаг (ElevenLabs, Telegram — тохируулаагүй)", any(x["to"].startswith("ElevenLabs") for x in inf["external"])
+          and not next(x for x in inf["external"] if x["to"] == "Telegram")["active"])
+    r = c.get("/api/database/export", params={"format": "csv"})
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    names = set(z.namelist())
+    leads_csv = z.read("leads.csv").decode("utf-8-sig")
+    check("CSV zip: хүснэгт бүр + reminders + settings", {"leads.csv", "person_docs.csv", "lead_changes.csv", "reminders.json",
+                                                        "settings.json"} <= names and "Номин" in leads_csv, sorted(names))
+    check("вектор CSV-д товчлогдоно, нууц түлхүүр нуугдана", "[вектор 4096]" in z.read("person_docs.csv").decode("utf-8-sig")
+          and people.staff_pin(t.dir) not in z.read("settings.json").decode())
+    r = c.get("/api/database/export", params={"format": "db"})
+    tmp = os.path.join(tempfile.mkdtemp(), "x.db")
+    open(tmp, "wb").write(r.content)
+    check(".db файл нээгдэнэ", sqlite3.connect(tmp).execute("SELECT COUNT(*) FROM leads").fetchone()[0] == 4)
+    check("буруу формат -> 400", c.get("/api/database/export", params={"format": "exe"}).status_code == 400)
+    leads = {x["name"]: x for x in c.get("/api/leads").json() if x["name"] in ("Болд", "Номин")}
+    bold_ids = [x["id"] for x in c.get("/api/leads").json() if x["name"] == "Болд"]
+    r = c.delete(f"/api/database/person/{bold_ids[0]}").json()
+    left = [x["name"] for x in c.get("/api/leads").json()]
+    check("хүнийг устгахад тэр хүний бүх бүртгэл (Bootcamp + эвент) устна", "Болд" not in left and "Номин" in left
+          and r["removed"]["leads"] == 2, r)
+    with sqlite3.connect(people.db_path(t.dir)) as con:
+        rest = sum(con.execute(f"SELECT COUNT(*) FROM {tb} WHERE lead_id IN ({','.join(map(str, bold_ids))})").fetchone()[0]
+                   for tb in ("person_docs", "lead_codes", "lead_changes"))
+    check("код, хувийн баримт, өөрчлөлт, сануулга үлдээгүй", rest == 0
+          and not any(str(i) in reminders.load(t)["items"] for i in bold_ids), rest)
+    check("байхгүй хүн -> 404", c.delete("/api/database/person/99999").status_code == 404)
+    path = backup.run(t)
+    check("нөөцлөлт: SQLite хуулбар үүснэ, мэдээлэлд харагдана", path and sqlite3.connect(path).execute(
+        "SELECT COUNT(*) FROM leads").fetchone()[0] == 2 and c.get("/api/database/info").json()["backup"]["count"] == 1)
+    for d in ("2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04", "2026-01-05", "2026-01-06", "2026-01-07"):
+        backup.run(t, d)
+    check("сүүлийн 7 хоногийг л үлдээнэ", len(backup.backups(t)) == 7)
 
 
 if __name__ == "__main__":
