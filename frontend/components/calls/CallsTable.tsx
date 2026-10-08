@@ -41,7 +41,7 @@ export function CallsTable({ calls }: { calls: Call[] }) {
     });
   }, [calls, sortField, sortOrder]);
 
-  if (!calls.length) return <EmptyState>Дуудлага алга. Zoiper-оос дотуур дугаар руу залгаж туршаарай.</EmptyState>;
+  if (!calls.length) return <EmptyState>Одоогоор дуудлага алга байна.</EmptyState>;
 
   const getSortIcon = (field: SortField) => {
     if (sortField !== field) return "↕";
