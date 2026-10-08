@@ -1114,6 +1114,27 @@ def test_runtime_race():
     check("4 процесс зэрэг runtime_root() дуудахад бүгд амжилттай (5 удаа)", bad == 0, f"{bad} унасан")
 
 
+def test_demo_login():
+    print("\n[24] «Демо» товч: нууц үггүйгээр admin-аар харна, засахгүй")
+    c = TestClient(app)
+    check("анхдагчаар идэвхтэй", c.get("/api/demo").json() == {"enabled": True})
+    r = c.post("/api/demo-login")
+    check("демо -> 200, admin", r.status_code == 200 and r.json()["role"] == "admin", r.text[:120])
+    check("/api/me -> демо admin", c.get("/api/me").json().get("email") == accounts.DEMO_EMAIL)
+    check("харах: /api/leads 200", c.get("/api/leads").status_code == 200)
+    check("засах хориотой: PUT /api/org -> 403", c.put("/api/org", json={"name": "x"}).status_code == 403)
+    check("устгах хориотой: DELETE /api/database/person/1 -> 403",
+          c.delete("/api/database/person/1").status_code == 403)
+    check("бөөнөөр татах хориотой: /api/database/export -> 403", c.get("/api/database/export").status_code == 403)
+    check("AI туршилт зөвшөөрөгдөнө (403 биш)", c.post("/api/assistant", json={"text": "сайн байна уу"}).status_code != 403)
+    check("демо хэрэглэгч нууц үгээр нэвтрэхгүй", login(TestClient(app), accounts.DEMO_EMAIL, "demo-password").status_code == 401)
+    os.environ["DEMO_LOGIN"] = "0"
+    try:
+        check("DEMO_LOGIN=0 -> 404", TestClient(app).post("/api/demo-login").status_code == 404)
+    finally:
+        os.environ.pop("DEMO_LOGIN", None)
+
+
 if __name__ == "__main__":
     test_login()
     test_signup()
@@ -1137,5 +1158,6 @@ if __name__ == "__main__":
     test_personal_rag()
     test_build_cancel()
     test_runtime_race()
+    test_demo_login()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)

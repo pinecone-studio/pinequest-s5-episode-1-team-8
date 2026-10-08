@@ -119,6 +119,19 @@ def get(user_id: int) -> dict | None:
     return dict(row) if row else None
 
 
+DEMO_EMAIL = "demo"
+
+
+def demo_user() -> dict:
+    """«Демо» товчны хэрэглэгч: admin эрхээр бүгдийг харна (засах эрхийг app.py хаана). Байхгүй бол үүсгэнэ."""
+    with connect() as con:
+        row = con.execute("SELECT id FROM users WHERE email=?", (DEMO_EMAIL,)).fetchone()
+    if row is None:
+        create_user(DEMO_EMAIL, secrets.token_urlsafe(24), role="admin")    # нууц үгээр нэвтрэх боломжгүй
+        return demo_user()
+    return get(row["id"])
+
+
 def users_of(tenant: str) -> list[dict]:
     with connect() as con:
         return [dict(r) for r in con.execute(

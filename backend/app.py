@@ -3,6 +3,7 @@ AI Receptionist — backend API (FastAPI). Вэб интерфейс нь fronte
 
   POST /api/signup  {"company", "phone", "email", "password"} -> шинэ байгууллага + эзэмшигч, нэвтэрнэ
   POST /api/login   {"email", "password"} -> хэрэглэгч + httpOnly session cookie
+  POST /api/demo-login -> нууц үггүйгээр демо (admin-аар харах, засахгүй); GET /api/demo -> {"enabled"}
   POST /api/logout  -> cookie устгана
   GET  /api/me      -> нэвтэрсэн хэрэглэгч, байгууллага (нэвтрээгүй бол 401)
 
@@ -36,7 +37,10 @@ LOCAL = {"127.0.0.1", "::1"}
 
 # /docs, /openapi.json-ийг хаана: гадагш нээхэд API-ийн бүтцийг ил гаргахгүй
 app = FastAPI(title="AI Receptionist", docs_url=None, redoc_url=None, openapi_url=None)
-PUBLIC = {"/api/login", "/api/logout", "/api/signup"}
+PUBLIC = {"/api/login", "/api/logout", "/api/signup", "/api/demo", "/api/demo-login"}
+# Демо хэрэглэгч бүгдийг харна, гэхдээ өөрчлөхгүй: зөвхөн эдгээр бичих хүсэлт зөвшөөрөгдөнө (AI туршилт).
+DEMO_WRITES = {"/api/logout", "/api/assistant"}
+DEMO_BLOCKED_READS = ("/api/database/export", "/api/voice/export")    # бүх өгөгдлийг бөөнөөр татах
 
 
 def client_ip(request: Request) -> str:
@@ -84,7 +88,12 @@ async def require_login(request: Request, call_next):
         else:
             request.state.user = user
             request.state.tenant = viewed_tenant(request, user)
-            response = await call_next(request)
+            if user["email"] == accounts.DEMO_EMAIL and (
+                    (request.method not in ("GET", "HEAD") and path not in DEMO_WRITES)
+                    or path.startswith(DEMO_BLOCKED_READS)):
+                response = JSONResponse({"detail": "Демо горимд зөвхөн харах боломжтой"}, status_code=403)
+            else:
+                response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Cache-Control"] = "no-store"
     return response
@@ -122,6 +131,25 @@ def login(request: Request, body: LoginBody):
         time.sleep(auth.FAIL_DELAY)   # таахыг удаашруулна
         return error("И-мэйл эсвэл нууц үг буруу", 401)
     return logged_in(request, user)
+
+
+# ---------------- демо (багш, шүүгч) ----------------
+# Нэвтрэх хуудасны «Демо» товч нууц үггүйгээр admin-ийн харах эрхээр нэвтрүүлнэ. DEMO_LOGIN=0 бол унтарна.
+
+def demo_enabled() -> bool:
+    return os.getenv("DEMO_LOGIN", "1") == "1"
+
+
+@app.get("/api/demo")
+def demo_status():
+    return {"enabled": demo_enabled()}
+
+
+@app.post("/api/demo-login")
+def demo_login(request: Request):
+    if not demo_enabled():
+        return error("Демо нэвтрэлт идэвхгүй", 404)
+    return logged_in(request, accounts.demo_user())
 
 
 @app.post("/api/logout")
