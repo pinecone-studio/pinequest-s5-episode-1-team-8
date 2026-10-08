@@ -55,6 +55,14 @@ def python_executable(source: str | None = None) -> str:
     return bundled if os.path.isfile(bundled) else sys.executable
 
 
+def ai_libs_ready(python: str) -> bool:
+    """«Аудио бэлдэх» -д хэрэгтэй хүнд сангууд (requirements-ai.txt) суусан эсэх. Тест/legacy runtime-д AI_LIBS_CHECK=0."""
+    if os.getenv("AI_LIBS_CHECK", "1") == "0":
+        return True
+    r = subprocess.run([python, "-c", "import torch, sentence_transformers"], capture_output=True)
+    return r.returncode == 0
+
+
 def tts_cache() -> str:
     """Бүх байгууллагын нийтлэг TTS кэш."""
     return os.path.join(sim_root(), "data", "tts_cache") if LIVE else os.path.join(DATA_DIR, "tts_cache")
@@ -122,6 +130,10 @@ def _run(slug: str):
     with open(log_path(tenant), "w", encoding="utf-8") as log:
         if not os.path.isfile(python):
             log.write(f"AI Python орчин олдсонгүй: {python}\n")
+            code = -1
+        elif source == AI_RUNTIME_DIR and not ai_libs_ready(python):
+            log.write("AI сангууд суугаагүй байна (torch, sentence-transformers, mlx-whisper).\n"
+                      "Терминалд нэг удаа: ./dev.sh --ai   (~3GB, 5-15 минут), дараа нь дахин «Бэлдэх» дарна уу.\n")
             code = -1
         else:
             root = runtime_root()

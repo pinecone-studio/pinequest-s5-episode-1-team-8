@@ -6,7 +6,8 @@ AI ресепшний сервер тал. Вэб интерфейс нь `front
 
 ```bash
 uv venv --python 3.12 .venv
-uv pip install --python .venv/bin/python -r backend/requirements.txt
+uv pip install --python .venv/bin/python -r backend/requirements.txt      # вэб (хөнгөн)
+uv pip install --python .venv/bin/python -r backend/requirements-ai.txt   # AI runtime (~3GB) — эсвэл ./dev.sh --ai
 
 .venv/bin/python backend/app.py        # http://127.0.0.1:8100
 ```

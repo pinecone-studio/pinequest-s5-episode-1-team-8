@@ -2,10 +2,14 @@
 # Backend (http://127.0.0.1:8100) + frontend (http://localhost:3000)-ийг зэрэг асаана.
 # Ctrl+C дарахад хоёулаа унтарна.
 #
-#   ./dev.sh          # бүх код, өгөгдөл энэ repository дотроос ажиллана
+#   ./dev.sh          # вэб (хөнгөн сангууд — хэдхэн секунд)
+#   ./dev.sh --ai     # + AI сангууд (torch, Whisper, bge-m3): «Аудио бэлдэх», утасны AI-д. Эхний удаа ~3GB, 5-15 мин
 set -u
 cd "$(dirname "$0")"
-if [ "${1:-}" = "--sim" ]; then
+WITH_AI=0
+if [ "${1:-}" = "--ai" ]; then
+  WITH_AI=1
+elif [ "${1:-}" = "--sim" ]; then
   echo "--sim сонголт хэрэггүй болсон. Зүгээр ./dev.sh ажиллуулна уу."
   exit 2
 fi
@@ -18,10 +22,21 @@ if [ ! -x .venv/bin/python ]; then
   exit 1
 fi
 # Багийн гишүүн шинэ сан нэмсэн бол автоматаар суулгана (өөрчлөлтгүй бол хэдхэн секунд)
-if command -v uv >/dev/null 2>&1; then
-  uv pip install -q --python .venv/bin/python -r backend/requirements.txt || exit 1
-else
-  .venv/bin/python -m pip install -q -r backend/requirements.txt || exit 1
+install() {   # $1 = requirements файл, $2 = "-q" (чимээгүй) эсвэл "" (явцыг харуулна)
+  if command -v uv >/dev/null 2>&1; then
+    uv pip install ${2:-} --python .venv/bin/python -r "$1"
+  else
+    .venv/bin/python -m pip install ${2:-} -r "$1"
+  fi
+}
+echo "Сангуудыг шалгаж байна..."
+install backend/requirements.txt -q || exit 1
+if [ "$WITH_AI" = 1 ]; then
+  echo "AI сангуудыг суулгаж байна (эхний удаа ~3GB татна, 5-15 минут — явц доор харагдана)..."
+  install backend/requirements-ai.txt "" || exit 1
+elif ! .venv/bin/python -c "import torch, sentence_transformers, mlx_whisper" >/dev/null 2>&1; then
+  echo "ℹ️  AI сангууд суугаагүй: вэб ажиллана, харин «Аудио бэлдэх», AI сургалт, утасны AI-д хэрэгтэй."
+  echo "   Суулгах: ./dev.sh --ai   (нэг удаа, ~3GB)"
 fi
 (cd frontend && bun install --silent) || exit 1
 # Зөвхөн тухайн портыг СОНСОЖ буй серверийг шалгана (VS Code зэрэг холбогдсон програмыг биш)

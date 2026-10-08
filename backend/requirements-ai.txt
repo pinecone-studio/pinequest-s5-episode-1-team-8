@@ -1,0 +1,15 @@
+# AI runtime: RAG embedding (bge-m3), яриа таних (MLX Whisper), сонгогч, VAD.
+# «Аудио бэлдэх», AI сургалт, утасны AI (run_ai.py)-д хэрэгтэй. Вэб үүнгүйгээр ажиллана.
+# Суулгах (нэг удаа, ~3GB): ./dev.sh --ai
+# Oron TTS (f5-tts, oron-tts) ашиглахгүй — хоолой нь ElevenLabs.
+-r requirements.txt
+torch==2.14.1
+torchaudio==2.11.0
+transformers==5.18.0
+sentence-transformers==6.1.0
+scikit-learn==1.9.1
+safetensors==0.8.0
+huggingface-hub==1.33.0
+mlx==0.32.3
+mlx-whisper==0.4.3
+silero-vad==6.2.3

@@ -15,7 +15,8 @@ uv venv --python 3.12 .venv
 ./dev.sh          # http://localhost:3000   (унтраах: Ctrl+C)
 ```
 
-`dev.sh` асах бүрдээ шинэ нэмэгдсэн сангуудыг автоматаар суулгана. Анх асахад `admin`-ийн нууц үг терминалд нэг удаа хэвлэгдэнэ.
+`dev.sh` асах бүрдээ шинэ нэмэгдсэн (хөнгөн) сангуудыг автоматаар суулгана. «Аудио бэлдэх», AI сургалт, утасны AI-д
+хэрэгтэй хүнд AI сангуудыг (torch, Whisper, bge-m3 — ~3GB) нэг удаа `./dev.sh --ai`-аар суулгана. Анх асахад `admin`-ийн нууц үг терминалд нэг удаа хэвлэгдэнэ.
 Жишээ дуудлага: `.venv/bin/python backend/demo_data.py`
 
 Дэлгэрэнгүй: [backend/README.md](backend/README.md), [frontend/README.md](frontend/README.md)
