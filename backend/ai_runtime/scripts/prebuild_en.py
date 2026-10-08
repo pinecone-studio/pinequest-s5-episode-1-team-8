@@ -25,7 +25,8 @@ if __name__ == "__main__":
         sys.exit(0)
     tts = OronTTS()          # монгол моделийг ачаалахгүй (lazy)
     if not tts.en_ckpt:
-        sys.exit("Англи модель (F5TTS_v1_Base) алга -> англи хэсгийг Oron уншина")
+        print("Англи модель (F5TTS_v1_Base) алга -> англи хэсгийг монгол хоолойгоор үргэлжлүүлнэ")
+        sys.exit(0)
     todo = [s for s in segs if not os.path.exists(tts.en_cache_path(s))]
     print(f"Англи хэсэг: {len(segs)}, кэшээс {len(segs) - len(todo)}, шинээр {len(todo)}")
     for i, seg in enumerate(todo, 1):
