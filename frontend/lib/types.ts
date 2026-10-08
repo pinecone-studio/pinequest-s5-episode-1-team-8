@@ -150,7 +150,7 @@ export type KnowledgeFile = { name: string; size: number; mtime: number; editabl
 export type KnowledgeFact = { text: string; source: string | null; hash: string; has_audio: boolean; recorded: boolean };
 export type KnowledgeResponse = { files: KnowledgeFile[]; facts: KnowledgeFact[]; indexed_at?: number | string | null };
 export type JobStatus = {
-  state: "idle" | "queued" | "running" | "done" | "error";
+  state: "idle" | "queued" | "running" | "done" | "error" | "canceled";
   task?: "build" | "train" | "english" | "regen" | "answers";
   running: boolean;
   ahead: number;

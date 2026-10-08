@@ -27,6 +27,7 @@ export function BuildPanel({ initial }: { initial: BuildStatus }) {
         setBuild(next);
         if (!next.running) {
           if (next.state === "done") setMessage("Бэлэн боллоо ✓");
+          else if (next.state === "canceled") setMessage("Зогсоолоо — өмнө бэлдсэн аудио хэвээр ажиллана");
           else setError(`Алдаа гарлаа (код ${next.code}). Логийг шалгана уу.`);
           router.refresh();
           void refreshStatus();
@@ -59,6 +60,16 @@ export function BuildPanel({ initial }: { initial: BuildStatus }) {
     }
   }
 
+  async function cancel() {
+    if (!window.confirm("Бэлдэж буй ажлыг зогсоох уу? Өмнө бэлдсэн аудио хэвээр ажиллана, дараа нь дахин бэлдэж болно.")) return;
+    setError("");
+    try {
+      setBuild(await apiSend<BuildStatus>("/api/knowledge/build/cancel", "POST"));
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
   const log = build.state === "queued" ? `Дараалалд байна (өмнө нь ${build.ahead} ажил)...` : build.log.join("\n") || "—";
   return (
     <div className="flex flex-col gap-3">
@@ -66,6 +77,7 @@ export function BuildPanel({ initial }: { initial: BuildStatus }) {
         <Button variant="primary" onClick={start} disabled={build.running || checking}>
           {checking ? "Тооцоолж байна..." : build.state === "queued" ? "Дараалалд..." : build.running ? "Бэлдэж байна..." : "Бэлдэх"}
         </Button>
+        {build.running && <Button onClick={cancel} className="hover:border-danger hover:text-danger">⏹ Зогсоох</Button>}
         {estimate && (
           <span className="text-sm text-muted">
             {estimate.new ? `ElevenLabs: ${estimate.new} шинэ өгүүлбэр (~${estimate.chars} тэмдэгт)` : "Аудио бүгд бэлэн — токен зарцуулахгүй"}

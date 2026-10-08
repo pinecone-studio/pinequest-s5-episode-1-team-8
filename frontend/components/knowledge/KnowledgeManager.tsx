@@ -85,6 +85,11 @@ export function KnowledgeManager({ initial }: { initial: KnowledgeResponse }) {
     run(async () => { const status = await apiSend<BuildStatus>("/api/knowledge/build", "POST"); setBuild(status); }, "Аудио бэлдэж эхэллээ");
   }
 
+  function cancelBuild() {
+    if (!window.confirm("Бэлдэж буй ажлыг зогсоох уу? Өмнө бэлдсэн аудио хэвээр ажиллана, дараа нь дахин бэлдэж болно.")) return;
+    run(async () => { setBuild(await apiSend<BuildStatus>("/api/knowledge/build/cancel", "POST")); }, "Зогсоолоо — өмнө бэлдсэн аудио хэвээр ажиллана");
+  }
+
   function play(hash: string) {
     audio.current?.pause(); audio.current = new Audio(`/api/knowledge/audio/${hash}`); void audio.current.play();
   }
@@ -105,7 +110,7 @@ export function KnowledgeManager({ initial }: { initial: KnowledgeResponse }) {
     </section>
 
     <section className="rounded-[18px] bg-panel p-7 max-md:p-4">
-      <div className="flex flex-wrap items-center gap-4"><h2 className="flex-1 text-base font-semibold">Аудио бэлдэх</h2><button className={`${button} border-brand bg-brand text-bg hover:bg-brand-2`} onClick={startBuild} disabled={build.running}>{build.state === "queued" ? "Дараалалд..." : build.running ? "Бэлдэж байна..." : "Аудио бэлдэх"}</button></div>
+      <div className="flex flex-wrap items-center gap-4"><h2 className="flex-1 text-base font-semibold">Аудио бэлдэх</h2><button className={`${button} border-brand bg-brand text-bg hover:bg-brand-2`} onClick={startBuild} disabled={build.running}>{build.state === "queued" ? "Дараалалд..." : build.running ? "Бэлдэж байна..." : "Аудио бэлдэх"}</button>{build.running && <button className={`${button} hover:border-danger hover:text-danger`} onClick={cancelBuild} disabled={pending}>⏹ Зогсоох</button>}</div>
       <p className="mt-5 text-sm leading-6 text-muted">Мэдээллээс асуулт, тодруулах сэдэв, FAQ-г автоматаар үүсгэж, шинэ/өөрчлөгдсөн өгүүлбэрийг аудио болгоод (өгүүлбэр бүр ~5с) AI-г сургана. Өөрийн бичлэгтэйг TTS хийхгүй. Олон байгууллага зэрэг бэлдвэл дараалалд орно. <b className="text-fg">Бэлдэх хугацаанд AI сервер түр зогсоно</b> (8GB санах ой) — дуудлагагүй үед ажиллуулна уу.</p>
       <pre className="mt-5 max-h-72 min-h-20 overflow-auto whitespace-pre-wrap rounded-[12px] bg-bg p-4 font-mono text-xs leading-5 text-muted">{log}</pre>
     </section>

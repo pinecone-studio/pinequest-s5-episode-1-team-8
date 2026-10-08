@@ -28,6 +28,7 @@ export function BuildPanel({
       const next = await apiSend<JobStatus>(statusPath, "GET");
       setStatus(next);
       if (!next.running && next.code === 0 && next.finished) setMessage("Бэлэн боллоо ✓");
+      if (!next.running && next.state === "canceled") setMessage("Зогсоолоо — өмнө бэлдсэн аудио хэвээр ажиллана");
     } catch (err) {
       setError((err as Error).message);
     }
@@ -54,6 +55,17 @@ export function BuildPanel({
     }
   }
 
+  async function cancel() {
+    if (!window.confirm("Бэлдэж буй ажлыг зогсоох уу? Өмнө бэлдсэн аудио хэвээр ажиллана, дараа нь дахин бэлдэж болно.")) return;
+    setError(""); setMessage("");
+    try {
+      setStatus(await apiSend<JobStatus>("/api/knowledge/build/cancel", "POST"));
+      void refresh();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
   const label = status?.state === "queued" ? "Дараалалд…" : status?.running ? "Ажиллаж байна…" : buttonLabel;
   const log = status?.state === "queued" ? `Дараалалд байна (өмнө нь ${status.ahead} ажил)…` : status?.log.join("\n") || "—";
 
@@ -62,6 +74,7 @@ export function BuildPanel({
       <div className="flex flex-wrap items-center gap-4">
         <h2 className="grow text-[15px] font-semibold">{title}</h2>
         <Button variant="primary" onClick={start} disabled={Boolean(status?.running)}>{label}</Button>
+        {status?.running && <Button onClick={cancel} className="hover:border-danger hover:text-danger">⏹ Зогсоох</Button>}
       </div>
       <p className="mt-4 text-sm leading-6 text-muted">{description}</p>
       <pre className="mt-4 max-h-48 overflow-auto rounded-[10px] bg-bg p-4 font-mono text-xs leading-5 whitespace-pre-wrap text-muted">{log}</pre>
