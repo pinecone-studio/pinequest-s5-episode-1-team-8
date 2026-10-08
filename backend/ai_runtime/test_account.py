@@ -261,6 +261,18 @@ def web_parity(embed):
           people.lead(tdir, a)["phone"] == "80405060" and people.lead(tdir, b)["phone"] == "80405060")
 
 
+def runtime_symlink():
+    """[11] knowledge_jobs.runtime_root() кодыг symlink-ээр харуулдаг -> shim backend/people.py-г олох ёстой."""
+    import subprocess
+    print("\n[11] runtime хавтсанд symlink-ээр ачаалах")
+    here = os.path.dirname(os.path.abspath(__file__))
+    with tempfile.TemporaryDirectory() as d:
+        os.symlink(os.path.join(here, "people.py"), os.path.join(d, "people.py"))
+        r = subprocess.run([sys.executable, "-c", "import people; print(people.EMBED_ON_WRITE, hasattr(people, 'cancel_registration'))"],
+                           cwd=d, env={**os.environ, "PYTHONPATH": d}, capture_output=True, text=True)
+        check("symlink-ээр ачаалахад backend/people.py олдоно", r.stdout.strip() == "False True", (r.stderr or r.stdout).strip()[-200:])
+
+
 if __name__ == "__main__":
     if "--real" in sys.argv:
         from embed import Embedder
@@ -270,5 +282,6 @@ if __name__ == "__main__":
     else:
         main(fake_embed)
         web_parity(fake_embed)
+    runtime_symlink()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)
