@@ -15,6 +15,8 @@ from tenant import Tenant
 
 JOBS: dict[str, dict] = {}
 JOBS_LOCK = threading.Lock()
+PROCS: dict[str, subprocess.Popen] = {}     # ажиллаж буй алхмын процесс (зогсооход)
+CANCELED = -2                                # «Зогсоох» дарсан ажлын код
 JOB_QUEUE: "queue.Queue[str]" = queue.Queue()
 LOG_SKIP = re.compile(r"it/s\]|s/it\]|ref_text|gen_text|Converting|Using |Generating|vocab|token :|model :|Batches|Loading weights")
 BUILD_STEPS = [["scripts/ingest.py", "--no-audio"], ["scripts/autogen.py"], ["scripts/prebuild_en.py"],
@@ -149,10 +151,17 @@ def _run(slug: str):
                 # BUILD_STEPS нь хуучин integration test болон гаднын тохиргоонд
                 # солигдож болдог нийцтэй нэр тул build үед шууд ашиглана.
                 for step in BUILD_STEPS if task == "build" else TASK_STEPS[task]:
+                    if job.get("cancel"):
+                        break
                     log.write(f"\n=== {' '.join(step)} ===\n")
                     log.flush()
-                    code = subprocess.call([python, "-W", "ignore", RUNNER, root, TENANTS_DIR, *step], cwd=root, env=env,
-                                           stdout=log, stderr=subprocess.STDOUT)
+                    proc = subprocess.Popen([python, "-W", "ignore", RUNNER, root, TENANTS_DIR, *step], cwd=root, env=env,
+                                            stdout=log, stderr=subprocess.STDOUT)
+                    PROCS[slug] = proc
+                    code = proc.wait()
+                    PROCS.pop(slug, None)
+                    if job.get("cancel"):
+                        break
                     if code and step[0] in OPTIONAL:
                         log.write(f"({step[0]} алдаатай дууслаа, алгаслаа)\n")
                         code = 0
@@ -162,10 +171,36 @@ def _run(slug: str):
                 if stopped:
                     launchctl(["bootstrap", f"gui/{os.getuid()}", AI_PLIST], log)
                     log.write("AI сервер дахин асав\n")
+        if job.get("cancel"):
+            code = CANCELED
+            log.write("\n⏹ Зогсоосон. Өмнө бэлдсэн аудио, мэдээлэл хэвээр ажиллана.\n")
+    if code == CANCELED:
+        job.update(state="canceled", finished=time.time(), code=code)
+        return
     if code == 0:
         sync_rag(tenant)
     job.update(state="done" if code == 0 else "error", finished=time.time(), code=code)
     notify_done(tenant, job.get("task", "build"), code)
+
+
+def cancel(t: Tenant) -> dict:
+    """Дараалалд эсвэл ажиллаж буй ажлыг зогсооно. Ажиллаж буй алхмын процессыг унтрааж, AI серверийг буцааж асаана."""
+    with JOBS_LOCK:
+        job = JOBS.get(t.slug)
+        if not job or job["state"] not in ("queued", "running"):
+            raise RuntimeError("Зогсоох ажил алга")
+        job["cancel"] = True
+        _rebuild.discard(t.slug)
+        if job["state"] == "queued":                 # ажиллаж эхлээгүй -> шууд
+            job.update(state="canceled", finished=time.time(), code=CANCELED)
+        proc = PROCS.get(t.slug)
+    if proc and proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+    return status(t)
 
 
 def sync_rag(t: Tenant):
@@ -235,6 +270,9 @@ def _auto_fire(slug: str):
 def _worker():
     while True:
         slug = JOB_QUEUE.get()
+        if JOBS.get(slug, {}).get("state") == "canceled":   # дараалалд байхдаа зогсоосон
+            JOB_QUEUE.task_done()
+            continue
         try:
             _run(slug)
         except Exception as exc:

@@ -970,6 +970,57 @@ def test_personal_rag():
     check("огнооны клипүүд аудио бэлдэх жагсаалтад", people.slot_parts(slot)[0] in texts and len(texts) >= 60, len(texts))
 
 
+def test_build_cancel():
+    print("\n[22] «Зогсоох»: бэлдэж буй ажлыг зогсоох")
+    import time
+    import knowledge_jobs
+    sim = tempfile.mkdtemp(prefix="fake_sim_cancel_")
+    os.makedirs(os.path.join(sim, "scripts"))
+    os.makedirs(os.path.join(sim, ".venv", "bin"))
+    os.symlink(sys.executable, os.path.join(sim, ".venv", "bin", "python"))
+    open(os.path.join(sim, "tenant.py"), "w").write(FAKE_SIM_TENANT)
+    open(os.path.join(sim, "scripts", "slow.py"), "w").write("import time\nprint('удаан алхам', flush=True)\ntime.sleep(60)\n")
+    open(os.path.join(sim, "scripts", "after.py"), "w").write("open('AFTER_RAN', 'w').write('x')\n")
+    old = (os.environ.get("SIM_TRUNK_DIR"), knowledge_jobs.BUILD_STEPS)
+    os.environ["SIM_TRUNK_DIR"], knowledge_jobs.BUILD_STEPS = sim, [["scripts/slow.py"], ["scripts/after.py"]]
+    try:
+        a = owner_client("Зогсоох тест", "cancel@example.mn")
+        check("ажилгүй үед зогсоох -> 409", a.post("/api/knowledge/build/cancel").status_code == 409)
+        a.post("/api/knowledge/build")
+        for _ in range(100):
+            if knowledge_jobs.PROCS:
+                break
+            time.sleep(0.05)
+        check("удаан алхам ажиллаж байна", a.get("/api/knowledge/build").json()["state"] == "running")
+        t0 = time.time()
+        r = a.post("/api/knowledge/build/cancel")
+        st = {}
+        for _ in range(100):
+            st = a.get("/api/knowledge/build").json()
+            if not st["running"]:
+                break
+            time.sleep(0.05)
+        check("зогсоосон (60с хүлээлгүй)", st["state"] == "canceled" and not st["running"] and time.time() - t0 < 6
+              and r.status_code == 200, st.get("state"))
+        check("дараагийн алхам ажиллаагүй", not os.path.exists(os.path.join(knowledge_jobs.runtime_root(), "AFTER_RAN")))
+        check("логт «Зогсоосон»", any("Зогсоосон" in line for line in st["log"]), st["log"][-2:])
+        check("процесс үлдээгүй", not knowledge_jobs.PROCS)
+        knowledge_jobs.BUILD_STEPS = [["scripts/after.py"]]
+        a.post("/api/knowledge/build")
+        for _ in range(100):
+            st = a.get("/api/knowledge/build").json()
+            if not st["running"]:
+                break
+            time.sleep(0.05)
+        check("зогсоосны дараа дахин бэлдэж болно", st["state"] == "done", st.get("state"))
+    finally:
+        knowledge_jobs.BUILD_STEPS = old[1]
+        if old[0] is None:
+            os.environ.pop("SIM_TRUNK_DIR", None)
+        else:
+            os.environ["SIM_TRUNK_DIR"] = old[0]
+
+
 FAKE_ESTIMATE_SIM = {
     "tenant.py": FAKE_SIM_TENANT + "\ndef _p(self, *parts):\n    return os.path.join(self.dir, *parts)\nTenant.path = _p\n"
                  "Tenant.recordings_dir = property(lambda self: os.path.join(self.dir, 'recordings'))\n",
@@ -1069,5 +1120,6 @@ if __name__ == "__main__":
     test_tenant_sim_parity()
     test_auto_build()
     test_personal_rag()
+    test_build_cancel()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)

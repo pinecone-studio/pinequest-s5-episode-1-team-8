@@ -113,6 +113,15 @@ def start_build(t: Tenant = Depends(current_tenant)):
         raise HTTPException(409, str(exc)) from exc
 
 
+@router.post("/build/cancel")
+def cancel_build(t: Tenant = Depends(current_tenant)):
+    """«Зогсоох»: аудио бэлдэх, сургалт, англи хэлний бэлдэлт гэх мэт байгууллагын одоогийн ажлыг зогсооно."""
+    try:
+        return knowledge_jobs.cancel(t)
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from None
+
+
 @router.get("/build")
 def build_status(t: Tenant = Depends(current_tenant)):
     return knowledge_jobs.status(t)
