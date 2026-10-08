@@ -8,6 +8,7 @@ import { apiSend } from "@/lib/client";
 import { formatDateTime } from "@/lib/format";
 import { LEAD_STATUS, type Lead, type LeadChange, type LeadStatus, type Reminder } from "@/lib/types";
 import { useAction } from "@/lib/useAction";
+import { ForgetPerson } from "./ForgetPerson";
 import { LeadChanges } from "./LeadChanges";
 import { ReminderCell } from "./ReminderCell";
 
@@ -31,6 +32,7 @@ export function LeadRow({ lead, reminder, code, changes = [] }: { lead: Lead; re
         {lead.name || "—"}
         {code && <div className="text-[13px] text-muted">Код <b className="font-mono text-fg">{code}</b></div>}
         <LeadChanges changes={changes} />
+        <ForgetPerson leadId={lead.id} name={lead.name} />
       </Td>
       <Td>
         {lead.phone ? <b className="font-mono">{lead.phone}</b> : <Tag tone="bad">дугааргүй</Tag>}
