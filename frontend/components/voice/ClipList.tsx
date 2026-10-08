@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { ActionStatus } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Tag } from "@/components/ui/Tag";
 import { startRecording, toCleanWav } from "@/lib/audio";
 import { apiSend } from "@/lib/client";
@@ -36,6 +37,23 @@ export function ClipList({ items, voiceName, play, onChange }: {
   const [customText, setCustomText] = useState("");
   const [customWav, setCustomWav] = useState<Blob | null>(null);
   const [customMessage, setCustomMessage] = useState("");
+  
+  const [dialogConfig, setDialogConfig] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    confirmLabel: string;
+    danger: boolean;
+    onConfirm: () => void;
+  }>({
+    open: false,
+    title: "",
+    description: "",
+    confirmLabel: "Устгах",
+    danger: true,
+    onConfirm: () => {},
+  });
+
   const stopRef = useRef<(() => Promise<Blob>) | null>(null);
   const speechRef = useRef<SpeechRecognitionLike | null>(null);
   const { pending, error, message, run } = useAction();
@@ -54,17 +72,35 @@ export function ClipList({ items, voiceName, play, onChange }: {
   if (filter === "top") shown = [...shown].sort((a, b) => b.plays - a.plays);
 
   function regenerate(item: VoiceItem) {
-    if (!window.confirm("Энэ өгүүлбэрийг ElevenLabs-аар өөр хувилбараар дахин үүсгэх үү?")) return;
-    void run(async () => { await apiSend(`/api/voice/regenerate/${item.hash}`, "POST"); await onChange(); }, "Дахин үүсгэж байна…");
+    setDialogConfig({
+      open: true,
+      title: "Өгүүлбэр дахин үүсгэх",
+      description: "Энэ өгүүлбэрийг ElevenLabs-аар өөр хувилбараар дахин үүсгэх үү?",
+      confirmLabel: "Дахин үүсгэх",
+      danger: false,
+      onConfirm: () => {
+        setDialogConfig((prev) => ({ ...prev, open: false }));
+        void run(async () => { await apiSend(`/api/voice/regenerate/${item.hash}`, "POST"); await onChange(); }, "Дахин үүсгэж байна…");
+      },
+    });
   }
 
   function deleteRecording(item: VoiceItem) {
-    if (!window.confirm("Энэ бичлэгийг устгаад ElevenLabs-ийн аудио руу буцах уу?")) return;
-    void run(async () => { await apiSend(`/api/voice/recording/${item.hash}`, "DELETE"); await onChange(); }, "Бичлэг устлаа");
+    setDialogConfig({
+      open: true,
+      title: "Бичлэг устгах",
+      description: "Энэ бичлэгийг устгаад ElevenLabs-ийн аудио руу буцах уу?",
+      confirmLabel: "Устгах",
+      danger: true,
+      onConfirm: () => {
+        setDialogConfig((prev) => ({ ...prev, open: false }));
+        void run(async () => { await apiSend(`/api/voice/recording/${item.hash}`, "DELETE"); await onChange(); }, "Бичлэг устлаа");
+      },
+    });
   }
 
   async function toggleRecord(hash: string) {
-    if (recording === hash && stopRef.current) {          // зогсоох -> цэвэрлээд хадгалах
+    if (recording === hash && stopRef.current) {
       const stop = stopRef.current;
       stopRef.current = null;
       setRecording(null);
@@ -78,7 +114,7 @@ export function ClipList({ items, voiceName, play, onChange }: {
       }, "Бичлэг хадгалагдлаа ✓ «Аудиог шинэчлэх» дарвал залгагчид сонсогдоно");
       return;
     }
-    if (recording) return;                                  // нэг удаа нэг өгүүлбэр
+    if (recording) return;
     void run(async () => {
       stopRef.current = (await startRecording()).stop;
       setRecording(hash);
@@ -214,6 +250,18 @@ export function ClipList({ items, voiceName, play, onChange }: {
           </div>
         ) : <p className="py-10 text-center text-muted">Алга ✓</p>}
       </div>
+
+      <ConfirmDialog
+        open={dialogConfig.open}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmLabel={dialogConfig.confirmLabel}
+        cancelLabel="Цуцлах"
+        danger={dialogConfig.danger}
+        pending={pending}
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig((prev) => ({ ...prev, open: false }))}
+      />
     </section>
   );
 }

@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { BuildPanel } from "@/components/knowledge/BuildPanel";
 import { ActionStatus } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { apiSend } from "@/lib/client";
 import { formatDateTime } from "@/lib/format";
 import type { TrainingAnswers, TrainingStatus } from "@/lib/types";
@@ -11,6 +12,8 @@ import { useAction } from "@/lib/useAction";
 
 export function TrainingManager({ initial, answers }: { initial: TrainingStatus; answers: TrainingAnswers }) {
   const [rows, setRows] = useState(initial.taught);
+  const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
+
   const { pending, error, message, run } = useAction();
   const model = initial.model;
   const evaluation = model?.eval;
@@ -22,6 +25,17 @@ export function TrainingManager({ initial, answers }: { initial: TrainingStatus;
       await apiSend("/api/train/examples", "POST", { q: data.get("q"), answer: data.get("answer") });
       form.reset(); const next = await apiSend<TrainingStatus>("/api/train", "GET"); setRows(next.taught);
     }, "Сургалтын жишээ нэмэгдлээ ✓");
+  }
+
+  function confirmDelete() {
+    if (deleteIndex !== null) {
+      const indexToDelete = deleteIndex;
+      setDeleteIndex(null);
+      void run(async () => {
+        await apiSend(`/api/train/examples/${indexToDelete}`, "DELETE");
+        setRows((all) => all.filter((item) => item.i !== indexToDelete));
+      }, "Жишээ устлаа");
+    }
   }
 
   return (
@@ -48,10 +62,22 @@ export function TrainingManager({ initial, answers }: { initial: TrainingStatus;
       <section className="rounded-[14px] bg-panel px-[22px] py-5"><h2 className="mb-3 font-semibold">Бодит дуудлагаас заасан жишээ</h2>
         {rows.length ? <div className="divide-y divide-line">{rows.map((row) => <div key={row.i} className="grid items-center gap-3 py-3 md:grid-cols-[1fr_1fr_auto]">
           <p>{row.q}</p><span className="text-sm text-muted">{row.faq ? `FAQ: ${row.faq}` : row.fact ? row.fact.slice(0, 120) : row.label === "other" ? "Мэдээлэлд алга" : "Тодруулна"}</span>
-          <Button className="text-danger" onClick={() => void run(async () => { await apiSend(`/api/train/examples/${row.i}`, "DELETE"); setRows((all) => all.filter((item) => item.i !== row.i)); }, "Жишээ устлаа")}>Устгах</Button>
+          <Button className="text-danger" onClick={() => setDeleteIndex(row.i)}>Устгах</Button>
         </div>)}</div> : <p className="py-8 text-center text-muted">Одоохондоо алга. Хариулж чадаагүй асуултын зөв хариултыг заагаарай.</p>}
       </section>
       <ActionStatus error={error} message={message} />
+
+      <ConfirmDialog
+        open={deleteIndex !== null}
+        title="Сургалтын жишээ устгах"
+        description="Энэ сургалтын жишээг устгахдаа итгэлтэй байна уу? Энэ үйлдлийг буцаах боломжгүй."
+        confirmLabel="Устгах"
+        cancelLabel="Цуцлах"
+        danger={true}
+        pending={pending}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteIndex(null)}
+      />
     </div>
   );
 }

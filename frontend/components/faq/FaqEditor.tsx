@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -6,6 +5,7 @@ import { useState } from "react";
 import { BuildPanel } from "@/components/knowledge/BuildPanel";
 import { ActionStatus } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Tag } from "@/components/ui/Tag";
 import { apiSend } from "@/lib/client";
 import type { FaqData, FaqItem } from "@/lib/types";
@@ -14,6 +14,7 @@ import { useAction } from "@/lib/useAction";
 export function FaqEditor({ initial }: { initial: FaqData }) {
   const [greeting, setGreeting] = useState(initial.greeting);
   const [items, setItems] = useState(initial.faq);
+  const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
 
   const { pending, error, message, run } = useAction();
 
@@ -55,15 +56,11 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
     );
   }
 
-  // PR 3: FAQ устгахын өмнө баталгаажуулах
-  function deleteFaq(index: number) {
-    const confirmed = window.confirm("Энэ FAQ-г устгах уу?");
-
-    if (!confirmed) {
-      return;
+  function confirmDelete() {
+    if (deleteIndex !== null) {
+      setItems((rows) => rows.filter((_, i) => i !== deleteIndex));
+      setDeleteIndex(null);
     }
-
-    setItems((rows) => rows.filter((_, i) => i !== index));
   }
 
   return (
@@ -90,14 +87,12 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
           onChange={(event) => setGreeting(event.target.value)}
         />
 
-        {/* PR 4: FAQ-ийн тоо */}
         <div className="mt-6 mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-fg">
             Нийт {items.length} FAQ
           </h2>
         </div>
 
-        {/* PR 5: FAQ байхгүй үеийн тайлбар */}
         {items.length === 0 ? (
           <div className="mt-5 rounded-[10px] border border-line-2 bg-bg px-5 py-8 text-center">
             <p className="text-sm text-muted">
@@ -152,7 +147,7 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
 
                   <Button
                     className="ml-auto text-danger"
-                    onClick={() => deleteFaq(index)}
+                    onClick={() => setDeleteIndex(index)}
                   >
                     Устгах
                   </Button>
@@ -192,7 +187,6 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
           </div>
         )}
 
-        {/* Доод талын товчнууд */}
         <div className="mt-4 flex flex-wrap items-center gap-3">
           {items.length > 0 && (
             <Button
@@ -227,7 +221,17 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
       </section>
 
       <BuildPanel />
+
+      <ConfirmDialog
+        open={deleteIndex !== null}
+        title="FAQ устгах"
+        description="Энэ FAQ-г устгахдаа итгэлтэй байна уу? Энэ үйлдлийг буцаах боломжгүй."
+        confirmLabel="Устгах"
+        cancelLabel="Цуцлах"
+        danger={true}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteIndex(null)}
+      />
     </div>
   );
 }
-
