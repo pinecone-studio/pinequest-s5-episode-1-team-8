@@ -81,7 +81,9 @@ export function VoiceSettings({ initial, eleven, isAdmin, initialTab }: {
       {tab === "lexicon" && <LexiconEditor settings={data.settings} onSaved={refresh} />}
 
       <BuildPanel key={buildKey} startPath="/api/voice/rebuild" title="Аудиог шинэчлэх" buttonLabel="Аудиог шинэчлэх"
-        description="Хоолойн сонголт, толь, бичлэг, ↻-ийн дагуу өөрчлөгдсөн өгүүлбэрүүдийг ElevenLabs-аар дахин үүсгэнэ (кэштэйг алгасна, AI-г дахин сургахгүй). Шинэ мэдээлэл нэмсэн бол Тохируулах → «Аудио бэлдэх»." />
+        description={isAdmin
+          ? "Хоолойн сонголт, толь болон бичлэгийн өөрчлөлтийг бэлэн аудионд оруулна."
+          : "Хоолой эсвэл дуудлагаа өөрчилсний дараа энэ товчийг дарна."} />
     </div>
   );
 }

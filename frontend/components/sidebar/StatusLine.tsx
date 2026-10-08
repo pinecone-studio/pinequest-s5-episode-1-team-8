@@ -4,7 +4,7 @@ import type { Status } from "@/lib/types";
 import { useStatus } from "@/lib/useStatus";
 
 /** "● ОНЛАЙН  SIP ✓" — AI сервер, SIP асаалттай эсэх (10с тутам шинэчлэгдэнэ) */
-export function StatusLine({ initial }: { initial: Status | null }) {
+export function StatusLine({ initial, isAdmin }: { initial: Status | null; isAdmin: boolean }) {
   const { status, offline } = useStatus(initial);
   const ok = "text-brand";
   const bad = "text-danger";
@@ -15,7 +15,7 @@ export function StatusLine({ initial }: { initial: Status | null }) {
       ) : status ? (
         <>
           <span className={status.ai_server ? ok : bad}>● {status.ai_server ? "ОНЛАЙН" : "УНТАРСАН"}</span>
-          <span className={status.sip ? ok : bad}>SIP {status.sip ? "✓" : "✕"}</span>
+          {isAdmin && <span className={status.sip ? ok : bad}>SIP {status.sip ? "✓" : "✕"}</span>}
         </>
       ) : null}
     </div>
