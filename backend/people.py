@@ -543,10 +543,13 @@ def docs(tdir: str, lead_id: int) -> list[dict]:
     return rows
 
 
+EMBED_ON_WRITE = True       # утасны AI (ai_runtime/people.py) False болгоно — өөрийн загвараар хайлтын үед тооцоолно
+
+
 def _embed_missing(tdir: str, lead_id: int, rows: list[dict]):
     """Шинэ/өөрчлөгдсөн баримтын векторыг тэр даруй тооцоолж DB-д хадгална (RAG хайлтад бэлэн)."""
     missing = [r for r in rows if r["emb"] is None]
-    if not missing:
+    if not missing or not EMBED_ON_WRITE:
         return
     try:
         import embedder

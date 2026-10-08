@@ -81,7 +81,8 @@ def main():
     calls = a.get("/api/calls").json()
     check("утасны системийн дуудлага шууд харагдана", any(c["uuid"] == "live-call-1" for c in calls), calls[:1])
 
-    check("ElevenLabs түлхүүр SIM-TRUNK/data-аас", eleven.KEY_FILE == os.path.join(SIM, "data", "elevenlabs_key"))
+    # #108-аас хойш AI runtime энэ repo-д: түлхүүр үргэлж DATA_DIR-д (SIM-TRUNK хавтас шаардахгүй)
+    check("ElevenLabs түлхүүр DATA_DIR-аас", eleven.KEY_FILE == os.path.join(config.DATA_DIR, "elevenlabs_key"))
     os.makedirs(os.path.join(SIM, "data"), exist_ok=True)
     open(eleven.KEY_FILE, "w").write("sk_" + "x" * 40)
     check("түлхүүртэй гэж харагдана (анхдагч Уянга)", a.get("/api/voice").json()["voice"] == {

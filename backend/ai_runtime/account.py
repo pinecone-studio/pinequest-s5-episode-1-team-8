@@ -35,27 +35,33 @@ OFFER = 3               # нэг удаад санал болгох сул ца�
 
 # Залгагчийн хүсэлтүүд (хувийн баримтуудтай хамт хайлтад орно)
 INTENTS = {
+    "cancel_registration": ["Бүртгэлээ цуцлах", "Бүртгэлээ цуцалмаар байна", "Эвентэд очиж чадахгүй боллоо",
+                            "Хөтөлбөрт суухаа больсон", "Оролцож чадахгүй нь", "Ирж чадахгүй нь цуцалъя", "Явахгүй болсон"],
     "change_phone": ["Дугаараа солимоор байна", "Утасны дугаараа өөрчлөх", "Шинэ дугаар өгье", "Дугаар солих",
                      "Дугаар маань солигдсон"],
     "change_time": ["Цагаа солимоор байна", "Өөр цаг авъя", "Уулзалтын цагаа хойшлуулах", "Цагаа өөрчлөх",
                     "Өөр өдөр болох уу", "Цагаа шилжүүлэх"],
-    "cancel": ["Цагаа цуцлах", "Уулзалтаа цуцалмаар байна", "Ирж чадахгүй нь", "Бүртгэлээ цуцлах"],
+    "cancel": ["Цагаа цуцлах", "Уулзалтаа цуцалмаар байна", "Товлосон цагаа цуцлах"],
     "ask_time": ["Миний цаг хэзээ билээ", "Хэдэн цагт очих вэ", "Уулзалт хэзээ вэ", "Хэдний өдөр очих вэ"],
     "ask_phone": ["Ямар дугаар бүртгэлтэй вэ", "Миний дугаар зөв үү", "Бүртгэлтэй дугаараа шалгах"],
     "ask_status": ["Бүртгэл маань ямар байгаа вэ", "Бүртгэл баталгаажсан уу", "Хүсэлт маань хаана явж байна"],
+    "ask_attendance": ["Эвентэд ирэх эсэх маань бүртгэгдсэн үү", "Ирнэ гэж бүртгэгдсэн үү", "Намайг ирнэ гэж тэмдэглэсэн үү",
+                       "Ирэх эсэхээ шалгах"],
 }
 # Ажилтны команд ("Болдын цагийг нь шилжүүл" — нэрийг хассаны дараа)
 STAFF_INTENTS = {
+    "cancel_registration": ["бүртгэлийг нь цуцал", "хөтөлбөрөөс хас", "эвентээс хас", "ирэхгүй гэсэн"],
     "change_phone": ["дугаарыг нь солих", "утасны дугаарыг нь өөрчил", "шинэ дугаар оруул", "дугаар солих"],
     "change_time": ["цагийг нь шилжүүл", "цагийг нь солих", "өөр өдөр рүү шилжүүл", "цагийг өөрчил",
                     "уулзалтыг нь хойшлуул", "руу шилжүүл"],
-    "cancel": ["цагийг нь цуцал", "уулзалтыг нь цуцлах", "бүртгэлийг нь цуцал"],
+    "cancel": ["цагийг нь цуцал", "уулзалтыг нь цуцлах"],
     "ask_time": ["цаг нь хэзээ вэ", "хэдэн цагт ирэх вэ", "уулзалт нь хэзээ"],
     "ask_phone": ["дугаар нь хэд вэ", "ямар дугаартай вэ"],
     "ask_status": ["бүртгэл нь ямар байгаа вэ", "төлөв нь юу вэ"],
+    "ask_attendance": ["ирэх үү", "ирнэ гэсэн үү", "ирэх эсэх нь"],
 }
-DOC_INTENT = {"phone": "ask_phone", "appointment": "ask_time", "status": "ask_status"}
-MENU_KEYS = {"1": "change_phone", "2": "change_time", "3": "cancel"}
+DOC_INTENT = {"phone": "ask_phone", "appointment": "ask_time", "status": "ask_status", "attendance": "ask_attendance"}
+MENU_KEYS = {"1": "change_phone", "2": "change_time", "3": "cancel", "4": "cancel_registration"}
 ORDINALS = {"нэг": 0, "эхн": 0, "нэгд": 0, "хоёр": 1, "хоёрд": 1, "гура": 2, "гурв": 2, "сүүл": 2}
 WEEKDAY_STEMS = {"дава": 0, "мягм": 1, "лхаг": 2, "пүрэ": 3, "пүрв": 3, "баас": 4, "бямб": 5, "ням": 6}
 
@@ -99,13 +105,18 @@ def detect_intent(search: Search, text: str) -> str | None:
 
 
 CHANGE_STEMS = ("шилж", "соли", "солъ", "соль", "өөрч", "хойш", "урагш")
+CANT_GO = ("чадах", "больс", "явах", "суух", "оролц", "ирэхг", "очихг")
 
 
 def keyword_intent(text: str) -> str | None:
-    """Ажилтны богино команд үгээр: "цагийг нь шилжүүл", "дугаарыг соль", "цуцал"."""
+    """Богино команд үгээр (вэбийн assistant.py-тэй ижил): "цуцал" -> бүртгэл/цаг, "шилжүүл", "дугаарыг соль"."""
     st = stems(text)
+    low = text.lower()
+    reg = any(x.startswith(("бүрт", "хөтө", "эвен", "сурга", "boot")) for x in st)
     if any(x.startswith("цуца") for x in st):
-        return "cancel"
+        return "cancel_registration" if reg or not any(x.startswith(("цаг", "уулз")) for x in st) else "cancel"
+    if any(c in low for c in CANT_GO) and any(x.startswith(("чада", "боло", "боль")) for x in st):
+        return "cancel_registration"
     if any(x.startswith(c) for x in st for c in CHANGE_STEMS):
         if any(x.startswith("дуга") or x.startswith("утас") or x.startswith("утсы") for x in st):
             return "change_phone"
@@ -173,7 +184,7 @@ class AccountFlow:
             return self._code(digits)
         if self.state == "new_phone":
             return self._phone(digits)
-        if self.state in ("phone_confirm", "slot_confirm", "cancel_confirm"):
+        if self.state in ("phone_confirm", "slot_confirm", "cancel_confirm", "reg_cancel_confirm"):
             return self._confirm({"1": True, "2": False}.get(digits[:1]))
         if self.state == "slot":
             i = int(digits[:1]) - 1 if digits[:1].isdigit() else -1
@@ -201,7 +212,7 @@ class AccountFlow:
         if self.state == "new_phone":
             digits = parse_phone(text)
             return self._phone(digits) if digits else ["ask_new_phone"]
-        if self.state in ("phone_confirm", "slot_confirm", "cancel_confirm"):
+        if self.state in ("phone_confirm", "slot_confirm", "cancel_confirm", "reg_cancel_confirm"):
             ans = yes_no(text)
             return self._confirm(ans) if ans is not None else ["confirm"]
         if self.state == "slot":
@@ -291,11 +302,24 @@ class AccountFlow:
                 people.save_emb(self.tdir, lead_id, d["field"], d["text"], self.search.vectors([d["text"]])[0].tobytes())
         docs += [(k, q) for k, qs in INTENTS.items() for q in qs]
         ranked = self.search.rank(text, docs)
-        return ranked[0][0] if ranked and ranked[0][1] >= MATCH else None
+        kw = keyword_intent(text)
+        if ranked and ranked[0][1] >= MATCH:
+            top = ranked[0][0]
+            return kw if kw in ("cancel", "cancel_registration") and top in ("cancel", "cancel_registration") else top
+        return kw
 
     def _do(self, intent: str, text: str = "") -> list[str]:
         self.intent = None
         lead_id = self.lead["id"]
+        if intent == "cancel_registration":
+            if (people.lead(self.tdir, lead_id) or {}).get("status") == "canceled":
+                return ["status_canceled", self._end()]
+            self.state = "reg_cancel_confirm"
+            return ["ask_cancel_reg"]
+        if intent == "ask_attendance":
+            coming = people.attendance(self.tdir, lead_id)
+            self.state = "menu"
+            return ["attendance_unknown" if coming is None else "attendance_yes" if coming else "attendance_no", self._end()]
         if intent == "change_phone":
             self.state = "new_phone"
             return ["ask_new_phone"]
@@ -380,8 +404,12 @@ class AccountFlow:
             self.events.append({"field": "appointment", "old": old and people.fmt(old), "new": people.fmt(self.chosen),
                                 "lead": self.lead, "staff": self.staff})
             return ["appt_done", f"date:{people.fmt(self.chosen)}", self._end()]
-        if not ans:                           # cancel_confirm
+        if not ans:                           # cancel_confirm, reg_cancel_confirm
             return ["unchanged", self._end()]
+        if state == "reg_cancel_confirm":
+            old = people.cancel_registration(self.tdir, lead_id, self.source, self.call_uuid)
+            self.events.append({"field": "status", "old": old, "new": "canceled", "lead": self.lead, "staff": self.staff})
+            return ["reg_cancel_done", self._end()]
         old = people.cancel_appointment(self.tdir, lead_id, self.source, self.call_uuid)
         self.events.append({"field": "appointment", "old": old and people.fmt(old), "new": None, "lead": self.lead,
                             "staff": self.staff})
