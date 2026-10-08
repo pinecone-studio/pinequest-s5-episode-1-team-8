@@ -1,170 +1,93 @@
-# Frontend-ийн дараагийн 4 жижиг PR
+# Frontend-ийн 4 жижиг PR ажил
 
-Өмнөх FAQ-ийн ажлууд хийгдсэн тул эдгээр нь түүнтэй давхцахгүй шинэ ажлууд юм. Бүгд зөвхөн frontend өөрчлөлт бөгөөд backend, API, өгөгдлийн JSON файлд хүрэхгүй.
+Эдгээр ажлыг тус тусад нь PR болгоно. Зөвхөн `frontend/` дотор ажиллаж, backend, API болон JSON өгөгдөлд өөрчлөлт оруулахгүй.
 
-PR бүр тусдаа файлд хийгдэх учраас хоорондоо хамааралгүй. Нэг PR-д зөвхөн тухайн даалгаврын өөрчлөлтийг оруулна.
+## PR 1 — Mobile цэсийг `Escape`-аар хаах
 
-## Эхлэх
-
-```bash
-git switch main
-git pull origin main
-cd frontend
-bun install
-bun dev
-```
-
-PR бүрийн өмнө `main`-аас заасан нэртэй шинэ branch үүсгэнэ. Дууссаны дараа:
-
-```bash
-cd frontend
-bun run lint
-```
-
----
-
-## PR 1 — Mobile цэсийг Escape товчоор хаах
-
-**Өөрчлөх файл:** `frontend/components/sidebar/MobileMenu.tsx`
-
-**Branch:** `frontend/mobile-menu-escape`
-
-**PR title:** `feat(frontend): close mobile menu with Escape`
-
-### Яагаад хийх вэ?
-
-Одоо mobile цэсийг зөвхөн цэсний товч эсвэл холбоосоор хаадаг. Keyboard ашиглаж байгаа хүн `Escape` дараад хаах боломжтой болгоно.
+- **Файл:** `frontend/components/sidebar/MobileMenu.tsx`
+- **Branch:** `frontend/mobile-menu-escape`
+- **PR title:** `feat(frontend): close mobile menu with Escape`
 
 ### Хийх зүйл
 
-1. React-оос `useEffect` import хийнэ.
-2. Component дотор `useEffect` нэмнэ.
-3. Цэс хаалттай (`open === false`) үед event listener нэмэх шаардлагагүй.
-4. Цэс нээлттэй үед `document`-ийн `keydown` event-ийг сонсоно.
-5. `event.key === "Escape"` бол `setOpen(false)` дуудна.
-6. Effect-ийн cleanup function дотор listener-ээ заавал салгана.
+- `useEffect` ашиглан цэс нээлттэй үед `document`-ийн `keydown` event сонсоно.
+- `Escape` дарахад `setOpen(false)` дуудна.
+- Цэс хаалттай үед listener нэмэхгүй, cleanup дээр listener-ээ салгана.
+- Одоогийн товч болон холбоосоор хаах ажиллагааг хэвээр үлдээнэ.
 
-### Дууссан гэж үзэх нөхцөл
+### Шалгах
 
-- Дэлгэцээ нарийсгаж mobile цэсийг нээхэд хэвийн ажиллана.
-- Цэс нээлттэй үед `Escape` дарахад хаагдана.
-- Цэс хаалттай үед `Escape` дарахад алдаа гарахгүй.
-- Цэсний холбоос дарахад хаагддаг одоогийн үйлдэл хэвээр байна.
+- Mobile цэс нээлттэй үед `Escape` дарахад хаагдана.
+- Цэсний холбоос дарахад өмнөх шигээ хаагдана.
 - `bun run lint` амжилттай ажиллана.
 
 ---
 
-## PR 2 — Гарах товчны loading төлвийг ойлгомжтой болгох
+## PR 2 — Logout товчны loading төлөв
 
-**Өөрчлөх файл:** `frontend/components/sidebar/LogoutButton.tsx`
-
-**Branch:** `frontend/logout-loading-label`
-
-**PR title:** `feat(frontend): improve logout loading feedback`
-
-### Яагаад хийх вэ?
-
-`Гарах` товч дарагдсан үед disabled болдог ч харагдах icon болон дэлгэц уншигчийн тайлбар өөрчлөгддөггүй.
+- **Файл:** `frontend/components/sidebar/LogoutButton.tsx`
+- **Branch:** `frontend/logout-loading-label`
+- **PR title:** `feat(frontend): improve logout loading feedback`
 
 ### Хийх зүйл
 
-1. Товчны `title` болон `aria-label` утгыг `pending`-ээс хамааруулна:
-   - энгийн үед: `Гарах`
-   - хүлээж байх үед: `Гарч байна…`
-2. `pending === true` үед одоогийн гарах icon-ы оронд жижиг loading spinner харуулна.
-3. Spinner-д Tailwind-ийн `animate-spin` class ашиглаж болно.
-4. Spinner болон icon хоёул `aria-hidden` хэвээр байна.
-5. Одоо байгаа `disabled={pending}` болон logout logic-ийг өөрчлөхгүй.
+- `pending` үед `title` болон `aria-label`-ийг `Гарч байна…` болгоно. Энгийн үед `Гарах` байна.
+- `pending` үед logout icon-ы оронд `animate-spin` class-тай жижиг spinner харуулна.
+- Одоогийн `disabled={pending}` болон logout logic-ийг өөрчлөхгүй.
 
-### Дууссан гэж үзэх нөхцөл
+### Шалгах
 
-- Товч дарахаас өмнө tooltip/accessible name нь `Гарах` байна.
-- Товч дарсны дараа `Гарч байна…` болно.
-- Хүлээж байх үед spinner харагдаж, товч дахин дарагдахгүй.
-- Logout хүсэлт болон `/login` руу шилжих logic хэвээр ажиллана.
+- Дарахаас өмнө `Гарах`, дарсны дараа `Гарч байна…` гэж уншигдана.
+- Хүлээж байх үед spinner харагдаж, дахин дарагдахгүй.
+- Logout хийгдээд `/login` руу шилжинэ.
 - `bun run lint` амжилттай ажиллана.
 
 ---
 
-## PR 3 — Идэвхтэй шүүлтүүрийн тоог харуулах
+## PR 3 — Идэвхтэй calls filter-ийн тоо
 
-**Өөрчлөх файл:** `frontend/components/calls/CallsFilter.tsx`
-
-**Branch:** `frontend/calls-active-filter-count`
-
-**PR title:** `feat(frontend): show active calls filter count`
-
-### Яагаад хийх вэ?
-
-Ярианы жагсаалтад хэдэн шүүлтүүр зэрэг идэвхтэй байгааг хэрэглэгч нэг дороос мэддэг болгоно.
+- **Файл:** `frontend/components/calls/CallsFilter.tsx`
+- **Branch:** `frontend/calls-active-filter-count`
+- **PR title:** `feat(frontend): show active calls filter count`
 
 ### Хийх зүйл
 
-1. `value.q`, `value.days`, `value.unanswered` гурваас хэд нь идэвхтэй байгааг тоолдог `activeCount` утга гаргана.
-2. `activeCount > 0` үед `Цэвэрлэх` холбоосын өмнө дараах текстийг харуулна:
+- `q`, `days`, `unanswered` утгуудаас хэд нь идэвхтэйг `activeCount`-оор тоолно.
+- `activeCount > 0` үед `Цэвэрлэх` холбоосын өмнө `1 шүүлтүүр идэвхтэй` гэх текст харуулна.
+- Тоо нь сонгосон шүүлтүүрээс автоматаар шинэчлэгдэнэ.
+- Одоогийн URL query болон цэвэрлэх ажиллагааг өөрчлөхгүй.
 
-```text
-2 шүүлтүүр идэвхтэй
-```
+### Шалгах
 
-3. Тоо нь гараар бичигдэхгүй, сонгосон шүүлтүүрээс автоматаар гарна.
-4. Текстэд `text-sm text-brand` зэрэг одоо байгаа theme class ашиглана.
-5. Одоо байгаа `active` boolean-ийг `activeCount > 0` хэлбэрээр гаргаж болно.
-
-Идэвхтэйд тооцох дүрэм:
-
-- Хайлтын текст хоосон биш бол 1.
-- Хугацаа сонгосон бол 1.
-- `Зөвхөн хариулж чадаагүй` сонгосон бол 1.
-
-### Дууссан гэж үзэх нөхцөл
-
-- Ямар ч шүүлтүүргүй үед тоо болон `Цэвэрлэх` харагдахгүй.
-- Нэг шүүлтүүр сонгоход `1 шүүлтүүр идэвхтэй` гэж харагдана.
-- Гурвууланг сонгоход `3 шүүлтүүр идэвхтэй` гэж харагдана.
+- Шүүлтүүргүй үед тоо болон `Цэвэрлэх` харагдахгүй.
+- 1–3 шүүлтүүр сонгоход зөв тоо харагдана.
 - `Цэвэрлэх` дарахад бүх шүүлтүүр болон тоо арилна.
-- URL-д шүүлтүүр хадгалагддаг одоогийн ажиллагаа эвдэхгүй.
 - `bun run lint` амжилттай ажиллана.
 
 ---
 
-## PR 4 — Setup banner-ийн mobile товчийг бүтэн өргөн болгох
+## PR 4 — Setup banner-ийн mobile байрлал
 
-**Өөрчлөх файл:** `frontend/components/dashboard/SetupBanner.tsx`
-
-**Branch:** `frontend/setup-banner-mobile`
-
-**PR title:** `fix(frontend): improve setup banner on mobile`
-
-### Яагаад хийх вэ?
-
-Нарийн дэлгэц дээр тайлбар болон `Тохируулах →` холбоос шахалдаж харагдаж болно. Mobile үед товчийг тусдаа мөрөнд, бүтэн өргөнөөр харуулна.
+- **Файл:** `frontend/components/dashboard/SetupBanner.tsx`
+- **Branch:** `frontend/setup-banner-mobile`
+- **PR title:** `fix(frontend): improve setup banner on mobile`
 
 ### Хийх зүйл
 
-1. Banner-ийн доторх wrapper-ийг mobile үед босоо, `sm`-ээс дээш хөндлөн байрлалтай болгоно.
-2. `Тохируулах →` холбоосыг mobile үед бүтэн өргөн, текстийг голлуулж харуулна.
-3. `sm`-ээс дээш дэлгэц дээр товч өмнөх шигээ өөрийн хэмжээгээр баруун талд байна.
-4. Зөвхөн Tailwind class өөрчилнө. Текст, route болон component-ийн бүтэц/logic-ийг өөрчлөх шаардлагагүй.
+- Banner-ийн wrapper-ийг mobile үед босоо, `sm`-ээс дээш хөндлөн байрлалтай болгоно (`flex-col sm:flex-row`).
+- `Тохируулах →` холбоосыг mobile үед бүтэн өргөн, голлуулсан болгоно (`w-full text-center sm:w-auto`).
+- Текст, route, өнгө болон component logic-ийг өөрчлөхгүй.
 
-Ашиглаж болох class-ууд:
+### Шалгах
 
-```text
-flex-col sm:flex-row
-w-full text-center sm:w-auto
-```
-
-### Дууссан гэж үзэх нөхцөл
-
-- Mobile өргөнд тайлбарын доор бүтэн өргөн товч харагдана.
-- Том дэлгэц дээр тайлбар зүүн, товч баруун талд хэвээр байна.
-- `Тохируулах →` дарахад `/setup` руу орно.
-- Одоогийн өнгө, хүрээ, зайны загвар хадгалагдана.
+- Mobile дээр товч тайлбарын доор бүтэн өргөн харагдана.
+- Том дэлгэц дээр тайлбар зүүн, товч баруун талд байна.
+- Товч `/setup` руу зөв шилжинэ.
 - `bun run lint` амжилттай ажиллана.
 
 ---
 
-## PR description-ийн загвар
+## PR description
 
 ```markdown
 ## Юу хийсэн
@@ -175,7 +98,7 @@ w-full text-center sm:w-auto
 - [ ] Browser дээр гараар шалгасан
 
 ## Screenshot
-<!-- Өөрчлөлт харагдаж байгаа screenshot оруулна. -->
+<!-- Өөрчлөлт харагдах screenshot оруулна. -->
 ```
 
-Анхаарах зүйл: format хийх нэрээр бусад файлд өөрчлөлт оруулахгүй. Backend-ийн файл, API endpoint, JSON өгөгдлийг өөрчлөхгүй.
+> Анхаарах: Нэг PR-д зөвхөн тухайн ажлын файлыг өөрчилж, бусад өөрчлөлтийг хамт оруулахгүй.
