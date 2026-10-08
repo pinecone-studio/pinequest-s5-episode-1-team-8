@@ -5,7 +5,7 @@ import { apiGet } from "@/lib/api";
 import { requireUser } from "@/lib/session";
 import type { TrainingAnswers, UnansweredReview } from "@/lib/types";
 
-export const metadata: Metadata = { title: "Хариулж чадаагүй" };
+export const metadata: Metadata = { title: "Хариулаагүй асуулт" };
 
 export default async function UnansweredPage() {
   await requireUser();
@@ -16,8 +16,8 @@ export default async function UnansweredPage() {
   return (
     <>
       <PageHeader
-        title="Хариулж чадаагүй"
-        sub="Бодит дуудлагын асуултыг AI одоо хэрхэн хариулахыг дахин шалгана. Шийдэгдээгүй асуултад байгаа хариултыг заах эсвэл шинэ хариулт бичээд аудио, сургалтыг хамтад нь бэлдэнэ."
+        title="Хариулаагүй асуулт"
+        sub="AI туслах хариулж чадаагүй асуултад зөв хариултыг сонгох эсвэл шинээр бичнэ."
       />
       <UnansweredManager initial={review} answers={answers} />
     </>

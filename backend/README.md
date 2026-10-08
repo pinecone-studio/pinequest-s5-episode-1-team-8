@@ -142,7 +142,11 @@ AI engine-ийн эх код `backend/ai_runtime/`, байгууллагын м�
 
 ```bash
 .venv/bin/python backend/test_system.py     # -> ТЭНЦЛЭЭ ✓
+.venv/bin/python backend/test_ai_evaluation.py --validate-only  # 30 асуултын бүтцийг шалгана
+.venv/bin/python backend/test_ai_evaluation.py                  # бодит RAG/AI хариултыг шалгана
 .venv/bin/python backend/test_live.py       # хуучин runtime нийцлийн integration test
 ```
 
-Түр хавтсанд ажиллана — жинхэнэ хэрэглэгчдэд хүрэхгүй.
+AI evaluation нь `backend/tests/fixtures/pinecone_eval_questions.json` дахь тогтмол 30 асуултыг
+ашиглана. TTS/ElevenLabs дуудахгүй, гаднын SIM-TRUNK хавтас шаардахгүй. Тестүүд түр хавтсанд
+ажиллана — жинхэнэ хэрэглэгчдэд хүрэхгүй.
