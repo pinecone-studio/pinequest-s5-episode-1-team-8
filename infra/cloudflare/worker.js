@@ -1,6 +1,6 @@
-// AI ресепшний тогтмол хаяг: https://sim-trunk.<account>.workers.dev -> iMac дээрх систем (Cloudflare Tunnel).
-// Систем өөрөө (Whisper, bge-m3, F5 ~8GB) Worker-т багтахгүй тул iMac дээрээ ажиллана; Worker зөвхөн дамжуулна.
-// Quick tunnel-ийн хаяг дахин асах бүрт солигддог -> scripts/tunnel.sh шинэ хаягийг KV-ийн "origin"-д бичнэ.
+// AI ресепшний (pinequest, баг 8) тогтмол хаяг: https://pinequest-team-8.<account>.workers.dev -> iMac дээрх систем (Cloudflare Tunnel).
+// Систем өөрөө (Whisper, bge-m3, сонгогч) Worker-т багтахгүй тул iMac дээрээ ажиллана; Worker зөвхөн дамжуулна.
+// Quick tunnel-ийн хаяг дахин асах бүрт солигддог -> backend/ai_runtime/scripts/tunnel.py шинэ хаягийг KV-ийн "origin"-д бичнэ.
 // PROXY_SECRET: залгагчийн жинхэнэ IP-г (x-client-ip) вэб зөвхөн энэ нууцтай үед итгэнэ (нэвтрэлтийн хязгаарлалт).
 
 const OFFLINE = `<!doctype html><html lang="mn"><head><meta charset="utf-8">

@@ -1,5 +1,5 @@
 {
-  "name": "sim-trunk-worker",
+  "name": "pinequest-team-8-worker",
   "private": true,
   "description": "AI ресепшний тогтмол хаяг (Cloudflare Worker -> iMac tunnel)",
   "scripts": { "deploy": "wrangler deploy" },
