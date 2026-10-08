@@ -444,7 +444,10 @@ class Call:
                         await self.play(*self.router.clip(clip))
                 spoken.append(" ".join(parts))
             else:
-                clip = self.router.meta["account"][key]
+                clip = self.router.meta["account"].get(key)
+                if not clip:                        # «Аудио бэлдэх»-ээс өмнөх индекст шинэ хэллэг алга
+                    print(f"  [анхаар] '{key}' хэллэгийн аудио алга — «Аудио бэлдэх» дарна уу")
+                    continue
                 await self.play(*self.router.clip(clip))
                 spoken.append(clip["text"])
         reply = " ".join(spoken)
@@ -462,7 +465,7 @@ class Call:
 
     def notify_change(self, lead: dict, ev: dict):
         """AI-ийн хийсэн өөрчлөлтийг ажилтанд (Telegram). Ажилтан гараар юу ч хийх шаардлагагүй."""
-        what = "утасны дугаар" if ev["field"] == "phone" else "уулзалтын цаг"
+        what = {"phone": "утасны дугаар", "status": "бүртгэл", "attendance": "ирэх эсэх"}.get(ev["field"], "уулзалтын цаг")
         new = ev["new"] or "цуцалсан"
         who = "ажилтан утсаар өөрчиллөө" if ev.get("staff") else "залгагч өөрөө утсаар өөрчиллөө"
         msg = (f"{self.tenant.config().get('name', self.tenant.slug)}: {lead.get('name') or 'Бүртгэл'} — "

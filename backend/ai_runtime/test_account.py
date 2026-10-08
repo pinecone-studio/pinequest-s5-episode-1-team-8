@@ -210,12 +210,65 @@ def main(embed):
         check(f"ажилтны команд '{text}' -> {want}", got == want, str(got))
 
 
+
+def web_parity(embed):
+    """#108-ийн дараа: утасны AI вэбтэй НЭГ people.py ашиглаж, нэг нэгнийхээ бичсэнийг эвдэхгүй."""
+    import json as _json
+    from datetime import timedelta
+    print("\n[10] Утас ба вэб нэг логик (backend/people.py)")
+    check("people = backend/people.py (хуулбар биш)", people.__file__.endswith(os.path.join("backend", "people.py"))
+          and hasattr(people, "cancel_registration") and people.EMBED_ON_WRITE is False, people.__file__)
+    now = datetime(2026, 10, 12, 9, 0, tzinfo=people.TZ)
+    tdir = make_tenant()
+    path = people.db_path(tdir)
+    ev_at = now + timedelta(days=3)
+    st = _json.load(open(os.path.join(tdir, "data", "settings.json")))
+    st["events"] = [{"name": "AI Hackathon эвент", "at": people.fmt(ev_at.replace(hour=10, minute=0))}]
+    _json.dump(st, open(os.path.join(tdir, "data", "settings.json"), "w"))
+    a = db.add_lead("c1", "Номин", "88990011", None, None, "lead", path=path, course="AI Hackathon эвент")
+    b = db.add_lead("c2", "Номин", "88990011", None, None, "lead", path=path, course="Bootcamp хөтөлбөр")
+    people.sync_event_reminders(tdir, now)
+    items = _json.load(open(people.reminders_path(tdir)))["items"]
+    items[str(a)]["attendance"] = True
+    _json.dump({"items": items}, open(people.reminders_path(tdir), "w"))
+    docs = {d["field"] for d in people.docs(tdir, a)}
+    check("утасны AI баримт шинэчлэхэд «ирэх эсэх» устахгүй", "attendance" in docs, sorted(docs))
+    check("эвентийг уулзалт гэж андуурахгүй", people.appointment(tdir, a) is None)
+    check("эвентийн цаг уулзалтын сул цагийг эзлэхгүй", not people.taken(tdir))
+    search = acct.Search(embed)
+    code = people.ensure_code(tdir, a)
+    flow = acct.AccountFlow(tdir, search, None, "call-p", now=now)
+    flow.handle_dtmf(code)
+    keys = flow.handle("Ирнэ гэж бүртгэгдсэн үү")
+    check("«Ирнэ гэж бүртгэгдсэн үү» -> attendance_yes", keys[0] == "attendance_yes", keys)
+    keys = flow.handle_dtmf("4")
+    check("цэс 4 -> бүртгэл цуцлах уу", keys == ["ask_cancel_reg"] and flow.state == "reg_cancel_confirm", keys)
+    keys = flow.handle_dtmf("1")
+    check("утсаар бүртгэл цуцлагдлаа", keys[0] == "reg_cancel_done" and people.lead(tdir, a)["status"] == "canceled"
+          and flow.events[-1]["field"] == "status", keys)
+    check("эвентийн сануулга цуцлагдсан, Bootcamp бүртгэл хэвээр",
+          _json.load(open(people.reminders_path(tdir)))["items"][str(a)]["status"] == "canceled"
+          and people.lead(tdir, b)["status"] == "new")
+    flow = acct.AccountFlow(tdir, search, None, "call-q", now=now)
+    flow.handle_dtmf(people.ensure_code(tdir, b))
+    flow.handle("Эвентэд очиж чадахгүй боллоо")
+    check("«очиж чадахгүй боллоо» -> бүртгэл цуцлах", flow.state == "reg_cancel_confirm")
+    flow.handle_dtmf("2")
+    flow.handle_dtmf("1")
+    flow.handle_dtmf("80405060")
+    flow.handle_dtmf("1")
+    check("утсаар дугаар солиход тэр хүний бүх бүртгэл шинэчлэгдэнэ (вэбтэй ижил)",
+          people.lead(tdir, a)["phone"] == "80405060" and people.lead(tdir, b)["phone"] == "80405060")
+
+
 if __name__ == "__main__":
     if "--real" in sys.argv:
         from embed import Embedder
         emb = Embedder()
         main(emb.query)
+        web_parity(emb.query)
     else:
         main(fake_embed)
+        web_parity(fake_embed)
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)
