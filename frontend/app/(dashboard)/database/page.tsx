@@ -27,24 +27,22 @@ export default async function DatabasePage({ searchParams }: PageProps<"/databas
     <>
       <PageHeader
         title="Өгөгдлийн сан"
-        sub={`Байгууллагын бүх өгөгдөл нэг SQLite файлд: ${db.file} (${Math.max(1, Math.round(db.bytes / 1024))} KB). Байгууллагын RAG, хүн бүрийн хувийн RAG (вектортой), бүртгэл, өөрчлөлт, дуудлага. Зөвхөн харах — өөрчлөлтийг AI туслах, сануулгын дуудлага хийнэ.`}
+        sub="Байгууллагын бүртгэл, дуудлага болон мэдлэгийн сангийн мэдээллийг хүснэгтээр харах."
       />
       <Card className="mb-5">
         <DataInfo info={info} />
       </Card>
-      <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <nav className="space-y-2">
+      <div className="space-y-4">
+        <nav aria-label="Өгөгдлийн сангийн хүснэгтүүд" className="flex flex-wrap justify-center gap-2">
           {db.tables.map((x) => (
             <Link
               key={x.name}
               href={`/database?table=${x.name}`}
-              className={`block rounded-[12px] px-4 py-3 ${x.name === table ? "bg-panel-2 ring-[1.5px] ring-brand" : "bg-panel hover:bg-panel-2"}`}
+              aria-current={x.name === table ? "page" : undefined}
+              className={`inline-flex min-w-[140px] items-center justify-center gap-2 rounded-[10px] border px-4 py-2.5 transition-colors ${x.name === table ? "border-brand bg-panel-2 text-fg" : "border-line bg-panel text-muted hover:border-line-2 hover:bg-panel-2 hover:text-fg"}`}
             >
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="font-mono text-sm font-semibold">{x.name}</span>
-                <span className="font-mono text-[13px] text-muted">{x.rows}</span>
-              </div>
-              {x.about && <div className="mt-0.5 text-[13px] text-muted">{x.about}</div>}
+              <span className="font-mono text-sm font-semibold">{x.name}</span>
+              <span className={`font-mono text-xs ${x.name === table ? "text-brand" : "text-muted"}`}>{x.rows}</span>
             </Link>
           ))}
         </nav>
@@ -52,7 +50,8 @@ export default async function DatabasePage({ searchParams }: PageProps<"/databas
           {rows ? (
             <>
               <h2 className="mb-1 font-mono text-lg font-semibold">{rows.table}</h2>
-              {rows.about && <p className="mb-4 text-sm text-muted">{rows.about}</p>}
+              {rows.about && <p className="mb-1 text-sm text-muted">{rows.about}</p>}
+              <p className="mb-4 text-xs text-dim">{rows.columns.length} багана · {rows.total} мөр</p>
               <DbTableView data={rows} q={q} />
             </>
           ) : (
