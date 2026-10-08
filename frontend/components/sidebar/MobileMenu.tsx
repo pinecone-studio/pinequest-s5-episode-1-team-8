@@ -1,11 +1,27 @@
 "use client";
 
-import { useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 
 /** Утсан дээр (md-ээс нарийн) цэсийг ☰ товчоор нээж хаана. Компьютер дээр үргэлж харагдана.
  *  header — лого (үргэлж харагдана), children — цэс, хэрэглэгчийн карт */
 export function MobileMenu({ header, children }: { header: ReactNode; children: ReactNode }) {
   const [open, setOpen] = useState(false);
+
+  // Escape товчоор цэсийг хаах логик
+  useEffect(() => {
+    if (!open) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
 
   // Цэсний холбоос дарахад утсан дээр цэс хаагдана (шинэ хуудас харагдана)
   function closeOnLink(e: MouseEvent) {
