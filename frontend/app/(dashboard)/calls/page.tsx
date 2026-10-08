@@ -7,7 +7,7 @@ import { apiGet } from "@/lib/api";
 import { requireUser } from "@/lib/session";
 import type { Call } from "@/lib/types";
 
-export const metadata: Metadata = { title: "Яриа" };
+export const metadata: Metadata = { title: "Ярианууд" };
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
@@ -28,7 +28,7 @@ export default async function CallsPage({ searchParams }: PageProps<"/calls">) {
 
   return (
     <>
-      <PageHeader title="Яриа" sub="Дуудлага бүр дээр дарж залгагч болон AI-ийн яриаг харна." />
+      <PageHeader title="Ярианууд" sub="Дуудлага дээр дарж залгагч болон AI туслахын яриаг харна." />
       <CallsFilter value={value} />
       <Card>
         {filtered && !calls.length ? <EmptyState>Шүүлтүүрт тохирох дуудлага алга.</EmptyState> : <CallsTable calls={calls} />}

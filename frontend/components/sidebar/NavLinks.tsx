@@ -12,21 +12,34 @@ export function NavLinks({ isAdmin, status }: { isAdmin: boolean; status: Status
   return (
     <nav>
       {NAV.map((group, i) => (
-        <div key={group.title ?? i}>
-          {group.title && (
+        <NavGroup key={group.title ?? i} group={group} isAdmin={isAdmin} pathname={pathname}
+          badges={badges} />
+      ))}
+    </nav>
+  );
+}
+
+function NavGroup({ group, isAdmin, pathname, badges }: {
+  group: (typeof NAV)[number];
+  isAdmin: boolean;
+  pathname: string;
+  badges: Status | null;
+}) {
+  const items = group.items.filter((item) => !item.adminOnly || isAdmin);
+  if (!items.length) return null;
+
+  return (
+    <div>
+      {group.title && (
             <div className="px-4 pt-[22px] pb-2.5 font-mono text-[11px] leading-none font-medium tracking-[.14em] text-muted uppercase">
               {group.title}
             </div>
-          )}
-          {group.items
-            .filter((item) => !item.adminOnly || isAdmin)
-            .map((item) => (
-              <NavLink key={item.href} item={item} active={isActive(pathname, item.href)}
-                count={item.badge && badges ? badges[item.badge] : 0} />
-            ))}
-        </div>
+      )}
+      {items.map((item) => (
+        <NavLink key={item.href} item={item} active={isActive(pathname, item.href)}
+          count={item.badge && badges ? badges[item.badge] : 0} />
       ))}
-    </nav>
+    </div>
   );
 }
 
