@@ -1099,6 +1099,21 @@ def test_auto_build():
             os.environ["SIM_TRUNK_DIR"] = env
 
 
+def test_runtime_race():
+    print("\n[23] Утасны AI, SIP зэрэг асахад runtime хавтас мөргөлдөхгүй")
+    import subprocess
+    here = os.path.dirname(os.path.abspath(__file__))
+    code = "import knowledge_jobs; knowledge_jobs.runtime_root()"
+    bad = 0
+    for _ in range(5):
+        env = {**os.environ, "DATA_DIR": tempfile.mkdtemp(prefix="pc_race_"), "BACKUP_SCHEDULER": "0"}
+        env.pop("SIM_TRUNK_DIR", None)
+        procs = [subprocess.Popen([sys.executable, "-c", code], cwd=here, env=env, stderr=subprocess.PIPE, text=True)
+                 for _ in range(4)]
+        bad += sum(p.wait() != 0 for p in procs)
+    check("4 процесс зэрэг runtime_root() дуудахад бүгд амжилттай (5 удаа)", bad == 0, f"{bad} унасан")
+
+
 if __name__ == "__main__":
     test_login()
     test_signup()
@@ -1121,5 +1136,6 @@ if __name__ == "__main__":
     test_auto_build()
     test_personal_rag()
     test_build_cancel()
+    test_runtime_race()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)

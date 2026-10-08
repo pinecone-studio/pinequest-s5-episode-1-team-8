@@ -82,6 +82,14 @@ def launchctl(args: list[str], log) -> int:
     return subprocess.call(["launchctl", *args], stdout=log, stderr=subprocess.STDOUT)
 
 
+def _symlink(target: str, link: str):
+    """Утасны AI, SIP хоёр зэрэг асахад нэг холбоосыг давхар үүсгэж болно -> аль нэг нь үүсгэсэн бол хангалттай."""
+    try:
+        os.symlink(target, link, target_is_directory=os.path.isdir(target))
+    except FileExistsError:
+        pass
+
+
 def runtime_root() -> str:
     """Дотоод AI кодыг DATA_DIR-тэй холбоод тусгаарлагдсан runtime үүсгэнэ.
 
@@ -100,12 +108,12 @@ def runtime_root() -> str:
         if os.path.islink(link) and os.readlink(link) != target:   # SIM_TRUNK_DIR солигдсон -> шинэ рүү заана
             os.unlink(link)
         if not os.path.lexists(link):
-            os.symlink(target, link, target_is_directory=os.path.isdir(target))
+            _symlink(target, link)
     for name, target in (("tenants", os.path.join(DATA_DIR, "tenants")), ("data", DATA_DIR)):
         link = os.path.join(runtime, name)
         os.makedirs(target, exist_ok=True)
         if not os.path.lexists(link):
-            os.symlink(target, link, target_is_directory=True)
+            _symlink(target, link)
     voices = os.path.join(runtime, "voices")       # Oron-ийн лавлах хоолой (custom.*) ашиглахгүй
     if os.path.islink(voices):
         os.unlink(voices)
@@ -117,7 +125,7 @@ def runtime_root() -> str:
                 continue
             link = os.path.join(voices, name)
             if not os.path.lexists(link):
-                os.symlink(os.path.join(source_voices, name), link)
+                _symlink(os.path.join(source_voices, name), link)
     os.makedirs(os.path.join(runtime, "logs"), exist_ok=True)
     return runtime
 
