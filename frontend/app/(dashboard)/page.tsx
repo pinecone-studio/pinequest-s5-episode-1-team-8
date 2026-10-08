@@ -41,6 +41,7 @@ export default async function DashboardPage() {
         }
         actions={
           <>
+            <Link href="/guide" className="text-muted hover:underline">📖 Заавар</Link>
             <Link href="/knowledge" className="font-bold hover:underline">Мэдээлэл нэмэх →</Link>
             <Link
               href="/unanswered"
