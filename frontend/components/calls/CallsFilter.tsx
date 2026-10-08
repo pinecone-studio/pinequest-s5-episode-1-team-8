@@ -10,7 +10,15 @@ export type CallsQuery = { q: string; days: string; unanswered: boolean };
 /** Яриа шүүх: дугаар/үгээр хайх, хугацаа, зөвхөн хариулж чадаагүй. URL-д хадгалагдана (?q=...&days=7) —
  *  хуваалцаж, буцаж ирэхэд хэвээр. JS-гүй ч ажиллана. */
 export function CallsFilter({ value }: { value: CallsQuery }) {
-  const active = Boolean(value.q || value.days || value.unanswered);
+  // Идэвхтэй шүүлтүүрийн тоог тооцоолох
+  const activeCount = [
+    Boolean(value.q),
+    Boolean(value.days),
+    Boolean(value.unanswered),
+  ].filter(Boolean).length;
+
+  const active = activeCount > 0;
+
   return (
     <Form action="/calls" className="mb-[18px] flex flex-wrap items-center gap-3">
       <input
@@ -34,7 +42,10 @@ export function CallsFilter({ value }: { value: CallsQuery }) {
       </label>
       <Button type="submit">Шүүх</Button>
       {active && (
-        <Link href="/calls" className="text-sm text-muted hover:text-fg hover:underline">Цэвэрлэх</Link>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-brand">{activeCount} шүүлтүүр идэвхтэй</span>
+          <Link href="/calls" className="text-sm text-muted hover:text-fg hover:underline">Цэвэрлэх</Link>
+        </div>
       )}
     </Form>
   );
