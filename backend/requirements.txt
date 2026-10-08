@@ -3,10 +3,23 @@ fastapi==0.142.2
 uvicorn==0.54.0
 httpx==0.28.1            # Telegram мэдэгдэл, тест (fastapi.testclient)
 python-multipart==0.0.20 # файл upload (мэдээлэл, хоолойн бичлэг)
-# Аудио, мэдээлэл боловсруулалт — SIM-TRUNK-тэй яг ижил хувилбар, ижил алгоритм
+# Аудио, мэдээлэл боловсруулалт
 numpy==2.5.3
 scipy==1.18.1            # resample_poly (бичлэг 24kHz, утасны чанар 8kHz)
 soundfile==0.14.0
 pypdf==6.19.0            # .pdf мэдээлэл
 python-docx==1.2.0       # .docx мэдээлэл
 sounddevice==0.5.6       # гарах дуудлага: iMac + iPhone (BlackHole)
+# Дотоод AI runtime: RAG embedding, STT, selector, VAD, TTS
+torch==2.14.1
+torchaudio==2.11.0
+transformers==5.18.0
+sentence-transformers==6.1.0
+scikit-learn==1.9.1
+safetensors==0.8.0
+huggingface-hub==1.33.0
+mlx==0.32.3
+mlx-whisper==0.4.3
+silero-vad==6.2.3
+f5-tts==1.1.22
+oron-tts @ git+https://github.com/btseee/oron-tts.git

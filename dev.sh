@@ -2,17 +2,15 @@
 # Backend (http://127.0.0.1:8100) + frontend (http://localhost:3000)-ийг зэрэг асаана.
 # Ctrl+C дарахад хоёулаа унтарна.
 #
-#   ./dev.sh          # өөрийн туршилтын өгөгдөл (backend/data)
-#   ./dev.sh --sim    # SIM-TRUNK-ийн БОДИТ байгууллагууд дээр: дуудлага, мэдээлэл, аудио утасны системтэй нэг
+#   ./dev.sh          # бүх код, өгөгдөл энэ repository дотроос ажиллана
 set -u
 cd "$(dirname "$0")"
 if [ "${1:-}" = "--sim" ]; then
-  export SIM_TRUNK_LIVE=1
-  if [ ! -d "${SIM_TRUNK_DIR:-../SIM-TRUNK}/tenants" ]; then
-    echo "SIM-TRUNK олдсонгүй: ${SIM_TRUNK_DIR:-../SIM-TRUNK} (SIM_TRUNK_DIR=... гэж зааж болно)"
-    exit 1
-  fi
+  echo "--sim сонголт хэрэггүй болсон. Зүгээр ./dev.sh ажиллуулна уу."
+  exit 2
 fi
+# Хуучин shell session-д үлдсэн тохиргоо гаднын хавтас руу буцааж заахаас хамгаална.
+unset SIM_TRUNK_LIVE SIM_TRUNK_DIR
 
 if [ ! -x .venv/bin/python ]; then
   echo "Python орчин алга. Эхлээд нэг удаа:"

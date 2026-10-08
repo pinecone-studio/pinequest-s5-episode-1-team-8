@@ -11,23 +11,31 @@ uv pip install --python .venv/bin/python -r backend/requirements.txt
 .venv/bin/python backend/app.py        # http://127.0.0.1:8100
 ```
 
+Утасны AI үйлчилгээг тусдаа процессоор асаах бол:
+
+```bash
+.venv/bin/python backend/run_ai.py phone   # AudioSocket AI, 9092
+.venv/bin/python backend/run_ai.py sip     # SIP bridge, 5060/UDP
+```
+
 Анх асахад жишиг байгууллага (Pinecone Academy) ба `admin` хэрэглэгч санамсаргүй нууц үгтэй үүсч, терминалд **нэг удаа** хэвлэгдэнэ.
 Нууц үг солих: `.venv/bin/python backend/accounts.py admin admin`
 
 Жишээ дуудлага үүсгэх (вэбийг турших): `.venv/bin/python backend/demo_data.py`
 
-Порт 8100 (SIM-TRUNK-ийн вэб 8000 дээр ажилладаг тул давхцахгүй). Солих: `API_PORT=...`
+Порт 8100. Солих: `API_PORT=...`
 
-### SIM-TRUNK-ийн бодит өгөгдөл дээр (`./dev.sh --sim`)
+### AI engine ба өгөгдөл
 
-`SIM_TRUNK_LIVE=1` үед байгууллагуудыг `SIM-TRUNK/tenants`-аас шууд уншиж бичнэ — утасны систем (sip_bridge,
-phone_server) яг эдгээрийг ашигладаг тул **бодит дуудлага, бүртгэл шууд харагдаж**, мэдээлэл/FAQ/хоолойн өөрчлөлт
-утсанд хэрэгжинэ. SIM-TRUNK-ийн вэбийн (8000) оронд ажиллана — хоёуланг зэрэг бүү ашигла (бэлдэх ажлын дараалал тусдаа).
+AI engine-ийн эх код `backend/ai_runtime/`, байгууллагын мэдээлэл, индекс,
+аудио болон нууц түлхүүр `backend/data/` дотор байна. Тусдаа repository эсвэл
+зэрэгцээ хавтас шаардлагагүй.
 
-- ElevenLabs түлхүүр, TTS кэш: `SIM-TRUNK/data/`
-- "Аудио бэлдэх", "Аудиог шинэчлэх", англи аудио: AI серверийг түр зогсооно (8GB; SIM-TRUNK-тэй ижил). Болиулах: `BUILD_STOP_AI=0`
-- Хэрэглэгчид (`accounts.db`) манай `backend/data`-д хэвээр
-- SIM-TRUNK өөр газар бол: `SIM_TRUNK_DIR=/зам/SIM-TRUNK ./dev.sh --sim`
+- ElevenLabs түлхүүр: `backend/data/elevenlabs_key`
+- TTS кэш: `backend/data/tts_cache/`
+- Байгууллагууд: `backend/data/tenants/`
+- "Аудио бэлдэх", "Аудиог шинэчлэх", англи аудио нь санах ой багатай
+  төхөөрөмж дээр AI серверийг түр зогсоож болно. Болиулах: `BUILD_STOP_AI=0`
 
 ## API
 
@@ -51,7 +59,7 @@ phone_server) яг эдгээрийг ашигладаг тул **бодит д�
 | `GET /api/leads` | Бүртгэл: бүртгүүлэх / ажилтантай ярих хүсэлтүүд |
 | `PATCH /api/leads/{id}` `{"status"?, "notes"?}` | Төлөв (`new`, `contacted`, `done`), тэмдэглэл |
 | `GET /api/unanswered?limit=200` | AI хариулж чадаагүй асуултууд (дахин асуусан, тодруулсан, ажилтанд шилжүүлсэн) |
-| `GET /api/unanswered/review` | Асуултыг ажиллаж буй SIM-TRUNK AI-аар дахин шалгаж, шийдэгдсэн/чимээ/шийдэх ангилал болон ойр хариултын санал авна |
+| `GET /api/unanswered/review` | Асуултыг ажиллаж буй AI-аар дахин шалгаж, шийдэгдсэн/чимээ/шийдэх ангилал болон ойр хариултын санал авна |
 | `POST /api/unanswered/hide` `{"q"}` | Шийдэгдсэн эсвэл чимээ асуултыг ажлын жагсаалтаас нууна (дуудлагын лог хэвээр) |
 | `POST /api/unanswered/teach` `{"q", "answer"}` | Байгаа FAQ/мэдээллийг зөв хариулт болгон заана |
 | `POST /api/unanswered/answer` `{"q", "answer", "questions"}` | Байгууллагын бичсэн баталгаатай шинэ хариултыг давхардалгүй FAQ болгоно |
@@ -92,10 +100,12 @@ phone_server) яг эдгээрийг ашигладаг тул **бодит д�
 | `routes/unanswered.py` | Хариулж чадаагүй асуултууд |
 | `routes/status.py` | AI ресепшний төлөв |
 | `routes/admin.py` | Платформын admin: байгууллагууд, эрх, сольж харах |
-| `routes/eleven.py`, `eleven.py` | ElevenLabs хоолой (Oron-гүй): түлхүүр, хоолой сонгох, жишээ аудио (`eleven_samples.py` SIM-TRUNK-ийн орчинд) |
-| `routes/voice.py`, `audio_files.py` | Хоолой: өгүүлбэрүүд, толь, өөрийн бичлэг (`tenants/<slug>/recordings/<hash>.wav`, SIM-TRUNK-тэй ижил) |
+| `routes/eleven.py`, `eleven.py` | ElevenLabs хоолой: түлхүүр, хоолой сонгох, жишээ аудио |
+| `routes/voice.py`, `audio_files.py` | Хоолой: өгүүлбэрүүд, толь, өөрийн бичлэг (`tenants/<slug>/recordings/<hash>.wav`) |
 | `demo_data.py` | Жишээ дуудлага, бүртгэл үүсгэх (утасны AI бэлэн болохоос өмнө вэбийг турших) |
-| `sim_runner.py` | SIM-TRUNK-ийн скриптийг (ingest, TTS ...) манай байгууллагын хавтсаар ажиллуулна — "Аудио бэлдэх" |
+| `ai_runtime/` | Утасны AI, RAG, STT/TTS, selector сургалт, SIP bridge-ийн дотоод код |
+| `sim_runner.py` | AI runtime-ийн скриптийг байгууллагын зөв data хавтсаар ажиллуулна |
+| `run_ai.py` | Дотоод phone server эсвэл SIP bridge-ийг асаана |
 | `deps.py` | `current_user`, `current_tenant` |
 | `config.py` | `DATA_DIR` (анхдагч `backend/data/`) |
 | `accounts.py` | Хэрэглэгчид (SQLite `backend/data/accounts.db`), нууц үгийн хэш, session cookie |
@@ -131,7 +141,7 @@ phone_server) яг эдгээрийг ашигладаг тул **бодит д�
 
 ```bash
 .venv/bin/python backend/test_system.py     # -> ТЭНЦЛЭЭ ✓
-.venv/bin/python backend/test_live.py       # бодит горим (хуурамч SIM-TRUNK дээр)
+.venv/bin/python backend/test_live.py       # хуучин runtime нийцлийн integration test
 ```
 
 Түр хавтсанд ажиллана — жинхэнэ хэрэглэгчдэд хүрэхгүй.

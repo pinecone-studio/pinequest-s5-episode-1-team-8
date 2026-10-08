@@ -1,6 +1,6 @@
 """
-ElevenLabs-аар жишээ аудио үүсгэнэ. SIM-TRUNK-ийн орчинд sim_runner.py-ээр ажиллана (backend/eleven.py дуудна):
-SIM-TRUNK-ийн ElevenTTS тоо, цагийг үгээр болгож, дуудлагын толийг хэрэглээд дууны түвшинг тэнцүүлдэг —
+ElevenLabs-аар жишээ аудио үүсгэнэ. Дотоод AI runtime-д sim_runner.py-ээр ажиллана (backend/eleven.py дуудна):
+AI runtime-ийн ElevenTTS тоо, цагийг үгээр болгож, дуудлагын толийг хэрэглээд дууны түвшинг тэнцүүлдэг —
 "Аудио бэлдэх"-тэй яг адил аудио гарч, бэлдэх үед ElevenLabs-ийг дахин дуудахгүй.
 
   stdin:  {"voice": "<voice_id>", "items": [{"hash": "...", "text": "..."}]}

@@ -1,0 +1,13 @@
+# AI ресепшний тогтмол хаяг: https://sim-trunk.<account>.workers.dev (deploy: cd cloudflare && npx wrangler deploy)
+name = "sim-trunk"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+# "origin" = одоогийн quick tunnel хаяг (scripts/tunnel.sh бичнэ)
+[[kv_namespaces]]
+binding = "ORIGIN"
+id = "56924180071342838e54fd46983ff278"
+
+[observability]
+enabled = true

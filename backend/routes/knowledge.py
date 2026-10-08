@@ -1,4 +1,4 @@
-"""Байгууллагын RAG мэдээлэл, бэлдсэн өгүүлбэр/аудио болон SIM-TRUNK build job."""
+"""Байгууллагын RAG мэдээлэл, бэлдсэн өгүүлбэр/аудио болон AI build job."""
 import json
 import hashlib
 import os
@@ -127,9 +127,9 @@ def build_estimate(t: Tenant = Depends(current_tenant)):
     Ойролцоо: бэлдэх үед мэдээллээс шинэ FAQ/сэдэв үүсвэл нэмэгдэж болно."""
     import subprocess
     from config import DATA_DIR, TENANTS_DIR
-    python = os.path.join(knowledge_jobs.sim_root(), ".venv", "bin", "python")
+    python = knowledge_jobs.python_executable()
     if not os.path.isfile(python):
-        raise HTTPException(503, "SIM-TRUNK орчин олдсонгүй")
+        raise HTTPException(503, "AI Python орчин олдсонгүй")
     root = knowledge_jobs.runtime_root()
     env = {**os.environ, "DATA_DIR": DATA_DIR, "TENANT": t.slug, "HF_HUB_OFFLINE": "1"}
     try:
@@ -152,7 +152,7 @@ def fact_audio(fact_hash: str, t: Tenant = Depends(current_tenant)):
         facts = []
     audio = next((row.get("audio") for row in facts
                   if hashlib.sha1(row.get("text", "").encode()).hexdigest()[:12] == fact_hash), None)
-    # Манай өгөгдөл (хүний бичлэг) эсвэл SIM-TRUNK-ийн нийтлэг TTS кэш доторх файл л
+    # Манай өгөгдөл (хүний бичлэг) эсвэл дотоод нийтлэг TTS кэш доторх файл л
     allowed = [os.path.realpath(DATA_DIR), os.path.realpath(TENANTS_DIR), os.path.realpath(knowledge_jobs.tts_cache())]
     real = os.path.realpath(audio) if audio else ""
     if not audio or not os.path.isfile(audio) or not any(real.startswith(root + os.sep) for root in allowed):
