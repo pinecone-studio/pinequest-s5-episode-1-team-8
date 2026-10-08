@@ -5,12 +5,12 @@ import { Card } from "@/components/ui/Card";
 export function SetupBanner() {
   return (
     <Card className="mb-[34px] border border-brand">
-      <div className="flex flex-wrap items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
         <div className="min-w-0 flex-1">
           <h2 className="mb-1.5 text-[15px] font-semibold">AI ресепшнээ тохируулж дуусгаарай</h2>
           <p className="text-muted">Байгууллагын мэдээлэл → мэдээлэл оруулах → бэлдэх. Код бичих шаардлагагүй, ~10-30 минут.</p>
         </div>
-        <Link href="/setup" className="rounded-[10px] bg-brand px-[26px] py-[15px] font-semibold text-[#07130c] hover:bg-brand-2">
+        <Link href="/setup" className="w-full text-center sm:w-auto rounded-[10px] bg-brand px-[26px] py-[15px] font-semibold text-[#07130c] hover:bg-brand-2">
           Тохируулах →
         </Link>
       </div>
