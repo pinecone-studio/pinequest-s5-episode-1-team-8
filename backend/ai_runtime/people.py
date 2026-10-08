@@ -9,7 +9,7 @@ import importlib.util
 import os
 import sys
 
-_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "people.py")
+_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "people.py")  # runtime_root() symlink-ээр харуулдаг
 _spec = importlib.util.spec_from_file_location("people", _PATH)
 _mod = importlib.util.module_from_spec(_spec)
 sys.modules["people"] = _mod        # `import people` -> backend/people.py
