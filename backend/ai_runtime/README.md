@@ -14,7 +14,7 @@ SIP bridge-ийн кодыг агуулна. Эдгээр файл энэ reposi
 - `account.py`, `people.py` — хэрэглэгчийн мэдээлэл шалгах/солих үйлдэл
 - `scripts/` — мэдээлэл ingest, англи аудио, selector сургалт, чанарын шалгалт
 
-Python сангуудын хувилбар `backend/requirements.txt`-д бий.
+Python сангуудын хувилбар `backend/requirements-ai.txt`-д бий (`./dev.sh --ai`). Oron TTS ашиглахгүй — хоолой ElevenLabs.
 
 Үйлдлийн хурдан тест:
 
