@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import { AssistantChat } from "@/components/assistant/AssistantChat";
 import { PageHeader } from "@/components/PageHeader";
 import { apiGet } from "@/lib/api";
-import { requireUser } from "@/lib/session";
+import { requireAdmin } from "@/lib/session";
 import type { Lead, PeopleData } from "@/lib/types";
 
 export const metadata: Metadata = { title: "AI туршилт" };
 
 export default async function AssistantPage() {
-  await requireUser();
+  await requireAdmin();
   const [leads, people] = await Promise.all([apiGet<Lead[]>("/api/leads"), apiGet<PeopleData>("/api/people")]);
   const roster = leads
     .filter((l) => l.reason === "lead")

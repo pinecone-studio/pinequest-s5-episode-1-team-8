@@ -5,7 +5,7 @@ import { DbTableView } from "@/components/database/DbTableView";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { apiGet } from "@/lib/api";
-import { requireUser } from "@/lib/session";
+import { requireAdmin } from "@/lib/session";
 import type { DataInfo as Info, DbOverview, DbRows } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Өгөгдлийн сан" };
@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Өгөгдлийн сан" };
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
 export default async function DatabasePage({ searchParams }: PageProps<"/database">) {
-  await requireUser();
+  await requireAdmin();
   const sp = await searchParams;
   const [db, info] = await Promise.all([apiGet<DbOverview>("/api/database"), apiGet<Info>("/api/database/info")]);
   const table = db.tables.some((x) => x.name === one(sp.table)) ? one(sp.table) : db.tables[0]?.name;

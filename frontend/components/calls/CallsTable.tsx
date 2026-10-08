@@ -27,21 +27,12 @@ export function CallsTable({ calls }: { calls: Call[] }) {
 
   const sortedCalls = useMemo(() => {
     return [...calls].sort((a, b) => {
-      let aVal: any = a[sortField];
-      let bVal: any = b[sortField];
-
-      if (sortField === "started_at") {
-        aVal = new Date(a.started_at).getTime();
-        bVal = new Date(b.started_at).getTime();
-      }
-
-      if (aVal < bVal) return sortOrder === "asc" ? -1 : 1;
-      if (aVal > bVal) return sortOrder === "asc" ? 1 : -1;
-      return 0;
+      const difference = (a[sortField] ?? 0) - (b[sortField] ?? 0);
+      return sortOrder === "asc" ? difference : -difference;
     });
   }, [calls, sortField, sortOrder]);
 
-  if (!calls.length) return <EmptyState>Дуудлага алга. Zoiper-оос дотуур дугаар руу залгаж туршаарай.</EmptyState>;
+  if (!calls.length) return <EmptyState>Одоогоор дуудлага алга байна.</EmptyState>;
 
   const getSortIcon = (field: SortField) => {
     if (sortField !== field) return "↕";
@@ -60,34 +51,31 @@ export function CallsTable({ calls }: { calls: Call[] }) {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-line-2 text-xs text-muted uppercase">
-              <th className="py-3 px-4 font-semibold">
+              <th className="py-3 px-4 font-semibold" aria-sort={getAriaSort("started_at")}>
                 <button
                   type="button"
                   onClick={() => handleSort("started_at")}
                   className="flex items-center gap-1.5 text-fg hover:text-brand cursor-pointer"
-                  aria-sort={getAriaSort("started_at")}
                 >
                   Хэзээ <span>{getSortIcon("started_at")}</span>
                 </button>
               </th>
               <th className="py-3 px-4 font-semibold">Залгагч</th>
-              <th className="py-3 px-4 font-semibold">
+              <th className="py-3 px-4 font-semibold" aria-sort={getAriaSort("duration")}>
                 <button
                   type="button"
                   onClick={() => handleSort("duration")}
                   className="flex items-center gap-1.5 text-fg hover:text-brand cursor-pointer"
-                  aria-sort={getAriaSort("duration")}
                 >
                   Үргэлжилсэн <span>{getSortIcon("duration")}</span>
                 </button>
               </th>
               <th className="py-3 px-4 font-semibold">Асуулт</th>
-              <th className="py-3 px-4 font-semibold">
+              <th className="py-3 px-4 font-semibold" aria-sort={getAriaSort("unanswered")}>
                 <button
                   type="button"
                   onClick={() => handleSort("unanswered")}
                   className="flex items-center gap-1.5 text-fg hover:text-brand cursor-pointer"
-                  aria-sort={getAriaSort("unanswered")}
                 >
                   Хариулж чадаагүй <span>{getSortIcon("unanswered")}</span>
                 </button>

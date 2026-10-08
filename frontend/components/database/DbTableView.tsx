@@ -1,14 +1,28 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { formatDateTime } from "@/lib/format";
 import type { DbCell, DbRows } from "@/lib/types";
 
 const TIME_COLS = new Set(["ts", "created_at", "started_at", "ended_at", "updated_at", "built_at", "call_at"]);
 
+function subscribeStorage(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  return () => window.removeEventListener("storage", onChange);
+}
+
+const serverColumns = () => null;
+
 function Cell({ column, value }: { column: string; value: DbCell }) {
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
 
   const getCopyText = () => {
     if (value === null || value === "") return "";
@@ -24,12 +38,13 @@ function Cell({ column, value }: { column: string; value: DbCell }) {
   const handleCopy = async () => {
     const text = getCopyText();
     if (!text) return;
+    setCopyError(false);
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy:", err);
+    } catch {
+      setCopied(false);
+      setCopyError(true);
     }
   };
 
@@ -56,9 +71,9 @@ function Cell({ column, value }: { column: string; value: DbCell }) {
           type="button"
           onClick={handleCopy}
           className="opacity-0 group-hover:opacity-100 focus:opacity-100 shrink-0 rounded bg-panel-2 px-1.5 py-0.5 text-[11px] font-medium text-muted hover:text-fg border border-line-2 transition cursor-pointer"
-          title="Хуулах"
+          title={copyError ? "Хуулах боломжгүй байна. Текстийг сонгож гараар хуулна уу." : "Хуулах"}
         >
-          {copied ? "Хууллаа" : "Хуулах"}
+          <span aria-live="polite">{copyError ? "Хуулж чадсангүй" : copied ? "Хууллаа" : "Хуулах"}</span>
         </button>
       )}
     </div>
@@ -69,46 +84,41 @@ function Cell({ column, value }: { column: string; value: DbCell }) {
 export function DbTableView({ data, q }: { data: DbRows; q: string }) {
   const storageKey = `db-columns-${data.table}`;
 
-  // Hydration mismatch-ээс сэргийлж эхэндээ бүх баганаар эхлүүлнэ
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(data.columns);
+  const [selection, setSelection] = useState<{ table: string; columns: string[] } | null>(null);
   const [showColumnDropdown, setShowColumnDropdown] = useState(false);
-
-  // Client дээр ассаны дараа localStorage-оос уншиж тохируулна
-  useEffect(() => {
+  // Серверт бүх багана харагдана. Hydration дуусмагц хадгалсан сонголтыг уншина.
+  const savedColumns = useSyncExternalStore(subscribeStorage, () => {
     try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const valid = parsed.filter((c) => data.columns.includes(c));
-          if (valid.length > 0) {
-            setVisibleColumns(valid);
-            return;
-          }
-        }
-      }
-    } catch (e) {
-      // ignore
+      return localStorage.getItem(storageKey);
+    } catch {
+      return null;
     }
-    setVisibleColumns(data.columns);
-  }, [storageKey, data.columns]);
+  }, serverColumns);
 
-  // Сонгогдсон багануудыг localStorage-д хадгалах
-  useEffect(() => {
+  let selectedColumns: unknown = selection?.table === data.table ? selection.columns : null;
+  if (selectedColumns === null && savedColumns) {
     try {
-      localStorage.setItem(storageKey, JSON.stringify(visibleColumns));
-    } catch (e) {
-      // ignore
+      selectedColumns = JSON.parse(savedColumns);
+    } catch {
+      // Эвдэрсэн хадгалалтад бүх баганыг харуулна.
     }
-  }, [storageKey, visibleColumns]);
+  }
+  const validColumns = Array.isArray(selectedColumns)
+    ? data.columns.filter((column) => selectedColumns.includes(column))
+    : [];
+  const visibleColumns = validColumns.length ? validColumns : data.columns;
 
   const toggleColumn = (col: string) => {
-    if (visibleColumns.includes(col)) {
-      if (visibleColumns.length === 1) return; // Keep at least one column
-      setVisibleColumns(visibleColumns.filter((c) => c !== col));
-    } else {
-      const updated = data.columns.filter((c) => visibleColumns.includes(c) || c === col);
-      setVisibleColumns(updated);
+    const hidden = visibleColumns.includes(col);
+    if (hidden && visibleColumns.length === 1) return;
+    const columns = data.columns.filter((column) =>
+      hidden ? column !== col && visibleColumns.includes(column) : column === col || visibleColumns.includes(column)
+    );
+    setSelection({ table: data.table, columns });
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(columns));
+    } catch {
+      // Хадгалах эрхгүй үед сонголт энэ хуудсанд ажиллана.
     }
   };
 
