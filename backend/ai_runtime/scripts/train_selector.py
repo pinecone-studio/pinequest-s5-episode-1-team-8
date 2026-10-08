@@ -179,8 +179,8 @@ def eval_file() -> str | None:
 
 
 async def evaluate(router) -> tuple[int, int]:
-    import test_system
-    ok, total, _ = await test_system.run_eval(router, quiet=True, eval_file=eval_file())
+    import eval_runner
+    ok, total, _ = await eval_runner.run_eval(router, quiet=True, eval_file=eval_file())
     return ok, total
 
 
