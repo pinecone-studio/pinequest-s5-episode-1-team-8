@@ -15,7 +15,7 @@ export type RosterItem = { id: number; name: string | null; course: string | nul
 
 const EXAMPLES: Record<Mode, string[]> = {
   caller: ["Эвентэд очиж чадахгүй боллоо", "Бүртгэлээ цуцалмаар байна", "Цагаа солимоор байна", "Би юунд бүртгүүлсэн бэ",
-    "Би дугаараа сольсон", "Эвентэд ирнэ гэж бүртгэгдсэн үү", "Сургалтын төлбөр хэд вэ"],
+    "Би дугаараа сольсон", "Эвентэд ирнэ гэж бүртгэгдсэн үү", "Сургалтын төлбөр хэд vэ"],
   staff: ["Болдын цагийг Баасан гараг руу шилжүүл", "Номины бүртгэлийг цуцал", "Сараагийн дугаарыг солих"],
 };
 const NEED_KEYPAD = new Set(["code", "staff_code", "target", "target_confirm", "new_phone", "phone_confirm", "slot",
@@ -36,12 +36,49 @@ export function AssistantChat({ roster, staffPin }: { roster: RosterItem[]; staf
   const [trace, setTrace] = useState<RagHit[]>([]);
   const [changes, setChanges] = useState<LeadChange[]>([]);
   const [changed, setChanged] = useState<Set<string>>(new Set());
-  const end = useRef<HTMLDivElement>(null);
+  
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const userScrolledRef = useRef(false);
+
+  // Auto-resize textarea (1 to 5 lines)
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    const newHeight = Math.min(ta.scrollHeight, 120); // ~5 lines max
+    ta.style.height = `${newHeight}px`;
+  }, [text]);
+
+  const handleScroll = () => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    if (isAtBottom) {
+      userScrolledRef.current = false;
+      setShowScrollBottom(false);
+    } else {
+      userScrolledRef.current = true;
+      setShowScrollBottom(true);
+    }
+  };
 
   useEffect(() => {
-    // блок бие: Chrome-ийн scrollIntoView Promise буцаадаг -> React үүнийг cleanup гэж андуурна
-    end.current?.scrollIntoView({ block: "nearest" });
+    const el = chatContainerRef.current;
+    if (!el) return;
+    if (!userScrolledRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [msgs]);
+
+  const scrollToBottom = () => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    userScrolledRef.current = false;
+    setShowScrollBottom(false);
+  };
 
   async function send(body: { text?: string; dtmf?: string }, shown: string | null, m: Mode = mode, sid = session) {
     setBusy(true);
@@ -58,12 +95,13 @@ export function AssistantChat({ roster, staffPin }: { roster: RosterItem[]; staf
       setChanged(new Set(r.changes.map((c) => c.field)));
       if (r.changes.length) {
         setChanges((x) => [...r.changes, ...x]);
-        router.refresh();               // жагсаалтын төлөв, кодууд
+        router.refresh();
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Алдаа гарлаа");
     } finally {
       setBusy(false);
+      setTimeout(() => textareaRef.current?.focus(), 50);
     }
   }
 
@@ -77,6 +115,7 @@ export function AssistantChat({ roster, staffPin }: { roster: RosterItem[]; staf
     setTrace([]);
     setChanged(new Set());
     if (m === "staff") void send({}, null, "staff", null);
+    setTimeout(() => textareaRef.current?.focus(), 50);
   }
 
   async function samples() {
@@ -93,6 +132,9 @@ export function AssistantChat({ roster, staffPin }: { roster: RosterItem[]; staf
     const t = text.trim();
     if (!t || busy) return;
     setText("");
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
     void send({ text: t }, t);
   };
 
@@ -115,8 +157,15 @@ export function AssistantChat({ roster, staffPin }: { roster: RosterItem[]; staf
           </button>
         </div>
 
-        <div className="rounded-[14px] bg-panel">
-          <div className="h-[420px] space-y-2.5 overflow-y-auto px-5 py-4">
+        <div className="relative rounded-[14px] bg-panel">
+          <div
+            ref={chatContainerRef}
+            onScroll={handleScroll}
+            role="log"
+            aria-live="polite"
+            aria-relevant="additions"
+            className="h-[420px] space-y-2.5 overflow-y-auto px-5 py-4"
+          >
             {!msgs.length && (
               <p className="text-sm text-muted">
                 {mode === "caller"
@@ -132,16 +181,34 @@ export function AssistantChat({ roster, staffPin }: { roster: RosterItem[]; staf
               </div>
             ))}
             {busy && <div className="text-sm text-dim">AI хайж байна…</div>}
-            <div ref={end} />
           </div>
-          <div className="flex gap-2 border-t border-line px-4 py-3">
-            <input
+
+          {showScrollBottom && (
+            <button
+              type="button"
+              onClick={scrollToBottom}
+              className="absolute bottom-16 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 rounded-full border border-line-2 bg-panel px-3 py-1.5 text-xs font-semibold shadow-md hover:border-brand cursor-pointer"
+            >
+              Шинэ хариулт ↓
+            </button>
+          )}
+
+          <div className="flex items-end gap-2 border-t border-line px-4 py-3">
+            <textarea
+              ref={textareaRef}
+              rows={1}
               value={text}
               onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submit()}
-              placeholder="Хэлэх зүйлээ бичнэ үү…"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  submit();
+                }
+              }}
+              disabled={busy}
+              placeholder="Хэлэх зүйлээ бичнэ үү (Enter илгээх, Shift+Enter шинэ мөр)…"
               aria-label="Хэлэх зүйл"
-              className="min-w-0 flex-1 rounded-[10px] border-[1.5px] border-line-2 bg-bg px-3 py-2 text-sm focus:border-brand focus:outline-none"
+              className="min-w-0 flex-1 resize-none overflow-y-auto rounded-[10px] border-[1.5px] border-line-2 bg-bg px-3 py-2 text-sm focus:border-brand focus:outline-none disabled:opacity-50"
             />
             <Button variant="primary" onClick={submit} disabled={busy || !text.trim()}>Илгээх</Button>
           </div>
