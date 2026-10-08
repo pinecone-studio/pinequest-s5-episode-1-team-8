@@ -375,6 +375,16 @@ export type DbTable = { name: string; rows: number; columns: string[]; about: st
 export type DbOverview = { file: string; bytes: number; tables: DbTable[] };
 export type DbVector = { dims: number; preview: number[] };
 export type DbCell = string | number | null | DbVector;
+export type DataInfo = {
+  location: { server: string; file: string; bytes: number; separate: boolean };
+  stored: { what: string; detail: string; count: number }[];
+  not_stored: string[];
+  external: { to: string; what: string; active: boolean }[];
+  local: string[];
+  access: string[];
+  retention: string;
+  backup: { count: number; keep_days: number; last: number | null; last_bytes: number };
+};
 export type DbRows = { table: string; columns: string[]; rows: DbCell[][]; total: number; offset: number; page: number; about: string };
 
 // backend/routes/rag.py — нэг өгөгдлийн сан (receptionist.db): байгууллагын RAG + хувийн RAG + дуудлага

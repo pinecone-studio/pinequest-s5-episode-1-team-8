@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { DataInfo } from "@/components/database/DataInfo";
 import { DbTableView } from "@/components/database/DbTableView";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { apiGet } from "@/lib/api";
 import { requireUser } from "@/lib/session";
-import type { DbOverview, DbRows } from "@/lib/types";
+import type { DataInfo as Info, DbOverview, DbRows } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Өгөгдлийн сан" };
 
@@ -14,7 +15,7 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) 
 export default async function DatabasePage({ searchParams }: PageProps<"/database">) {
   await requireUser();
   const sp = await searchParams;
-  const db = await apiGet<DbOverview>("/api/database");
+  const [db, info] = await Promise.all([apiGet<DbOverview>("/api/database"), apiGet<Info>("/api/database/info")]);
   const table = db.tables.some((x) => x.name === one(sp.table)) ? one(sp.table) : db.tables[0]?.name;
   const q = one(sp.q).trim().slice(0, 100);
   const offset = Math.max(0, Number.parseInt(one(sp.offset), 10) || 0);
@@ -28,6 +29,9 @@ export default async function DatabasePage({ searchParams }: PageProps<"/databas
         title="Өгөгдлийн сан"
         sub={`Байгууллагын бүх өгөгдөл нэг SQLite файлд: ${db.file} (${Math.max(1, Math.round(db.bytes / 1024))} KB). Байгууллагын RAG, хүн бүрийн хувийн RAG (вектортой), бүртгэл, өөрчлөлт, дуудлага. Зөвхөн харах — өөрчлөлтийг AI туслах, сануулгын дуудлага хийнэ.`}
       />
+      <Card className="mb-5">
+        <DataInfo info={info} />
+      </Card>
       <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
         <nav className="space-y-2">
           {db.tables.map((x) => (
