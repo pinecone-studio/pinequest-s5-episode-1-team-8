@@ -2,15 +2,22 @@
 # Backend (http://127.0.0.1:8100) + frontend (http://localhost:3000)-ийг зэрэг асаана.
 # Ctrl+C дарахад хоёулаа унтарна.
 #
-#   ./dev.sh          # вэб (хөнгөн сангууд — хэдхэн секунд)
-#   ./dev.sh --ai     # + AI сангууд (torch, Whisper, bge-m3): «Аудио бэлдэх», утасны AI-д. Эхний удаа ~3GB, 5-15 мин
+#   ./dev.sh          # backend + frontend
+#   ./dev.sh --ai     # install AI dependencies + web
+#   ./dev.sh --phone  # web + AI dependencies + phone AI + SIP
 set -u
 cd "$(dirname "$0")"
+mode="${1:-}"
 WITH_AI=0
-if [ "${1:-}" = "--ai" ]; then
+if [ "$mode" = "--ai" ] || [ "$mode" = "--phone" ]; then
   WITH_AI=1
-elif [ "${1:-}" = "--sim" ]; then
+fi
+if [ "$mode" = "--sim" ]; then
   echo "--sim сонголт хэрэггүй болсон. Зүгээр ./dev.sh ажиллуулна уу."
+  exit 2
+fi
+if [ -n "$mode" ] && [ "$mode" != "--phone" ] && [ "$mode" != "--ai" ]; then
+  echo "Ашиглах: ./dev.sh [--ai|--phone]"
   exit 2
 fi
 # Хуучин shell session-д үлдсэн тохиргоо гаднын хавтас руу буцааж заахаас хамгаална.
@@ -47,13 +54,23 @@ for port in 8100 3000; do
     exit 1
   fi
 done
+if [ "$mode" = "--phone" ]; then
+  if lsof -ti tcp:9092 -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "9092 порт дээр өөр AI сервер ажиллаж байна. Өмнөх процессыг унтраана уу."
+    exit 1
+  fi
+  if lsof -ti udp:5060 >/dev/null 2>&1; then
+    echo "5060 UDP порт дээр өөр SIP сервер ажиллаж байна. Өмнөх процессыг унтраана уу."
+    exit 1
+  fi
+fi
 
 # Ctrl+C эсвэл аль нэг нь унтарвал энэ скриптийн асаасан процессуудыг (хүүхдүүдтэй нь) унтраана.
 # (kill 0 биш: скриптийг өөр програмаас дуудсан бол тэрийг нь хамт унтраах байсан)
 killtree() { local child; for child in $(pgrep -P "$1"); do killtree "$child"; done; kill "$1" 2>/dev/null; }
 cleanup() {
   trap - INT TERM EXIT
-  for pid in ${api:-} ${web:-}; do killtree "$pid"; done
+  for pid in ${api:-} ${web:-} ${ai:-} ${sip:-}; do killtree "$pid"; done
   wait 2>/dev/null
 }
 trap cleanup INT TERM EXIT
@@ -62,7 +79,19 @@ trap cleanup INT TERM EXIT
 api=$!
 (cd frontend && exec bun dev) &
 web=$!
+if [ "$mode" = "--phone" ]; then
+  .venv/bin/python backend/run_ai.py phone &
+  ai=$!
+  .venv/bin/python backend/run_ai.py sip &
+  sip=$!
+fi
 
 echo "Вэб: http://localhost:3000   (унтраах: Ctrl+C)"
+if [ "$mode" = "--phone" ]; then
+  echo "Утасны AI: AudioSocket 9092 + SIP 5060/UDP"
+fi
 # Аль нэг нь зогсвол (жишээ нь алдаа) нөгөөг нь ч унтраана. (macOS-ийн bash 3.2-т wait -n алга)
-while kill -0 "$api" 2>/dev/null && kill -0 "$web" 2>/dev/null; do sleep 1; done
+while kill -0 "$api" 2>/dev/null && kill -0 "$web" 2>/dev/null \
+  && { [ "$mode" != "--phone" ] || { kill -0 "$ai" 2>/dev/null && kill -0 "$sip" 2>/dev/null; }; }; do
+  sleep 1
+done

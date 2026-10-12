@@ -9,7 +9,7 @@ import { apiGet } from "@/lib/api";
 import { requireUser } from "@/lib/session";
 import type { Lead, PeopleData, RemindersData } from "@/lib/types";
 
-export const metadata: Metadata = { title: "Бүртгэл" };
+export const metadata: Metadata = { title: "Бүртгэлүүд" };
 
 export default async function LeadsPage() {
   await requireUser();
@@ -21,8 +21,8 @@ export default async function LeadsPage() {
   return (
     <>
       <PageHeader
-        title="Бүртгэл"
-        sub="Залгагчид бүртгүүлэх эсвэл ажилтантай ярих хүсэлт өгсөн. Утасны дугаарыг AI таахгүй — залгагч хэлж, баталгаажуулсан дугаар л харагдана. «Уулзалт товлох» дарвал AI залгаж баталгаажуулна (1 — тийм, 2 — цуцлах). Хүн бүр бүртгэлийн кодтой: кодоороо залгаж цаг, дугаараа өөрөө солино. Багш, ажилтан ажилтны кодоор бусдын бүртгэлийг утсаар өөрчилнө — AI бичиж, энд түүх нь харагдана."
+        title="Бүртгэлүүд"
+        sub="Бүртгүүлэх эсвэл ажилтантай ярих хүсэлт үлдээсэн хүмүүсийг эндээс хянана."
       />
       <Card className="mb-5">
         <StaffPin initial={people.staff_pin} />

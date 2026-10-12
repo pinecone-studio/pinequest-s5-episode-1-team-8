@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 import { API_URL, SESSION_COOKIE } from "./config";
 import type { User } from "./types";
@@ -26,5 +26,12 @@ export const getUser = cache(async (): Promise<User | null> => {
 export async function requireUser(): Promise<User> {
   const user = await getUser();
   if (!user) redirect("/login");
+  return user;
+}
+
+/** Платформын техникийн болон байгууллага удирдах хуудсыг зөвхөн admin-д үзүүлнэ. */
+export async function requireAdmin(): Promise<User> {
+  const user = await requireUser();
+  if (user.role !== "admin") notFound();
   return user;
 }

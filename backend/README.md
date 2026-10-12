@@ -19,6 +19,9 @@ uv pip install --python .venv/bin/python -r backend/requirements-ai.txt   # AI r
 .venv/bin/python backend/run_ai.py sip     # SIP bridge, 5060/UDP
 ```
 
+Эсвэл төслийн үндсэн хавтсаас `./dev.sh --phone` ажиллуулбал backend, frontend,
+AudioSocket AI болон SIP bridge дөрвүүлээ нэг terminal дээр асна. `Ctrl+C` бүгдийг унтраана.
+
 Анх асахад жишиг байгууллага (Pinecone Academy) ба `admin` хэрэглэгч санамсаргүй нууц үгтэй үүсч, терминалд **нэг удаа** хэвлэгдэнэ.
 Нууц үг солих: `.venv/bin/python backend/accounts.py admin admin`
 
@@ -142,7 +145,11 @@ AI engine-ийн эх код `backend/ai_runtime/`, байгууллагын м�
 
 ```bash
 .venv/bin/python backend/test_system.py     # -> ТЭНЦЛЭЭ ✓
+.venv/bin/python backend/test_ai_evaluation.py --validate-only  # 30 асуултын бүтцийг шалгана
+.venv/bin/python backend/test_ai_evaluation.py                  # бодит RAG/AI хариултыг шалгана
 .venv/bin/python backend/test_live.py       # хуучин runtime нийцлийн integration test
 ```
 
-Түр хавтсанд ажиллана — жинхэнэ хэрэглэгчдэд хүрэхгүй.
+AI evaluation нь `backend/tests/fixtures/pinecone_eval_questions.json` дахь тогтмол 30 асуултыг
+ашиглана. TTS/ElevenLabs дуудахгүй, гаднын SIM-TRUNK хавтас шаардахгүй. Тестүүд түр хавтсанд
+ажиллана — жинхэнэ хэрэглэгчдэд хүрэхгүй.

@@ -93,6 +93,13 @@ FAQ_CANDIDATE = float(os.getenv("FAQ_CANDIDATE", "0.60"))  # FAQ_MATCH-аас д
 SELECT_LLM = os.getenv("SELECT_LLM", "0") == "1"
 FACT_MARGIN = 0.05       # FACT_DIRECT-ээс дээш үед 2-р өгүүлбэрээс ийм зөрүүтэй байх
 FAQ_NEAR = float(os.getenv("FAQ_NEAR", "0.70"))  # STT бага алдсан ("хэдэн сард сардаг") FAQ
+# Асуулт, FAQ хоёрт нийтлэг түлхүүр үг огт байхгүй үед зөвхөн embedding-д найдах
+# босгыг өндөр байлгана. Ингэснээр "цаг агаар" зэрэг хамааралгүй асуулт санамсаргүй
+# ойролцоо FAQ хариулт руу орохгүй, харин дахин тодруулах урсгал руу шилжинэ.
+FAQ_NEAR_NO_LEX = float(os.getenv("FAQ_NEAR_NO_LEX", "0.77"))
+# Дангаараа FAQ-ийн санааг батлахад хэт ерөнхий/олон утгатай язгуурууд.
+# Жишээ: "цаг агаар" дахь цаг нь "уулзалтын цаг" биш.
+FAQ_WEAK_STEMS = {"цаг"}
 FACT_OK = 0.50           # ...эсвэл ийм оноотой бөгөөд
 FACT_OK_MARGIN = 0.08    # 2-р өгүүлбэрээс тод ялгарч байвал тоглуулна
 TOP2_GAP = 0.03          # 2 өгүүлбэр тоглуулахад 3-р өгүүлбэрээс ийм зөрүүтэй байх
@@ -454,20 +461,14 @@ def oron_available() -> bool:
 
 
 def tts_engine() -> dict:
-    """Байгууллагын TTS: "eleven" (ElevenLabs, бэлдэх үед л) эсвэл "oron" (локал, загвар нь байвал).
-    clips: өгүүлбэр бүрээр сонгосон ("Хоолой" хуудасны харьцуулалт) {text_hash: "oron" | "eleven"}."""
+    """Байгууллагын TTS нь ElevenLabs. Oron-ийн хуучин кэш/код зөвхөн migration нийцтэй үлдсэн.
+    Байгууллага хоолой сонгоогүй бол платформын default Уянга хоолойг ашиглана."""
     import tenant
     cfg = tenant.current().config()
-    oron = oron_available()
     voice = cfg.get("eleven_voice") or (ELEVEN_DEFAULT_VOICE if eleven_key() else None)
-    engine = cfg.get("tts_engine") or ("oron" if oron else "eleven")
-    if engine == "oron" and not oron:
-        engine = "eleven"
-    if engine == "eleven" and not voice and oron:
-        engine = "oron"
-    clips = {h: e for h, e in (cfg.get("clip_engine") or {}).items() if (e == "oron" and oron) or (e == "eleven" and voice)}
-    return {"engine": engine, "voice": voice, "model": cfg.get("eleven_model", ELEVEN_MODEL),
-            "speed": min(max(float(cfg.get("eleven_speed", 1.0)), 0.7), 1.2), "clips": clips, "oron": oron}
+    clips = {h: "eleven" for h, e in (cfg.get("clip_engine") or {}).items() if e == "eleven" and voice}
+    return {"engine": "eleven", "voice": voice, "model": cfg.get("eleven_model", ELEVEN_MODEL),
+            "speed": min(max(float(cfg.get("eleven_speed", 1.0)), 0.7), 1.2), "clips": clips, "oron": False}
 
 
 def eleven_tag(eng: dict | None = None) -> str:
@@ -779,6 +780,14 @@ class FAQRouter:
         with open(os.path.join(index_dir, "faq_index.json"), encoding="utf-8") as f:
             self.meta = json.load(f)
         self.emb = np.load(os.path.join(index_dir, "faq_index.npz"))["emb"]
+        self.faq_stems = []
+        for faq_idx, faq in enumerate(self.meta["faq"]):
+            questions = [question for question, index in zip(
+                self.meta["questions"], self.meta["row_to_faq"]
+            ) if index == faq_idx]
+            self.faq_stems.append(
+                lex_stems(" ".join([*questions, faq.get("answer", "")])) - FAQ_WEAK_STEMS
+            )
 
         # RAG индекс (scripts/ingest.py) - байхгүй бол бүх тодорхойгүй асуулт -> ажилтан
         self.kb_chunks, self.kb_emb = [], np.zeros((0, self.emb.shape[1]), np.float32)
@@ -963,9 +972,12 @@ class FAQRouter:
             if faq_idx >= 0 and scores[row] > best.get(faq_idx, -1):
                 best[faq_idx] = float(scores[row])
         out = []
+        query_stems = lex_stems(text) - self.generic_stems - FAQ_WEAK_STEMS
         for faq_idx, sc in best.items():
-            if sc >= FAQ_CANDIDATE and self.faq_intent_supported(text, faq_idx):
-                faq = self.meta["faq"][faq_idx]
+            faq = self.meta["faq"][faq_idx]
+            lexical_match = bool(query_stems & self.faq_stems[faq_idx])
+            if (sc >= FAQ_CANDIDATE and self.faq_intent_supported(text, faq_idx)
+                    and (lexical_match or sc >= FAQ_NEAR_NO_LEX)):
                 out.append(({"text": faq["answer"], "audio": faq["audio"], "faq": True, "id": faq["id"]}, sc))
         return out
 

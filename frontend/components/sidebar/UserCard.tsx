@@ -13,7 +13,7 @@ export function UserCard({ user, status }: { user: User; status: Status | null }
           {user.email}
         </div>
         <div className="font-mono text-xs font-medium text-muted">{ROLE_LABEL[user.role]}</div>
-        <StatusLine initial={status} />
+        <StatusLine initial={status} isAdmin={user.role === "admin"} />
       </div>
       <LogoutButton />
     </div>

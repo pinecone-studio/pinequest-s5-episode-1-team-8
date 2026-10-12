@@ -5,7 +5,7 @@ import { apiGet } from "@/lib/api";
 import { requireUser } from "@/lib/session";
 import type { ElevenStatus, VoiceData } from "@/lib/types";
 
-export const metadata: Metadata = { title: "Хоолой" };
+export const metadata: Metadata = { title: "Дуу хоолой" };
 
 export default async function VoicePage({ searchParams }: PageProps<"/voice">) {
   const user = await requireUser();
@@ -18,8 +18,8 @@ export default async function VoicePage({ searchParams }: PageProps<"/voice">) {
   return (
     <>
       <PageHeader
-        title="Хоолой"
-        sub="Залгагчид тоглогдох бүх аудио: хоолойгоо сонгох, чанарыг нь шалгах, дуудлагыг засах. ElevenLabs-ийг зөвхөн аудио бэлдэхэд ашиглана."
+        title="Дуу хоолой"
+        sub="AI туслахын дуу хоолойг сонсох, дуудлагыг засах болон өөрийн бичлэгээр солих."
         actions={
           <a href="/api/voice/export" download
             className="inline-flex items-center rounded-[10px] border-[1.5px] border-line-2 px-4 py-[9px] text-sm font-semibold hover:border-brand">
