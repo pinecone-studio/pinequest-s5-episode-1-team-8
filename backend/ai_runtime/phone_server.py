@@ -483,19 +483,33 @@ class Call:
             return
         if not (self.lead and self.lead.state in ("phone", "confirm")):
             return
-        if self.turn and not self.turn.done():
-            return                       # өмнөх алхам дуусаагүй
         if key == "*":                    # алдсан бол * дараад дахин эхэлнэ
             self.dtmf = ""
             return
-        if key != "#":
-            self.dtmf += key
-        digits = self.dtmf
+        # Баталгаажуулах үед 1=зөв, 2=буруу. # хүлээлгүй шууд боловсруулна.
+        if self.lead.state == "confirm" and key in "12" and not self.dtmf:
+            digits = key
+        else:
+            if key != "#":
+                self.dtmf += key
+            digits = self.dtmf
         local = digits[3:] if digits.startswith("976") else digits
-        if key == "#" or len(local) >= 8:  # 8 цифр болмогц автоматаар (эсвэл # дарахад)
+        complete = self.lead.state == "confirm" and digits in ("1", "2")
+        if complete or key == "#" or len(local) >= 8:  # 8 цифр болмогц автоматаар (эсвэл # дарахад)
             self.dtmf = ""
             print(f"  [товчлуур] {digits}")
-            self.turn = asyncio.create_task(self.dtmf_turn(digits))
+            prev = self.turn
+            self.flush()
+
+            async def run():
+                if prev and not prev.done():
+                    try:
+                        await prev
+                    except asyncio.CancelledError:
+                        pass
+                if self.lead:
+                    await self.dtmf_turn(digits)
+            self.turn = asyncio.create_task(run())
 
     def on_account_dtmf(self, key: str):
         """Бүртгэлийн код (4), шинэ дугаар (8), цэс/баталгаажуулалт (1 товчлуур).
@@ -528,8 +542,11 @@ class Call:
 
     async def dtmf_turn(self, digits: str):
         self.log("user", f"[товчлуур] {digits}")
-        if self.lead.state == "confirm":     # баталгаажуулах үед дахин дугаар бичвэл шинэ дугаар
-            self.lead.state = "phone"
+        if self.lead.state == "confirm":
+            if digits not in ("1", "2"):  # дахин дугаар бичвэл шинэ дугаар
+                self.lead.state = "phone"
+            elif self.lead.lang == "en":
+                digits = "yes" if digits == "1" else "no"
         await self.lead_turn(digits)
 
     def digits_audio(self, digits: str, en: "english.EnglishRouter | None" = None):
