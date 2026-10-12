@@ -19,21 +19,23 @@ import type { Call, RagStats, Stats, Status, Unanswered, WeeklyReport } from "@/
 export const metadata: Metadata = { title: "Самбар" };
 
 export default async function DashboardPage() {
-  await requireUser();
+  const user = await requireUser();
+  const isAdmin = user.role === "admin";
   const [stats, calls, unanswered, status, report, rag] = await Promise.all([
     apiGet<Stats>("/api/stats"),
     apiGet<Call[]>("/api/calls?limit=6"),
     apiGet<Unanswered[]>("/api/unanswered?limit=5"),
     apiGet<Status>("/api/status"),
     apiGet<WeeklyReport>("/api/report?days=7"),
-    apiGet<RagStats>("/api/rag"),
+    isAdmin ? apiGet<RagStats>("/api/rag") : Promise.resolve(null),
   ]);
 
   return (
     <>
       {!status.ready && <SetupBanner />}
       <PageHeader
-        title="Сайн байна уу 👋"
+        title="Хяналтын самбар"
+        sub={`${user.tenant_name} байгууллагын AI туслахын сүүлийн мэдээлэл.`}
         note={
           <span className={status.ai_server ? "text-brand" : "text-danger"}>
             {" · "}AI ресепшн {status.ai_server ? "онлайн" : "унтарсан"}
@@ -41,8 +43,8 @@ export default async function DashboardPage() {
         }
         actions={
           <>
-            <Link href="/guide" className="text-muted hover:underline">📖 Заавар</Link>
-            <Link href="/knowledge" className="font-bold hover:underline">Мэдээлэл нэмэх →</Link>
+            <Link href="/guide" className="text-muted hover:underline">Тусламж</Link>
+            <Link href="/knowledge" className="font-bold hover:underline">AI-ийн мэдээлэл засах</Link>
             <Link
               href="/unanswered"
               className="rounded-[10px] bg-brand px-[26px] py-[15px] font-semibold text-[#07130c] hover:bg-brand-2"
@@ -53,17 +55,19 @@ export default async function DashboardPage() {
         }
       />
 
-      <section className="mb-[34px] grid grid-cols-[1.4fr_1fr_.9fr] gap-16 border-b border-line pb-[34px] max-xl:grid-cols-1 max-xl:gap-[34px]">
+      <section className={`mb-[34px] grid gap-16 border-b border-line pb-[34px] max-xl:grid-cols-1 max-xl:gap-[34px] ${isAdmin ? "grid-cols-[1.4fr_1fr_.9fr]" : "grid-cols-2"}`}>
         <AnswerRate stats={stats} />
-        <RouteBreakdown routes={stats.routes} />
+        {isAdmin && <RouteBreakdown routes={stats.routes} />}
         <CallsByDay days={stats.days} />
       </section>
 
-      <Section title="Нэг өгөгдлийн сан (RAG)">
-        <Card>
-          <RagStore rag={rag} />
-        </Card>
-      </Section>
+      {isAdmin && rag && (
+        <Section title="Мэдээллийн сангийн төлөв (RAG)">
+          <Card>
+            <RagStore rag={rag} />
+          </Card>
+        </Section>
+      )}
 
       <Section title="Энэ 7 хоногт" aside={<Link href="/settings" className="hover:underline">Долоо хоногийн тайлан →</Link>}>
         <Card>
@@ -93,17 +97,21 @@ export default async function DashboardPage() {
               <div className="text-sm text-muted">Бүх асуултад хариулсан</div>
             </Card>
           )}
-          <Link href="/knowledge" className="rounded-[14px] bg-panel px-[22px] py-5 hover:bg-panel-2">
-            <div className="text-[34px] font-extrabold">{status.facts}</div>
-            <div className="text-sm text-muted">Аудиотой өгүүлбэр</div>
-          </Link>
-          <Link href="/voice" className="rounded-[14px] bg-panel px-[22px] py-5 hover:bg-panel-2">
-            <div className="text-[34px] font-extrabold">
-              {status.recorded ?? 0}
-              <span className="font-mono text-base font-normal text-muted"> / {status.voice_total ?? "—"}</span>
-            </div>
-            <div className="text-sm text-muted">Өөрийн хоолойгоор бичсэн</div>
-          </Link>
+          {isAdmin && (
+            <>
+              <Link href="/knowledge" className="rounded-[14px] bg-panel px-[22px] py-5 hover:bg-panel-2">
+                <div className="text-[34px] font-extrabold">{status.facts}</div>
+                <div className="text-sm text-muted">Аудиотой өгүүлбэр</div>
+              </Link>
+              <Link href="/voice" className="rounded-[14px] bg-panel px-[22px] py-5 hover:bg-panel-2">
+                <div className="text-[34px] font-extrabold">
+                  {status.recorded ?? 0}
+                  <span className="font-mono text-base font-normal text-muted"> / {status.voice_total ?? "—"}</span>
+                </div>
+                <div className="text-sm text-muted">Өөрийн хоолойгоор бичсэн</div>
+              </Link>
+            </>
+          )}
           <Link href="/leads" className="rounded-[14px] bg-panel px-[22px] py-5 hover:bg-panel-2">
             <div className="text-[34px] font-extrabold">{stats.new_leads}</div>
             <div className="text-sm text-muted">Шинэ бүртгэл</div>

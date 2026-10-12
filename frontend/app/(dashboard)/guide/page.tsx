@@ -1,85 +1,87 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FAQS, HOWTOS, QUICKSTART, SECTIONS } from "@/components/guide/content";
+import type { ReactNode } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { Section } from "@/components/Section";
 import { Card } from "@/components/ui/Card";
 import { requireUser } from "@/lib/session";
 
-export const metadata: Metadata = { title: "Заавар" };
+export const metadata: Metadata = { title: "Тусламж" };
+
+const START = [
+  { href: "/setup", title: "1. Байгууллагаа оруулах", text: "Нэр, утас, хаяг, ажиллах цагаа бөглөнө." },
+  { href: "/knowledge", title: "2. AI-д мэдээлэл өгөх", text: "Үйлчилгээ, үнэ болон нөхцөлөө оруулна." },
+  { href: "/faq", title: "3. Асуулт, хариултаа шалгах", text: "Түгээмэл асуултын хариултыг засна." },
+  { href: "/calls", title: "4. Дуудлагаа хянах", text: "Дугаарын холболтыг манай баг хийнэ. Орж ирсэн яриаг эндээс шалгана." },
+];
+
+const DAILY = [
+  { href: "/unanswered", title: "Хариулаагүй асуулт", text: "AI мэдээгүй асуултад зөв хариулт нэмнэ." },
+  { href: "/leads", title: "Бүртгэлүүд", text: "Холбогдох шаардлагатай хүмүүсийн төлөв, тэмдэглэлийг хөтөлнө." },
+  { href: "/settings", title: "Мэдэгдэл ба тохиргоо", text: "Telegram мэдэгдэл, тайлан болон нууц үгээ тохируулна." },
+];
+
+const ADMIN = [
+  { href: "/admin", title: "Байгууллагууд", text: "Байгууллага нэмэх, эрх болон төлөвийг удирдах." },
+  { href: "/assistant", title: "AI туршилт", text: "Утасгүйгээр AI-ийн ажиллагааг шалгах." },
+  { href: "/train", title: "AI сургалт", text: "Хариулт сонголтын сургалт, үнэлгээг ажиллуулах." },
+  { href: "/database", title: "Өгөгдлийн сан", text: "Хүснэгт болон системийн өгөгдлийг шалгах." },
+];
 
 export default async function GuidePage() {
-  await requireUser();
+  const user = await requireUser();
   return (
     <>
-      <PageHeader
-        title="Заавар"
-        sub="AI ресепшнийг хэрхэн ашиглах вэ: эхлэх алхмууд, цэс бүр юунд зориулагдсан, түгээмэл нөхцөлд юу хийх, байнга асуудаг асуултууд."
-      />
+      <PageHeader title="Тусламж" sub="AI туслахаа эхлүүлэх болон өдөр тутам ашиглах товч заавар." />
 
-      <Section title="Хурдан эхлэх — 5 алхам">
-        <ol className="grid gap-3 md:grid-cols-5">
-          {QUICKSTART.map((s, i) => (
-            <li key={s.title}>
-              <Link href={s.href} className="block h-full rounded-[14px] bg-panel px-5 py-4 hover:bg-panel-2">
-                <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-brand font-bold text-[#07130c]">{i + 1}</div>
-                <div className="mb-1 font-semibold">{s.title}</div>
-                <p className="text-sm leading-5 text-muted">{s.text}</p>
-              </Link>
-            </li>
-          ))}
-        </ol>
-      </Section>
+      <LinkCards title="Эхлүүлэх 4 алхам" items={START} columns="md:grid-cols-2 xl:grid-cols-4" />
+      <LinkCards title="Өдөр тутам хийх зүйл" items={DAILY} columns="md:grid-cols-3" />
 
-      <Section title="Хэрхэн хийх вэ">
+      {user.role === "admin" && (
+        <LinkCards title="Admin хэрэгслүүд" items={ADMIN} columns="md:grid-cols-2 xl:grid-cols-4" />
+      )}
+
+      <Section title="Түгээмэл асуулт">
         <div className="space-y-2">
-          {HOWTOS.map((h) => (
-            <details key={h.title} className="group rounded-[14px] bg-panel px-5 py-4">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-                <span className="font-semibold">{h.title}</span>
-                <span className="flex items-center gap-3 text-[13px] text-muted">
-                  <span className="max-md:hidden">{h.who}</span>
-                  <span className="transition-transform group-open:rotate-90">›</span>
-                </span>
-              </summary>
-              <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-[15px] leading-6">
-                {h.steps.map((s) => <li key={s}>{s}</li>)}
-              </ol>
-              <div className="mt-3 flex flex-wrap gap-3 text-sm">
-                {h.links.map((l) => <Link key={l.href + l.label} href={l.href} className="text-brand hover:underline">{l.label} →</Link>)}
-              </div>
-            </details>
-          ))}
-        </div>
-      </Section>
-
-      {SECTIONS.map((g) => (
-        <Section key={g.group} title={`Цэс: ${g.group}`}>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {g.items.map((s) => (
-              <Card key={s.href}>
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <span className="text-lg font-semibold">{s.icon} {s.title}</span>
-                  <Link href={s.href} className="text-sm text-brand hover:underline">Нээх →</Link>
-                </div>
-                <p className="mb-2 text-sm text-muted">{s.what}</p>
-                <ul className="list-disc space-y-1 pl-5 text-sm">{s.how.map((x) => <li key={x}>{x}</li>)}</ul>
-              </Card>
-            ))}
-          </div>
-        </Section>
-      ))}
-
-      <Section title="Байнга асуудаг асуултууд">
-        <div className="space-y-2">
-          {FAQS.map((f) => (
-            <details key={f.q} className="rounded-[14px] bg-panel px-5 py-4">
-              <summary className="cursor-pointer font-semibold">{f.q}</summary>
-              <p className="mt-2 text-[15px] leading-6 text-muted">{f.a}</p>
-            </details>
-          ))}
+          <HelpItem question="AI байхгүй мэдээлэл зохиож хэлэх үү?">
+            Үгүй. AI зөвхөн таны оруулсан мэдээлэл болон бэлэн хариултаас сонгоно.
+          </HelpItem>
+          <HelpItem question="Мэдээлэл өөрчилсний дараа яах вэ?">
+            Эхлүүлэх хуудасны бэлдэх үйлдлийг ажиллуулна. Автомат бэлдэх асаалттай бол өөрөө шинэчлэгдэнэ.
+          </HelpItem>
+          <HelpItem question="Залгагчийн дуу бичигдэх үү?">
+            Үгүй. Зөвхөн ярианы бичвэр хадгалагдана.
+          </HelpItem>
         </div>
       </Section>
     </>
+  );
+}
+
+function LinkCards({ title, items, columns }: {
+  title: string;
+  items: { href: string; title: string; text: string }[];
+  columns: string;
+}) {
+  return (
+    <Section title={title}>
+      <div className={`grid gap-3 ${columns}`}>
+        {items.map((item) => (
+          <Link key={item.href} href={item.href} className="block rounded-[14px] bg-panel px-5 py-4 hover:bg-panel-2">
+            <h2 className="mb-1 font-semibold">{item.title}</h2>
+            <p className="text-sm leading-5 text-muted">{item.text}</p>
+          </Link>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+function HelpItem({ question, children }: { question: string; children: ReactNode }) {
+  return (
+    <Card>
+      <h2 className="mb-1 font-semibold">{question}</h2>
+      <p className="text-sm text-muted">{children}</p>
+    </Card>
   );
 }
