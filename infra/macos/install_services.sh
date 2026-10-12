@@ -8,7 +8,7 @@
 # Тогтмол хаяг: https://pinequest-team-8.<account>.workers.dev (infra/cloudflare). Лог: ~/Library/Logs/pinequest/
 # Эдгээр асаалттай үед ./dev.sh хэрэггүй (3000, 8100 порт эзэлнэ).
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+ROOT="${PINEQUEST_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
 LA="$HOME/Library/LaunchAgents"
 LOGS="$HOME/Library/Logs/pinequest"
 PY="$ROOT/.venv/bin/python"
@@ -61,8 +61,19 @@ plist() {  # нэр, хавтас, нэмэлт env (xml), тушаал...
 </plist>
 EOF
   plutil -lint -s "$LA/mn.pinequest.$s.plist"
-  launchctl bootout "gui/$U/mn.pinequest.$s" 2>/dev/null || true
-  launchctl bootstrap "gui/$U" "$LA/mn.pinequest.$s.plist"
+  reload "mn.pinequest.$s"
+}
+
+reload() {  # launchd хуучныг бүрэн суллахаас өмнө bootstrap хийвэл "5: Input/output error" -> хүлээж, дахин оролдоно
+  local label=$1
+  launchctl bootout "gui/$U/$label" 2>/dev/null || true
+  for _ in $(seq 40); do launchctl print "gui/$U/$label" >/dev/null 2>&1 || break; sleep 0.5; done
+  for try in 1 2 3 4 5; do
+    launchctl bootstrap "gui/$U" "$LA/$label.plist" 2>/dev/null && return 0
+    sleep 2
+  done
+  echo "$label асаж чадсангүй: launchctl bootstrap gui/$U $LA/$label.plist" >&2
+  return 1
 }
 
 HOSTX=""; [ -n "$HOST_IP" ] && HOSTX="<key>HOST_IP</key><string>$HOST_IP</string>"
