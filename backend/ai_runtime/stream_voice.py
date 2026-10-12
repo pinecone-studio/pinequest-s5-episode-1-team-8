@@ -454,20 +454,14 @@ def oron_available() -> bool:
 
 
 def tts_engine() -> dict:
-    """Байгууллагын TTS: "eleven" (ElevenLabs, бэлдэх үед л) эсвэл "oron" (локал, загвар нь байвал).
-    clips: өгүүлбэр бүрээр сонгосон ("Хоолой" хуудасны харьцуулалт) {text_hash: "oron" | "eleven"}."""
+    """Байгууллагын TTS нь ElevenLabs. Oron-ийн хуучин кэш/код зөвхөн migration нийцтэй үлдсэн.
+    Байгууллага хоолой сонгоогүй бол платформын default Уянга хоолойг ашиглана."""
     import tenant
     cfg = tenant.current().config()
-    oron = oron_available()
     voice = cfg.get("eleven_voice") or (ELEVEN_DEFAULT_VOICE if eleven_key() else None)
-    engine = cfg.get("tts_engine") or ("oron" if oron else "eleven")
-    if engine == "oron" and not oron:
-        engine = "eleven"
-    if engine == "eleven" and not voice and oron:
-        engine = "oron"
-    clips = {h: e for h, e in (cfg.get("clip_engine") or {}).items() if (e == "oron" and oron) or (e == "eleven" and voice)}
-    return {"engine": engine, "voice": voice, "model": cfg.get("eleven_model", ELEVEN_MODEL),
-            "speed": min(max(float(cfg.get("eleven_speed", 1.0)), 0.7), 1.2), "clips": clips, "oron": oron}
+    clips = {h: "eleven" for h, e in (cfg.get("clip_engine") or {}).items() if e == "eleven" and voice}
+    return {"engine": "eleven", "voice": voice, "model": cfg.get("eleven_model", ELEVEN_MODEL),
+            "speed": min(max(float(cfg.get("eleven_speed", 1.0)), 0.7), 1.2), "clips": clips, "oron": False}
 
 
 def eleven_tag(eng: dict | None = None) -> str:
