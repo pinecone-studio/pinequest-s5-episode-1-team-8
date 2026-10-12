@@ -401,10 +401,17 @@ class Call:
         try:
             code = people.ensure_code(self.tenant.dir, lead_id)
             people.docs(self.tenant.dir, lead_id)
-            return code
         except Exception as e:
             print(f"  [хувийн RAG алдаа] {e}")
             return None
+        if flow.phone:
+            try:
+                asyncio.get_running_loop().run_in_executor(
+                    None, notify.send_registration_code, flow.phone, code,
+                    self.tenant.config().get("name") or "")
+            except Exception as e:
+                print(f"  [SMS эхлүүлэх алдаа] {type(e).__name__}")
+        return code
 
     # ---------- Бүртгэлээ шалгах / өөрчлөх (хувийн RAG) ----------
 

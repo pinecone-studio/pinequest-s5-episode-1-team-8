@@ -6,10 +6,60 @@ Telegram байхгүй/алдаатай бол дуудлагад нөлөөл�
 """
 import json
 import os
+import re
 
 import httpx
 
 API = "https://api.telegram.org/bot{token}/{method}"
+SENDSMS_API = "https://smsapi.buural.mn/api/user/send"
+
+
+def send_registration_code(phone: str | None, code: str, company: str = "") -> bool:
+    """Баталгаажсан Монгол дугаар руу SendSMS.mn эсвэл SMS gateway-аар илгээнэ."""
+    url = os.getenv("SMS_API_URL", "").strip()
+    api_key = os.getenv("SMS_API_KEY", "").strip()
+    token = os.getenv("SMS_API_TOKEN", "").strip()
+    digits = re.sub(r"\D", "", phone or "")
+    if not re.fullmatch(r"\d{8}", digits):
+        print("  [SMS] илгээгээгүй: баталгаажсан 8 оронтой дугаар алга")
+        return False
+    if not re.fullmatch(r"\d{4}", code):
+        print("  [SMS] илгээгээгүй: 4 оронтой код алга")
+        return False
+    label = f"{company.strip()[:20]}: " if company and company.strip() else ""
+    message = f"{label}Бүртгэлийн код: {code}. Бусдад бүү хэл."
+    if api_key and token:
+        url = SENDSMS_API
+        payload = {"apiKey": api_key, "apiToken": token, "phone": digits, "message": message}
+        headers = {}
+    elif url.startswith("https://") and token:
+        payload = {"to": f"+976{digits}", "message": message}
+        headers = {"Authorization": f"Bearer {token}"}
+    else:
+        print("  [SMS] илгээгээгүй: SMS_API_KEY/SMS_API_TOKEN тохируулаагүй")
+        return False
+    try:
+        response = httpx.post(url, json=payload, headers=headers, timeout=10)
+        response.raise_for_status()
+        try:
+            result = response.json()
+        except ValueError:
+            result = None
+        if isinstance(result, dict) and (
+            result.get("success") is False
+            or result.get("status") in ("error", "failed", "failure")
+            or result.get("error")
+        ):
+            print("  [SMS алдаа] үйлчилгээ хүсэлтийг татгалзлаа")
+            return False
+        print(f"  [SMS] үйлчилгээ хүсэлтийг хүлээн авлаа (HTTP {response.status_code})")
+        return True
+    except httpx.HTTPStatusError as exc:
+        print(f"  [SMS алдаа] HTTP {exc.response.status_code}")
+        return False
+    except httpx.HTTPError as exc:
+        print(f"  [SMS алдаа] {type(exc).__name__}")
+        return False
 
 
 def settings_path(path: str | None = None) -> str:
