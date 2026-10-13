@@ -7,6 +7,14 @@
 #   ./dev.sh --phone  # web + AI dependencies + phone AI + SIP
 set -u
 cd "$(dirname "$0")"
+
+# Local secrets/config. `.env` is gitignored.
+if [ -f .env ]; then
+  set -a
+  . ./.env
+  set +a
+fi
+
 mode="${1:-}"
 WITH_AI=0
 if [ "$mode" = "--ai" ] || [ "$mode" = "--phone" ]; then
