@@ -1,120 +1,151 @@
 # Frontend-ийн дараагийн 4 PR ажил
 
-Доорх ажлууд `origin/main` дээр хараахан хийгдээгүй. PR бүр зөвхөн `frontend/` дотор хийгдэх бөгөөд backend endpoint, API response, JSON өгөгдөл өөрчлөхгүй.
+Эдгээр ажлыг 2026-10-13-ны `origin/main` болон GitHub-ийн бүх open/merged PR-тэй тулгаж шалгасан. Одоогоор хийгдээгүй, backend мэдэх шаардлагагүй жижиг frontend ажлууд.
 
-PR-үүд хоорондоо хамааралгүй. Нэг PR-д зөвхөн тухайн ажлын файлуудыг оруулна.
+PR бүр хоорондоо хамааралгүй. Нэг ажлыг эхлэх бүрдээ `main`-ээс шинэ branch үүсгэнэ:
 
-## PR 1 — Calls жагсаалтад эрэмбэлэлт ба mobile card view
+```bash
+git switch main
+git pull --ff-only origin main
+git switch -c <branch-name>
+```
 
-- **Үндсэн файл:** `frontend/components/calls/CallsTable.tsx`
-- **Branch:** `frontend/calls-sort-mobile-view`
-- **PR title:** `feat(frontend): improve calls list sorting and mobile view`
+Нэг PR-д зөвхөн тухайн ажилд заасан файлуудыг оруулна. Backend, API contract, JSON өгөгдөл өөрчлөхгүй. Шинэ package суулгахгүй.
+
+## PR 1 — Бүртгэлээс утас болон код хуулах
+
+- **Үндсэн файл:** `frontend/components/leads/LeadRow.tsx`
+- **Branch:** `frontend/lead-copy-actions`
+- **PR title:** `feat(frontend): add lead phone and code copy actions`
+
+### Зорилго
+
+Байгууллагын ажилтан бүртгэлийн утас болон кодыг гараар сонголгүй нэг товчоор хуулдаг болгоно.
 
 ### Хийх зүйл
 
-- Component-ийг client component болгоод `Хэзээ`, `Үргэлжилсэн`, `Хариулж чадаагүй` баганаар өсөх/буурах эрэмбэлэлт нэмнэ.
-- Идэвхтэй баганын header дээр чиглэлийн тэмдэг (`↑`/`↓`) болон `aria-sort` харуулна.
-- Анхны дараалал нь одоогийнхтой адил шинэ дуудлага эхэнд байна.
-- Desktop дээр одоогийн table-ийг хадгална. Mobile (`md`-ээс доош) үед дуудлага бүрийг огноо, дугаар, хугацаа, асуултын тоо, unanswered badge бүхий card болгоно.
-- Table болон card хоёул тухайн дуудлагын `/calls/[uuid]` хуудас руу ордог байна.
-- Шинэ package суулгахгүй.
+- Утасны дугаарын хажууд `Хуулах` товч нэмнэ.
+- Бүртгэлийн код байгаа үед кодын хажууд мөн `Хуулах` товч нэмнэ.
+- `navigator.clipboard.writeText` ашиглана.
+- Амжилттай хуулсан товч 2 секунд орчим `Хууллаа ✓` гэж харагдана.
+- Clipboard ажиллахгүй үед тухайн мөрөнд `Хуулж чадсангүй` гэсэн жижиг алдаа харуулна.
+- Утас байхгүй үед утас хуулах товч гаргахгүй.
+- Утас болон кодын хоёр feedback хоорондоо холилдохгүй байна.
+- Одоогийн төлөв солих, тэмдэглэл хадгалах, сануулга болон мэдээлэл устгах ажиллагааг өөрчлөхгүй.
 
 ### Шалгах зүйл
 
-- Гурван sortable header-ийг дарахад asc/desc зөв солигдоно.
-- Эрэмбэлсний дараа зөв дуудлагын detail руу орно.
-- 375px орчим өргөнд horizontal scroll үүсэхгүй, бүх мэдээлэл уншигдана.
-- Keyboard-аар header болон row/card холбоосууд руу очиж ашиглаж болно.
+- Утасны товч зөвхөн утасны дугаарыг хуулна.
+- Кодын товч зөвхөн бүртгэлийн кодыг хуулна.
+- Нэгийг хуулсны дараа нөгөөг хулахад зөв товчин дээр feedback гарна.
+- Keyboard-аар хоёр товчид хүрч ашиглаж болно.
 - `bun run lint` болон `bun run build` амжилттай ажиллана.
 
 ---
 
-## PR 2 — Database table-ийн багана сонголт ба cell copy
+## PR 2 — FAQ-г хувилж шинэ FAQ үүсгэх
+
+- **Үндсэн файл:** `frontend/components/faq/FaqEditor.tsx`
+- **Branch:** `frontend/faq-duplicate-action`
+- **PR title:** `feat(frontend): add FAQ duplicate action`
+
+### Зорилго
+
+Ижил бүтэцтэй асуулт, хариулт нэмэх үед бүгдийг дахин бичих шаардлагагүй болгоно.
+
+### Хийх зүйл
+
+- FAQ бүрийн `Устгах` товчны хажууд `Хувилах` товч нэмнэ.
+- Товч дарахад тухайн FAQ-ийн асуултууд болон хариултыг хуулсан шинэ FAQ яг доор нь нэмэгдэнэ.
+- Шинэ FAQ-ийн `id` нь давхцахгүй байна. Одоогийн шинэ FAQ үүсгэдэг хэлбэртэй адил шинэ id өгнө.
+- Array болон `questions`-ийг тусдаа хуулна; хувилсан FAQ-г засахад эх FAQ өөрчлөгдөхгүй.
+- Backend-д шууд request явуулахгүй. Хэрэглэгч одоогийн `Хадгалах` товчийг дарсны дараа л хадгална.
+- Хувилсны дараа `Хувиллаа. Хадгалах товчийг дарна уу.` гэсэн жижиг feedback харуулна.
+- Одоогийн нэмэх, засах, устгах, хадгалах ажиллагааг хэвээр үлдээнэ.
+
+### Шалгах зүйл
+
+- Хувилсан FAQ эх FAQ-ийн яг доор гарна.
+- Асуултууд болон хариулт бүрэн хуулна.
+- Хоёр FAQ-ийн id өөр байна.
+- Хувилсан FAQ-г засахад эх FAQ өөрчлөгдөхгүй.
+- Хадгалах хүртэл API request явахгүй.
+- `bun run lint` болон `bun run build` амжилттай ажиллана.
+
+---
+
+## PR 3 — Database хайлтыг ойлгомжтой цэвэрлэх
 
 - **Үндсэн файл:** `frontend/components/database/DbTableView.tsx`
-- **Branch:** `frontend/database-table-tools`
-- **PR title:** `feat(frontend): add database table viewing tools`
+- **Branch:** `frontend/database-search-clear`
+- **PR title:** `feat(frontend): improve database search feedback`
+
+### Зорилго
+
+Хайлт идэвхтэй эсэх болон бүх мөр рүү хэрхэн буцахыг хэрэглэгчид ойлгомжтой болгоно.
 
 ### Хийх зүйл
 
-- Component-ийг client component болгоно.
-- `Багана` товч нээхэд checkbox жагсаалт харуулж, хэрэглэгч харагдах багануудаа сонгодог болгоно.
-- Ядаж нэг багана заавал харагддаг байна; бүх баганыг нуухыг зөвшөөрөхгүй.
-- Сонголтыг `localStorage`-д table-ийн нэрээр тусад нь хадгална.
-- Cell дээр focus/hover хийхэд `Хуулах` товч гаргаж, текст утгыг clipboard-д хуулна.
-- Амжилттай хуулсны дараа 1–2 секунд `Хууллаа` feedback харуулна. Clipboard ажиллахгүй үед эвдрэлгүй, ойлгомжтой алдаа үзүүлнэ.
-- Pagination, search query болон vector/date formatting-ийн одоогийн ажиллагааг хэвээр үлдээнэ.
+- `q` хоосон биш үед search form-ийн хажууд `Хайлтыг цэвэрлэх` холбоос нэмнэ.
+- Цэвэрлэх холбоос нь одоогийн table-ийн нэрийг URL-д хадгалж, зөвхөн `q` болон pagination-ийн `offset`-ийг арилгана.
+- Хайлт идэвхтэй үед хүснэгтийн дээр `“...” хайлтын үр дүн` гэсэн жижиг тайлбар харуулна.
+- Хайлтын үр дүн хоосон үед ердийн `Мөр алга` биш, `“...” хайлтад тохирох мөр олдсонгүй` гэж харуулна.
+- Хайлтын input-ийн `type`-ийг `search` болгоно.
+- Одоогийн багана сонголт, cell copy, pagination болон table солих ажиллагааг өөрчлөхгүй.
 
-### Шалгах
+### Шалгах зүйл
 
-- Багана нууж/харуулсны дараа refresh хийхэд сонголт хадгалагдана.
-- Өөр table руу ороход тухайн table-ийн өөрийн сонголт ашиглагдана.
-- Энгийн text/number/date cell зөв хуулагдана.
-- Search болон `Өмнөх`/`Дараах` холбоосын query алдагдахгүй.
-- Keyboard-аар багана сонгох болон хуулах боломжтой.
+- Хайлтгүй үед шинэ тайлбар болон цэвэрлэх холбоос харагдахгүй.
+- Хайлттай үед зөв query текст харагдана.
+- Цэвэрлэхэд ижил table дээр бүх мөр буцаж харагдана.
+- Цэвэрлэх URL-д хуучин `q`, `offset` үлдэхгүй.
+- Хайлтын үед `Өмнөх`/`Дараах` холбоос query-г хэвээр хадгална.
 - `bun run lint` болон `bun run build` амжилттай ажиллана.
 
 ---
 
-## PR 3 — Assistant chat-ийн input ба accessibility сайжруулалт
+## PR 4 — Дуудлагын яриаг TXT файлаар татах
 
-- **Үндсэн файл:** `frontend/components/assistant/AssistantChat.tsx`
-- **Branch:** `frontend/assistant-chat-ux`
-- **PR title:** `feat(frontend): improve assistant chat interactions`
+- **Шинэ файл:** `frontend/components/calls/DownloadTranscriptButton.tsx`
+- **Өөрчлөх файл:** `frontend/app/(dashboard)/calls/[uuid]/page.tsx`
+- **Branch:** `frontend/call-transcript-download`
+- **PR title:** `feat(frontend): add call transcript download`
+
+### Зорилго
+
+Байгууллагын ажилтан нэг дуудлагын яриаг тайлан, архив эсвэл бусад хүнд өгөхөөр TXT файл болгож татдаг болгоно.
 
 ### Хийх зүйл
 
-- Нэг мөрийн `input`-ийг auto-resize хийдэг `textarea` болгоно; 1–5 мөр хүртэл өсдөг байна.
-- `Enter` илгээж, `Shift+Enter` шинэ мөр оруулдаг болгоно.
-- Илгээсний дараа focus-ийг textarea дээр хадгална.
-- Message list-д `role="log"`, `aria-live="polite"`, `aria-relevant="additions"` тохируулж шинэ AI хариултыг screen reader уншдаг болгоно.
-- Шинэ message нэмэгдэхэд доош auto-scroll хийнэ. Харин хэрэглэгч хуучин message уншихаар дээш scroll хийсэн үед хүчээр доош үсрүүлэхгүй; доор `Шинэ хариулт ↓` товч харуулна.
-- Busy төлөвт input болон илгээх товч disabled байна, одоогийн example/keypad flow эвдэхгүй.
+- Дуудлагын detail хуудасны header action хэсэгт `TXT татах` товч нэмнэ.
+- Товчийг шинэ client component дотор хийнэ. Detail page server component хэвээр үлдэнэ.
+- TXT агуулгын эхэнд дараах мэдээлэл байна:
+  - дуудлагын огноо;
+  - залгагчийн дугаар;
+  - үргэлжилсэн хугацаа.
+- Дараа нь message бүрийг дарааллаар нь:
+  - `Залгагч: ...`
+  - `AI: ...`
+  хэлбэрээр шинэ мөрөнд оруулна.
+- Browser-ийн `Blob`, `URL.createObjectURL` болон түр `<a download>` ашиглана.
+- Татсаны дараа object URL-ийг `URL.revokeObjectURL`-аар цэвэрлэнэ.
+- Файлын нэр `call-<uuid>.txt` байна.
+- Message байхгүй үед товч disabled байна.
+- Одоогийн `← Бүх яриа` холбоосыг хэвээр үлдээнэ.
 
-### Шалгах
+### Шалгах зүйл
 
-- `Enter`, `Shift+Enter` хоёр тусдаа зөв ажиллана.
-- Олон мөртэй текст textarea-г 5 мөр хүртэл өсгөнө.
-- Доод хэсэгт байх үед шинэ message автоматаар харагдана.
-- Дээш scroll хийсэн үед байрлал хадгалагдаж, `Шинэ хариулт ↓` товчоор доош очно.
-- Caller/staff mode солих, шинэ яриа, example болон keypad хэвийн ажиллана.
+- Message-тэй дуудлагаас TXT файл татагдана.
+- Файлын нэр зөв UUID-тай байна.
+- Монгол үсэг эвдрэхгүй, UTF-8-аар уншигдана.
+- Залгагч болон AI message зөв дарааллаар орно.
+- Дугаар тодорхойгүй үед `дугаар тодорхойгүй` гэж орно.
+- Message байхгүй үед товч disabled байна.
 - `bun run lint` болон `bun run build` амжилттай ажиллана.
 
 ---
 
-## PR 4 — Нэгдсэн confirm dialog component
-
-- **Шинэ файл:** `frontend/components/ui/ConfirmDialog.tsx`
-- **Өөрчлөх файлууд:**
-  - `frontend/components/faq/FaqEditor.tsx`
-  - `frontend/components/voice/ClipList.tsx`
-  - `frontend/components/training/TrainingManager.tsx`
-- **Branch:** `frontend/reusable-confirm-dialog`
-- **PR title:** `feat(frontend): add reusable confirmation dialog`
-
-### Хийх зүйл
-
-- Browser-ийн `window.confirm`-ийг орлох reusable dialog хийнэ.
-- Props нь `open`, `title`, `description`, confirm/cancel callback, confirm label болон danger төлөвтэй байна.
-- Dialog нээгдэхэд confirm биш, cancel товч эхэлж focus авна.
-- `Escape`, backdrop болон `Цуцлах` товч dialog-ийг хаана; confirm callback дуудахгүй.
-- Dialog хаагдсаны дараа focus өмнө дарсан товч руу буцна.
-- FAQ устгах, voice recording устгах, ElevenLabs-аар дахин үүсгэх үйлдлүүдийг шинэ dialog-т холбоно.
-- Training example устгах үйлдэлд мөн баталгаажуулалт нэмнэ.
-- Pending үед товчнууд disabled болж, давхар action явуулахгүй.
-
-### Шалгах
-
-- Дөрвөн action бүр зөв гарчиг, тайлбартай dialog нээнэ.
-- Cancel, backdrop, `Escape` үед ямар ч өгөгдөл өөрчлөгдөхгүй.
-- Confirm хийхэд өмнөх API action яг нэг удаа ажиллана.
-- Focus dialog дотроо зөв удирдагдаж, хаахад trigger товч руу буцна.
-- Mobile болон desktop дээр dialog viewport-оос халихгүй.
-- `bun run lint` болон `bun run build` амжилттай ажиллана.
-
----
-
-## PR description
+## PR description загвар
 
 ```markdown
 ## Юу хийсэн
@@ -130,4 +161,4 @@ PR-үүд хоорондоо хамааралгүй. Нэг PR-д зөвхөн �
 <!-- Өөрчлөлтийн desktop болон mobile харагдацыг оруулна. -->
 ```
 
-> Анхаарах: API contract өөрчлөх, backend файл засах, шинэ dependency суулгах шаардлагагүй. Scope томорвол тухайн PR-аас салгаж тусдаа issue болгоно.
+> Даалгаварт бичээгүй нэмэлт refactor хийхгүй. Scope томорвол тусдаа issue болгоно.
