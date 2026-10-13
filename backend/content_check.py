@@ -63,6 +63,29 @@ def check_empty_fields(faqs):
     return errors
 
 
+def normalize(text):
+    """Жижиг үсэг болгож, илүү зайг арилгана: '  Үнэ   ХЭД вэ ' -> 'үнэ хэд вэ'."""
+    return " ".join(str(text).lower().split())
+
+
+def check_duplicate_questions(faqs):
+    """Ижил асуулт хоёр өөр FAQ-д байгаа эсэхийг шалгана."""
+    seen = {}  # цэвэрлэсэн асуулт -> анх олдсон FAQ-ийн нэр
+    errors = []
+    for index, faq in enumerate(faqs, start=1):
+        faq_id = faq.get("id")
+        name = f"{index}-р FAQ" if is_empty(faq_id) else faq_id
+
+        for question in faq.get("questions", []):
+            if is_empty(question):
+                continue  # хоосон асуултыг check_empty_fields шалгана
+            key = normalize(question)
+            if key not in seen:
+                seen[key] = name
+            elif seen[key] != name:
+                errors.append(f'Давхардсан асуулт: "{question}" ({seen[key]} ба {name})')
+    return errors
+
 def main():
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_PATH
     faqs = load_faqs(path)
@@ -73,8 +96,7 @@ def main():
 
     print("FAQ:", len(faqs))
     print("Асуулт:", question_count)
-
-    errors = check_duplicate_ids(faqs) + check_empty_fields(faqs)
+    errors = check_duplicate_ids(faqs) + check_empty_fields(faqs) + check_duplicate_questions(faqs)
     for error in errors:
         print("Алдаа:", error)
 
