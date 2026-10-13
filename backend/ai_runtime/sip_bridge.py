@@ -356,8 +356,9 @@ class SIPServer(asyncio.DatagramProtocol):
 async def main():
     loop = asyncio.get_running_loop()
     await loop.create_datagram_endpoint(SIPServer, local_addr=("0.0.0.0", SIP_PORT))
-    print(f"SIP сервер: {my_ip()}:{SIP_PORT} (UDP)  ->  AI {AI_HOST}:{AI_PORT}")
-    print(f"Zoiper: username=phone1  password=дурын  domain={my_ip()}  transport=UDP")
+    print(f"SIP сервер: 0.0.0.0:{SIP_PORT} (UDP)  ->  AI {AI_HOST}:{AI_PORT}")
+    print("Zoiper: username=phone1  password=дурын  "
+          f"domain=<энэ Mac-ийн LAN/Tailscale IP>:{SIP_PORT}  transport=UDP")
     for t in tenants.all_tenants():
         print(f"  {t.config().get('extension', '—'):>6} -> {t.slug} ({t.config().get('name', '')})")
     await asyncio.Event().wait()
