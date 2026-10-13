@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ChatMessage } from "@/components/calls/ChatMessage";
+import { DownloadTranscriptButton } from "@/components/calls/DownloadTranscriptButton";
 import { EmptyState, PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { apiGet } from "@/lib/api";
@@ -23,7 +24,18 @@ export default async function CallPage({ params }: PageProps<"/calls/[uuid]">) {
       <PageHeader
         title="Дуудлага"
         sub={`${formatDateTime(call.started_at)} · ${call.caller || "дугаар тодорхойгүй"} · ${formatSeconds(call.duration)}`}
-        actions={<Link href="/calls" className="font-bold hover:underline">← Бүх яриа</Link>}
+        actions={
+          <div className="flex items-center gap-3">
+            <DownloadTranscriptButton
+              uuid={call.uuid}
+              createdAt={call.started_at}
+              phone={call.caller}
+              duration={call.duration}
+              messages={messages}
+            />
+            <Link href="/calls" className="font-bold hover:underline">← Бүх яриа</Link>
+          </div>
+        }
       />
       <Card>
         {messages.length ? (
