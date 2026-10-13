@@ -24,6 +24,7 @@ export default async function LoginPage() {
   const user = await getUser().catch(() => null);
   if (user) redirect("/");
   const demo = await demoEnabled();
+  console.log(demo)
 
   return (
     <AuthCard

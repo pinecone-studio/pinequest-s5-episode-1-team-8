@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/PageHeader";
 import { ActionStatus } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card, StatCard } from "@/components/ui/Card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { apiSend } from "@/lib/client";
 import { formatDateTime } from "@/lib/format";
 import type {
@@ -25,6 +26,9 @@ export function UnansweredManager({ initial, answers }: { initial: UnansweredRev
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  
+  // ConfirmDialog-ийн төлөв (state)
+  const [isApplyConfirmOpen, setIsApplyConfirmOpen] = useState(false);
 
   const groups = useMemo(() => {
     const noise = items.filter((item) => item.now?.noise);
@@ -78,7 +82,7 @@ export function UnansweredManager({ initial, answers }: { initial: UnansweredRev
   }
 
   async function apply() {
-    if (!window.confirm("Шинэ хариултын аудио үүсгэж AI-г сургах уу?")) return;
+    setIsApplyConfirmOpen(false);
     await action("apply", async () => {
       await apiSend<JobStatus>("/api/unanswered/apply", "POST");
       setPendingNotes([]);
@@ -99,7 +103,7 @@ export function UnansweredManager({ initial, answers }: { initial: UnansweredRev
             <b>{pendingNotes.length} өөрчлөлт</b> хэрэгжүүлэхэд бэлэн
             <p className="mt-1 text-sm text-muted">{pendingNotes.slice(-3).join(" · ")}{pendingNotes.length > 3 ? " …" : ""}</p>
           </div>
-          <Button variant="primary" onClick={() => void apply()} disabled={Boolean(busy)}>
+          <Button variant="primary" onClick={() => setIsApplyConfirmOpen(true)} disabled={Boolean(busy)}>
             {busy === "apply" ? "Дараалалд оруулж байна…" : "Хэрэгжүүлэх · аудио + сургалт"}
           </Button>
         </Card>
@@ -128,6 +132,18 @@ export function UnansweredManager({ initial, answers }: { initial: UnansweredRev
           onHide={hide} onHideAll={() => void hideAll(groups.noise, "noise")} />
       )}
       <ActionStatus error={error} message={message} />
+
+      {/* Хэрэгжүүлэх үйлдлийг баталгаажуулах ConfirmDialog */}
+      <ConfirmDialog
+        open={isApplyConfirmOpen}
+        title="Өөрчлөлтийг хэрэгжүүлэх үү?"
+        description="Шинэ хариултуудын аудио үүсч, AI сургалт хийгдэх болно."
+        confirmLabel="Хэрэгжүүлэх"
+        cancelLabel="Цуцлах"
+        danger={false}
+        onConfirm={() => void apply()}
+        onCancel={() => setIsApplyConfirmOpen(false)}
+      />
     </div>
   );
 }

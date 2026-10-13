@@ -14,6 +14,7 @@ import { useAction } from "@/lib/useAction";
 export function FaqEditor({ initial }: { initial: FaqData }) {
   const [greeting, setGreeting] = useState(initial.greeting);
   const [items, setItems] = useState(initial.faq);
+  const [searchQuery, setSearchQuery] = useState("");
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
   const [duplicateMessage, setDuplicateMessage] = useState<string | null>(null);
 
@@ -86,6 +87,18 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
     }
   }
 
+  // Хайлтын шүүлтүүр (ID, Асуулт, Хариултаар хайна)
+  const filteredItems = items.map((item, index) => ({ item, index })).filter(({ item }) => {
+    const query = searchQuery.toLowerCase().trim();
+    if (!query) return true;
+    
+    const matchId = item.id.toLowerCase().includes(query);
+    const matchAnswer = item.answer.toLowerCase().includes(query);
+    const matchQuestions = item.questions.some((q) => q.toLowerCase().includes(query));
+
+    return matchId || matchAnswer || matchQuestions;
+  });
+
   return (
     <div className="space-y-7">
       <div className="flex items-center justify-between">
@@ -117,10 +130,18 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
           onChange={(event) => setGreeting(event.target.value)}
         />
 
-        <div className="mt-6 mb-4 flex items-center justify-between">
+        <div className="mt-6 mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-fg">
-            Нийт {items.length} FAQ
+            Нийт {items.length} FAQ {filteredItems.length !== items.length && `(Шүүгдсэн: ${filteredItems.length})`}
           </h2>
+
+          {/* Хайлтын талбар */}
+          <input
+            className="w-full sm:w-[280px] rounded-[10px] border border-line-2 bg-bg px-3 py-2 text-sm outline-none focus:border-brand"
+            placeholder="ID, асуулт эсвэл хариултаар хайх..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
         </div>
 
         {items.length === 0 ? (
@@ -145,9 +166,15 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
               + FAQ нэмэх
             </Button>
           </div>
+        ) : filteredItems.length === 0 ? (
+          <div className="mt-5 rounded-[10px] border border-line-2 bg-bg px-5 py-8 text-center">
+            <p className="text-sm text-muted">
+              Хайлтын үр дүн олдсонгүй.
+            </p>
+          </div>
         ) : (
           <div className="mt-6 divide-y divide-line">
-            {items.map((item, index) => (
+            {filteredItems.map(({ item, index }) => (
               <div
                 key={`${item.id}-${index}`}
                 className="py-5 first:pt-0"

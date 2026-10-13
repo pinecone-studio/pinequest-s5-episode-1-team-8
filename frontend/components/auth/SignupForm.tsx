@@ -8,7 +8,7 @@ import { Field } from "@/components/ui/Field";
 import { apiSend } from "@/lib/client";
 
 /**
- * Байгууллагын нэр, утас, и-мэйл, нууц үг
+ * Байгууллагын нэр, утас, и-мэйл, нууц үг, нууц үг давталт
  * -> POST /api/signup
  * -> Тохируулах хуудас руу
  *
@@ -20,11 +20,22 @@ export function SignupForm() {
 
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    const form = Object.fromEntries(new FormData(e.currentTarget));
+    const formData = new FormData(e.currentTarget);
+    const password = formData.get("password") as string;
+
+    // Хоёр нууц үг ижил эсэхийг шалгах
+    if (password !== confirmPassword) {
+      setError("Нууц үг таарахгүй байна");
+      return;
+    }
+
+    // Давтан оруулсан нууц үгийг backend руу явуулах payload-аас хасах зорилгоор objekt болгож авна
+    const form = Object.fromEntries(formData.entries());
 
     setPending(true);
     setError("");
@@ -75,6 +86,19 @@ export function SignupForm() {
         autoComplete="new-password"
         required
         minLength={8}
+      />
+
+      {/* Нууц үгээ давтах талбар */}
+      <Field
+        label="Нууц үгээ давтах"
+        name="confirmPassword"
+        type="password"
+        autoComplete="new-password"
+        placeholder="Нууц үгээ дахин оруулна уу"
+        required
+        minLength={8}
+        value={confirmPassword}
+        onChange={(e) => setConfirmPassword(e.target.value)}
       />
 
       {error && <Alert>{error}</Alert>}
