@@ -86,7 +86,7 @@ export function DbTableView({ data, q }: { data: DbRows; q: string }) {
 
   const [selection, setSelection] = useState<{ table: string; columns: string[] } | null>(null);
   const [showColumnDropdown, setShowColumnDropdown] = useState(false);
-  // Серверт бүх багана харагдана. Hydration дуусмагц хадгалсан сонголтыг уншина.
+
   const savedColumns = useSyncExternalStore(subscribeStorage, () => {
     try {
       return localStorage.getItem(storageKey);
@@ -123,6 +123,7 @@ export function DbTableView({ data, q }: { data: DbRows; q: string }) {
   };
 
   const href = (offset: number) => `/database?${new URLSearchParams({ table: data.table, ...(q ? { q } : {}), offset: String(offset) })}`;
+  const clearSearchHref = `/database?${new URLSearchParams({ table: data.table })}`;
   const from = data.total ? data.offset + 1 : 0;
   const to = Math.min(data.offset + data.page, data.total);
 
@@ -132,13 +133,22 @@ export function DbTableView({ data, q }: { data: DbRows; q: string }) {
         <form className="flex flex-1 flex-wrap items-center gap-2" action="/database">
           <input type="hidden" name="table" value={data.table} />
           <input
+            type="search"
             name="q"
             defaultValue={q}
             placeholder="Хайх (текст баганаас)…"
             aria-label="Хайх"
             className="min-w-[220px] flex-1 rounded-[10px] border-[1.5px] border-line-2 bg-bg px-3 py-2 text-sm focus:border-brand focus:outline-none"
           />
-          <button className="cursor-pointer rounded-[10px] border-[1.5px] border-line-2 px-4 py-2 text-sm font-semibold hover:border-brand">Хайх</button>
+          <button type="submit" className="cursor-pointer rounded-[10px] border-[1.5px] border-line-2 px-4 py-2 text-sm font-semibold hover:border-brand">Хайх</button>
+          {q && (
+            <Link
+              href={clearSearchHref}
+              className="rounded-[10px] border border-line-2 bg-panel-2 px-3 py-2 text-sm font-medium text-muted hover:text-fg hover:border-brand transition"
+            >
+              Хайлтыг цэвэрлэх
+            </Link>
+          )}
         </form>
 
         <div className="relative">
@@ -180,6 +190,12 @@ export function DbTableView({ data, q }: { data: DbRows; q: string }) {
         <span className="ml-auto font-mono text-[13px] text-muted">{from}–{to} / {data.total}</span>
       </div>
 
+      {q && (
+        <div className="mb-2 text-xs text-muted">
+          “<strong className="text-fg">{q}</strong>” хайлтын үр дүн
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-[12px] border border-line">
         <table className="w-full text-left text-[13px]">
           <thead className="bg-panel-2">
@@ -208,7 +224,7 @@ export function DbTableView({ data, q }: { data: DbRows; q: string }) {
             {!data.rows.length && (
               <tr>
                 <td colSpan={visibleColumns.length} className="px-3 py-6 text-center text-muted">
-                  Мөр алга
+                  {q ? `“${q}” хайлтад тохирох мөр олдсонгүй` : "Мөр алга"}
                 </td>
               </tr>
             )}
