@@ -22,6 +22,17 @@ uv pip install --python .venv/bin/python -r backend/requirements-ai.txt   # AI r
 Эсвэл төслийн үндсэн хавтсаас `./dev.sh --phone` ажиллуулбал backend, frontend,
 AudioSocket AI болон SIP bridge дөрвүүлээ нэг terminal дээр асна. `Ctrl+C` бүгдийг унтраана.
 
+Шинэ бүртгэлийн 4 оронтой кодыг баталгаажсан дугаар руу SMS-ээр илгээх бол
+утасны AI процессыг асаахаас өмнө SendSMS.mn-ийн `SMS_API_KEY` ба
+`SMS_API_TOKEN`-ыг орчны хувьсагчаар тохируулна. Эдгээр нь
+`https://smsapi.buural.mn/api/user/send` endpoint-д `apiKey`, `apiToken`,
+`phone`, `message` JSON талбаруудаар илгээгдэнэ. Өөр HTTPS gateway ашиглах
+бол `SMS_API_URL` ба `SMS_API_TOKEN` тохируулна; тэр endpoint нь
+`Authorization: Bearer <token>` толгойтой JSON `{"to":"+97699112233","message":"..."}`
+хүсэлт хүлээн авах ёстой.
+Тохиргоо байхгүй, дугаар баталгаажаагүй эсвэл илгээхэд алдаа гарсан үед AI
+бүртгэлийн кодыг утсаар хэлэх одоогийн ажиллагаа хэвээр үргэлжилнэ.
+
 Анх асахад жишиг байгууллага (Pinecone Academy) ба `admin` хэрэглэгч санамсаргүй нууц үгтэй үүсч, терминалд **нэг удаа** хэвлэгдэнэ.
 Нууц үг солих: `.venv/bin/python backend/accounts.py admin admin`
 
