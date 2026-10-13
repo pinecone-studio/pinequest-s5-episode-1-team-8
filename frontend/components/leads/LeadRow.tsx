@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ActionStatus } from "@/components/ui/Alert";
 import { Td } from "@/components/ui/Table";
@@ -16,11 +17,56 @@ const CONTROL =
   "w-full rounded-[10px] border-[1.5px] border-line-2 bg-bg px-3 py-2 text-sm focus:border-brand focus:outline-none disabled:opacity-50";
 
 /** Бүртгэлийн нэг мөр: төлөв солих, тэмдэглэл бичих (талбараас гарахад хадгална), AI сануулга,
- *  бүртгэлийн код ба залгагч утсаар хийсэн өөрчлөлтүүд (хувийн RAG) */
+-  бүртгэлийн код ба залгагч утсаар хийсэн өөрчлөлтүүд (хувийн RAG) */
 export function LeadRow({ lead, reminder, code, changes = [] }: { lead: Lead; reminder?: Reminder; code?: string; changes?: LeadChange[] }) {
   const { pending, error, message, run } = useAction();
   const save = (body: { status?: LeadStatus; notes?: string }) =>
     run(() => apiSend(`/api/leads/${lead.id}`, "PATCH", body), "Хадгаллаа ✓");
+
+  const [phoneCopied, setPhoneCopied] = useState(false);
+  const [phoneError, setPhoneError] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
+  const [codeError, setCodeError] = useState(false);
+
+  useEffect(() => {
+    if (!phoneCopied && !phoneError) return;
+    const timer = setTimeout(() => {
+      setPhoneCopied(false);
+      setPhoneError(false);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [phoneCopied, phoneError]);
+
+  useEffect(() => {
+    if (!codeCopied && !codeError) return;
+    const timer = setTimeout(() => {
+      setCodeCopied(false);
+      setCodeError(false);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [codeCopied, codeError]);
+
+  const handleCopyPhone = async () => {
+    if (!lead.phone) return;
+    setPhoneError(false);
+    try {
+      await navigator.clipboard.writeText(lead.phone);
+      setPhoneCopied(true);
+    } catch {
+      setPhoneError(true);
+    }
+  };
+
+  const handleCopyCode = async () => {
+    if (!code) return;
+    setCodeError(false);
+    try {
+      await navigator.clipboard.writeText(code);
+      setCodeCopied(true);
+    } catch {
+      setCodeError(true);
+    }
+  };
 
   return (
     <tr>
@@ -30,12 +76,38 @@ export function LeadRow({ lead, reminder, code, changes = [] }: { lead: Lead; re
       </Td>
       <Td className="min-w-[240px]">
         {lead.name || "—"}
-        {code && <div className="text-[13px] text-muted">Код <b className="font-mono text-fg">{code}</b></div>}
+        {code && (
+          <div className="text-[13px] text-muted flex items-center gap-2 flex-wrap mt-1">
+            <span>Код <b className="font-mono text-fg">{code}</b></span>
+            <button
+              type="button"
+              onClick={handleCopyCode}
+              className="rounded bg-panel-2 px-1.5 py-0.5 text-[11px] font-medium text-muted hover:text-fg border border-line-2 transition cursor-pointer"
+              title={codeError ? "Хуулж чадсангүй" : "Код хуулах"}
+            >
+              <span aria-live="polite">{codeError ? "Хуулж чадсангүй" : codeCopied ? "Хууллаа ✓" : "Хуулах"}</span>
+            </button>
+          </div>
+        )}
         <LeadChanges changes={changes} />
         <ForgetPerson leadId={lead.id} name={lead.name} />
       </Td>
       <Td>
-        {lead.phone ? <b className="font-mono">{lead.phone}</b> : <Tag tone="bad">дугааргүй</Tag>}
+        {lead.phone ? (
+          <div className="flex items-center gap-2 flex-wrap">
+            <b className="font-mono">{lead.phone}</b>
+            <button
+              type="button"
+              onClick={handleCopyPhone}
+              className="rounded bg-panel-2 px-1.5 py-0.5 text-[11px] font-medium text-muted hover:text-fg border border-line-2 transition cursor-pointer"
+              title={phoneError ? "Хуулж чадсангүй" : "Утас хуулах"}
+            >
+              <span aria-live="polite">{phoneError ? "Хуулж чадсангүй" : phoneCopied ? "Хууллаа ✓" : "Хуулах"}</span>
+            </button>
+          </div>
+        ) : (
+          <Tag tone="bad">дугааргүй</Tag>
+        )}
         {lead.phone_raw && <div className="text-[13px] text-muted">STT: {lead.phone_raw}</div>}
         {lead.caller && <div className="text-[13px] text-muted">Caller ID: {lead.caller}</div>}
       </Td>
