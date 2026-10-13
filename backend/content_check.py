@@ -86,6 +86,16 @@ def check_duplicate_questions(faqs):
                 errors.append(f'Давхардсан асуулт: "{question}" ({seen[key]} ба {name})')
     return errors
 
+def check_todo_answers(faqs):
+    """Хариулт дотор TODO байгаа FAQ-уудын нэрийг буцаана."""
+    names = []
+    for index, faq in enumerate(faqs, start=1):
+        answer = faq.get("answer") or ""
+        if "TODO" in str(answer).upper():
+            faq_id = faq.get("id")
+            names.append(f"{index}-р FAQ" if is_empty(faq_id) else faq_id)
+    return names
+
 def main():
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_PATH
     faqs = load_faqs(path)
@@ -96,9 +106,21 @@ def main():
 
     print("FAQ:", len(faqs))
     print("Асуулт:", question_count)
+
     errors = check_duplicate_ids(faqs) + check_empty_fields(faqs) + check_duplicate_questions(faqs)
     for error in errors:
         print("Алдаа:", error)
+
+    warnings = check_todo_answers(faqs)
+    if warnings:
+        print("TODO хариулттай FAQ:")
+        for name in warnings:
+            print("-", name)
+
+    print()
+    print("Шалгалт дууслаа")
+    print("Алдаа:", len(errors))
+    print("Анхааруулга:", len(warnings))
 
     if errors:
         sys.exit(1)
