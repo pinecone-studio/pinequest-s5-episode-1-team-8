@@ -17,6 +17,22 @@ def load_faqs(path):
     return data.get("faq", [])
 
 
+def check_duplicate_ids(faqs):
+    """Нэг ID хэдэн удаа гарсныг тоолж, 1-ээс олон бол алдаа буцаана."""
+    counts = {}
+    for faq in faqs:
+        faq_id = faq.get("id")
+        if not faq_id:
+            continue  # хоосон ID-г PR 3 шалгана
+        counts[faq_id] = counts.get(faq_id, 0) + 1
+
+    errors = []
+    for faq_id, count in counts.items():
+        if count > 1:
+            errors.append(f"Давхардсан ID: {faq_id} ({count} удаа)")
+    return errors
+
+
 def main():
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_PATH
     faqs = load_faqs(path)
@@ -27,6 +43,13 @@ def main():
 
     print("FAQ:", len(faqs))
     print("Асуулт:", question_count)
+
+    errors = check_duplicate_ids(faqs)
+    for error in errors:
+        print("Алдаа:", error)
+
+    if errors:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
