@@ -17,19 +17,49 @@ def load_faqs(path):
     return data.get("faq", [])
 
 
+def is_empty(value):
+    """None, "" эсвэл зөвхөн зайтай текстийг хоосон гэж үзнэ."""
+    return value is None or str(value).strip() == ""
+
+
 def check_duplicate_ids(faqs):
     """Нэг ID хэдэн удаа гарсныг тоолж, 1-ээс олон бол алдаа буцаана."""
     counts = {}
     for faq in faqs:
         faq_id = faq.get("id")
-        if not faq_id:
-            continue  # хоосон ID-г PR 3 шалгана
+        if is_empty(faq_id):
+            continue  # хоосон ID-г check_empty_fields шалгана
         counts[faq_id] = counts.get(faq_id, 0) + 1
 
     errors = []
     for faq_id, count in counts.items():
         if count > 1:
             errors.append(f"Давхардсан ID: {faq_id} ({count} удаа)")
+    return errors
+
+
+def check_empty_fields(faqs):
+    """Хоосон ID, хоосон асуулт, хоосон хариулт хайна."""
+    errors = []
+    for index, faq in enumerate(faqs, start=1):
+        faq_id = faq.get("id")
+
+        # ID хоосон бол FAQ-г дарааллын дугаараар нь нэрлэнэ
+        if is_empty(faq_id):
+            errors.append(f"Хоосон ID: {index}-р FAQ")
+            name = f"{index}-р FAQ"
+        else:
+            name = faq_id
+
+        questions = faq.get("questions", [])
+        if not questions:
+            errors.append(f"Асуултгүй FAQ: {name}")
+        for question in questions:
+            if is_empty(question):
+                errors.append(f"Хоосон асуулт: {name}")
+
+        if is_empty(faq.get("answer")):
+            errors.append(f"Хоосон хариулт: {name}")
     return errors
 
 
@@ -44,7 +74,7 @@ def main():
     print("FAQ:", len(faqs))
     print("Асуулт:", question_count)
 
-    errors = check_duplicate_ids(faqs)
+    errors = check_duplicate_ids(faqs) + check_empty_fields(faqs)
     for error in errors:
         print("Алдаа:", error)
 
