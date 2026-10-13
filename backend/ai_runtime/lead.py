@@ -94,6 +94,11 @@ def clean_name(text: str) -> str:
 
 
 def yes_no(text: str) -> bool | None:
+    digits = re.sub(r"\D", "", text or "")
+    if digits == "1":
+        return True
+    if digits == "2":
+        return False
     words = set(re.findall(r"[а-яөүё]+", text.lower()))
     if words & NO:
         return False
