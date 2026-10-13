@@ -345,6 +345,10 @@ class SIPServer(asyncio.DatagramProtocol):
                       body=make_sdp(rtp_port, pt, me, dtmf_pt), to_tag=uuid.uuid4().hex[:8])
         self.answers[call_id] = ok
         send(ok)
+        # Зарим softphone (ялангуяа VPN/LTE дээр) серверээс RTP иртэл өөрөө RTP
+        # илгээдэггүй. Эхний RTP-г хүлээвэл хоёр тал хоёулаа хүлээгээд чимээгүй болно.
+        call.starting = True
+        asyncio.create_task(call.start_ai())
         print(f"[SIP] Дуудлага холбогдлоо [{t.slug} {ext}] {hget(headers, 'From', 'f')} "
               f"codec={CODECS[pt][0]} rtp {me}:{rtp_port} <-> {ip}:{port}")
 
