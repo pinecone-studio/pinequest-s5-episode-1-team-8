@@ -80,17 +80,13 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
     }
   }
 
-  // Хайлт болон TODO шүүлтүүрийн логик (originalIndex-ийг хамт хадгална)
   const filteredItems = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
 
     return items
       .map((item, originalIndex) => ({ item, originalIndex }))
       .filter(({ item }) => {
-        // Зөвхөн TODO шүүлтүүр шалгах (хариулт эсвэл бусад нөхцөлд TODO байгаа эсэх)
-        const isTodoItem =
-          item.answer.includes("TODO") || (item as any).isTodo;
-        if (onlyTodo && !isTodoItem) {
+        if (onlyTodo && !item.answer.includes("TODO")) {
           return false;
         }
 
@@ -135,7 +131,6 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
             Харагдаж буй {filteredItems.length} / Нийт {items.length} FAQ
           </h2>
 
-          {/* Хайлт болон TODO шүүлтүүр хэсэг */}
           <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
             <input
               className="w-full sm:w-[260px] rounded-[10px] border border-line-2 bg-bg px-3 py-2 text-sm outline-none focus:border-brand"
