@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import { BuildPanel } from "@/components/knowledge/BuildPanel";
 import { ActionStatus } from "@/components/ui/Alert";
@@ -15,8 +15,15 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
   const [greeting, setGreeting] = useState(initial.greeting);
   const [items, setItems] = useState(initial.faq);
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
+  const [duplicateMessage, setDuplicateMessage] = useState<string | null>(null);
 
   const { pending, error, message, run } = useAction();
+
+  useEffect(() => {
+    if (!duplicateMessage) return;
+    const timer = setTimeout(() => setDuplicateMessage(null), 3000);
+    return () => clearTimeout(timer);
+  }, [duplicateMessage]);
 
   const update = (
     index: number,
@@ -27,6 +34,22 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
         current === index ? { ...row, ...patch } : row
       )
     );
+
+  function duplicateItem(index: number) {
+    setItems((rows) => {
+      const target = rows[index];
+      const duplicated: FaqItem = {
+        id: `faq_${Date.now() % 100000}_copy`,
+        questions: [...target.questions],
+        answer: target.answer,
+        ...(target.auto !== undefined ? { auto: target.auto } : {}),
+      };
+      const nextRows = [...rows];
+      nextRows.splice(index + 1, 0, duplicated);
+      return nextRows;
+    });
+    setDuplicateMessage("Хувиллаа. Хадгалах товчийг дарна уу.");
+  }
 
   function save() {
     const faq = items
@@ -65,15 +88,22 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
 
   return (
     <div className="space-y-7">
-      <div className="flex justify-end">
-        <Button
-          variant="primary"
-          size="lg"
-          onClick={save}
-          disabled={pending}
-        >
-          Хадгалах
-        </Button>
+      <div className="flex items-center justify-between">
+        {duplicateMessage && (
+          <span className="text-sm font-medium text-brand animate-pulse">
+            {duplicateMessage}
+          </span>
+        )}
+        <div className="ml-auto flex items-center gap-3">
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={save}
+            disabled={pending}
+          >
+            Хадгалах
+          </Button>
+        </div>
       </div>
 
       <section className="rounded-[14px] bg-panel px-[22px] py-5">
@@ -145,12 +175,20 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
                     </Tag>
                   )}
 
-                  <Button
-                    className="ml-auto text-danger"
-                    onClick={() => setDeleteIndex(index)}
-                  >
-                    Устгах
-                  </Button>
+                  <div className="ml-auto flex items-center gap-2">
+                    <Button
+                      onClick={() => duplicateItem(index)}
+                      title="Энэ FAQ-г хувилах"
+                    >
+                      Хувилах
+                    </Button>
+                    <Button
+                      className="text-danger"
+                      onClick={() => setDeleteIndex(index)}
+                    >
+                      Устгах
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="grid gap-4 lg:grid-cols-2">
