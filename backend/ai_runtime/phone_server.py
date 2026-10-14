@@ -61,6 +61,7 @@ PRE_ROLL = 0.5   # яриа эхлэхээс өмнөх аудио. AI дуус�
 # 8GB машинд дуудлагагүй үед macOS загваруудыг swap руу гаргаж, дараагийн дуудлагын эхний хариулт 10с+ болсон
 # (10-06 демо шалгалт: залгагч хариу сонсохгүй таслав). Үе үе жижиг STT + embedding -> санах ойд барина. 0 = унтраах
 KEEPALIVE = float(os.getenv("KEEPALIVE", "90"))
+DTMF_GAP = 5.0      # сек: товчлуур хооронд үүнээс удаан завсарлавал дугаарыг шинээр эхлүүлнэ
 REVIEW_PORT = int(os.getenv("REVIEW_PORT", "9093"))   # вэбийн "Хариулж чадаагүй" хуудсанд (зөвхөн 127.0.0.1)
 WARM_TEXTS = ["сайн байна уу", "сургалтын төлбөр хэд вэ", "хөтөлбөр хэдэн сар үргэлжилдэг вэ тэгээд төлбөрөө хувааж төлж болох уу"]
 
@@ -142,6 +143,17 @@ class Models:
                 print(f"[{t.slug}] англи индекс ачаалж чадсангүй: {e}")
         return router
 
+    def warm(self):
+        """STT + embedding-ийг нэг удаа ажиллуулж санах ойд ачаална (swap-аас буцаана)."""
+        t = time.perf_counter()
+        try:
+            self.stt.transcribe(np.zeros(SR, np.float32), SR)
+            self.embedder.query(WARM_TEXTS)
+        except Exception as e:
+            print(f"  [warm алдаа] {e}")
+        if time.perf_counter() - t > 3:
+            print(f"  [warm] {time.perf_counter() - t:.1f}s (swap-аас ачааллаа)")
+
     @staticmethod
     def warm_llm():
         """Ollama моделийг санах ойд урьдчилан ачаална -> эхний дуудлага удаашрахгүй."""
@@ -172,6 +184,7 @@ class Call:
         self.lead_question = None        # handoff үед хариулж чадаагүй асуулт
         self.account: acct.AccountFlow | None = None   # залгагч өөрийн бүртгэлийг шалгаж/өөрчилж байвал
         self.dtmf = ""                   # товчлуураар бичиж буй дугаар
+        self.dtmf_at = 0.0               # сүүлд товчлуур дарсан цаг (DTMF_GAP)
         self.en: english.EnglishRouter | None = None   # байгууллага англи горимтой бол
         self.lang = "mn"                 # залгагчийн сүүлд ярьсан хэл
         self.en_misses = 0               # англиар дараалан олдоогүй асуулт
@@ -379,6 +392,11 @@ class Call:
         self.log("assistant", reply, route=f"lead_{flow.result or flow.state}")
         if flow.finished:
             self.lead = None
+        elif flow.state == "phone" and self.dtmf:   # нэрийн алхмын үед бичсэн цифрүүд
+            self.dtmf_at = time.monotonic()          # хэллэг тоглох хугацааг завсар гэж тооцохгүй
+            local = self.dtmf[3:] if self.dtmf.startswith("976") else self.dtmf
+            if len(local) >= 8:
+                asyncio.get_running_loop().call_soon(self.on_dtmf, "#")
         self.history += [{"role": "user", "content": text},
                          {"role": "assistant", "content": reply}]
         self.history = self.history[-8:]
@@ -488,10 +506,20 @@ class Call:
         if not self.lead:                # "кодоо бичнэ үү" тоглож байхад дарсан цифрийг хадгална
             self.dtmf = "" if key in "*#" else (self.dtmf + key)[-12:]
             return
-        if not (self.lead and self.lead.state in ("phone", "confirm")):
+        if not (self.lead and self.lead.state in ("name", "phone", "confirm")):
             return
         if key == "*":                    # алдсан бол * дараад дахин эхэлнэ
             self.dtmf = ""
+            return
+        # Хагас бичээд зогсож, дахин эхнээс нь бичвэл хуучин цифрүүд урд нь наалдаж
+        # "88008432" -> "00843288" болж байсан (бодит дуудлага) -> удаан завсарласан бол шинээр эхэлнэ
+        now = time.monotonic()
+        if key != "#" and self.dtmf and now - self.dtmf_at > DTMF_GAP:
+            self.dtmf = ""
+        self.dtmf_at = now
+        if self.lead.state == "name":     # нэрийг таниулж байх зуур дугаараа бичиж эхэлсэн -> хадгална
+            if key != "#":
+                self.dtmf += key
             return
         # Баталгаажуулах үед 1=зөв, 2=буруу. # хүлээлгүй шууд боловсруулна.
         if self.lead.state == "confirm" and key in "12" and not self.dtmf:
@@ -631,6 +659,9 @@ class Call:
                         clips.append(self.en.clip(suffix))
                         text += " " + suffix["text"]
                     self.turn = asyncio.create_task(self.play_all(clips))
+                    # Мэндчилгээ тоглох зуур загваруудыг swap-аас санах ойд буцаана: 8GB дээр
+                    # дуудлагын эхний STT 6–20с болж байсан. stt_pool (1 thread) -> эхний яриа араас нь
+                    asyncio.get_running_loop().run_in_executor(self.m.stt_pool, self.m.warm)
                     try:
                         db.start_call(self.uuid, path=self.tenant.db_path)
                         db.add_message(self.uuid, "assistant", text, route="greeting",
