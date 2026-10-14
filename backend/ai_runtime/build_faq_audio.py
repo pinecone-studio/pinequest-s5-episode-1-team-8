@@ -104,6 +104,8 @@ def main():
     print("\nБүртгэлээ шалгах/өөрчлөх (account) / огноо:")
     account = {key: clip(text) for key, text in phrases["account"].items()}
     dates = {x: clip(x) for x in people.all_date_texts(people.booking(t.dir))}
+    # Эвентийн нэр ("Эвентэд бүртгүүлмээр байна" -> "<нэр> <огноо> болно"). Тохиргоо -> Эвент-ээс
+    events = {e["name"]: clip(e["name"]) for e in people.events(t.dir)}
 
     print("\nСэдвийн bridge:")
     topics = {tid: clip(x["bridge"]) for tid, x in src.get("topics", {}).items()}
@@ -156,6 +158,7 @@ def main():
         "digits": digits,
         "account": account,
         "dates": dates,
+        "events": events,
         "topics": topics,
         "faq": faq,
         "questions": questions,

@@ -23,6 +23,7 @@ import signal
 import struct
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from math import gcd
 
 import numpy as np
@@ -36,7 +37,7 @@ import english
 import notify
 import people
 import tenant as tenants
-from lead import START_FAQ, LeadFlow
+from lead import START_FAQ, LeadFlow, wants_event
 import names
 from stt import NAME_DECODES, BilingualSTT, WhisperSTT
 
@@ -76,6 +77,8 @@ PRE_ROLL = 0.5   # яриа эхлэхээс өмнөх аудио. AI дуус�
 KEEPALIVE = float(os.getenv("KEEPALIVE", "90"))
 BYE_WORDS = re.compile(r"баяртай|баярлалаа|байхгүй|үгүй|болоо|алга|дараа ярья")
 REPROMPT_AFTER = float(os.getenv("REPROMPT_AFTER", "6"))   # бүртгэлийн асуултын дараах чимээгүй (сек)
+# Нэг товчлуураар хариулдаг алхмууд: баталгаажуулах 1/2, эвент сонгох 1-3, эвентэд бүртгүүлэх эсэх 1/2
+ONE_KEY = {"confirm": "12", "event_pick": "123", "event_offer": "12"}
 DTMF_GAP = 5.0      # сек: товчлуур хооронд үүнээс удаан завсарлавал дугаарыг шинээр эхлүүлнэ
 REVIEW_PORT = int(os.getenv("REVIEW_PORT", "9093"))   # вэбийн "Хариулж чадаагүй" хуудсанд (зөвхөн 127.0.0.1)
 WARM_TEXTS = ["сайн байна уу", "сургалтын төлбөр хэд вэ", "хөтөлбөр хэдэн сар үргэлжилдэг вэ тэгээд төлбөрөө хувааж төлж болох уу"]
@@ -316,6 +319,13 @@ class Call:
             return
         if self.account and lang != "en" and await self.account_turn(text=text):
             return
+        if (lang != "en" and not self.lead and not self.account and "lead" in self.router.meta
+                and wants_event(text, self.upcoming_events())):
+            caller = db.caller_of(self.uuid, path=self.tenant.db_path) if self.uuid else None
+            self.lead = LeadFlow("event", "event_start", caller, events=self.upcoming_events())
+            print("  [эвент] бүртгүүлэх хүсэлт")
+            if await self.lead_turn(text):
+                return
         if lang == "en":
             return await self.en_turn(text, t1)
         meta: dict = {}
@@ -387,6 +397,12 @@ class Call:
             self.lead = LeadFlow(START_FAQ[meta["faq_id"]], "name", caller)
             self.lead_question = None
 
+    def upcoming_events(self) -> list[dict]:
+        """Удахгүй болох эвентүүд (Тохиргоо -> Эвент), ойроос нь. "Эвентэд бүртгүүлмээр байна" -> эдгээрээс."""
+        now = datetime.now(people.TZ)
+        evs = [e for e in people.events(self.tenant.dir) if people.parse_local(e["at"]) > now]
+        return sorted(evs, key=lambda e: e["at"])[:3]
+
     def last_question(self, fallback: str) -> str:
         """Ажилтанд шилжүүлэх үеийн жинхэнэ асуулт ("дахин хэлнэ үү"-гийн өмнөх)."""
         users = [m["content"] for m in self.history if m["role"] == "user"]
@@ -422,8 +438,25 @@ class Call:
                 digits = key.split(":", 1)[1]
                 await say(*self.digits_audio(digits, en))
                 spoken.append(" ".join(digits[i:i + 2] for i in range(0, len(digits), 2)))
+            elif key.startswith("date:"):             # эвентийн гараг, сар, өдөр, цаг
+                parts = people.slot_parts(people.parse_local(key.split(":", 1)[1]))
+                for part in parts:
+                    clip = router.meta.get("dates", {}).get(part)
+                    if clip:
+                        await say(*router.clip(clip))
+                spoken.append(" ".join(parts))
+            elif key.startswith("ev:"):               # эвентийн нэр («Аудио бэлдэх»-ээр бэлдсэн)
+                clip = router.meta.get("events", {}).get(key[3:])
+                if clip:
+                    await say(*router.clip(clip))
+                else:
+                    print(f"  [анхаар] '{key[3:]}' эвентийн аудио алга — «Аудио бэлдэх» дарна уу")
+                spoken.append(key[3:])
             else:
-                clip = en.lead(key) if en else router.meta["lead"][key]
+                clip = en.lead(key) if en else router.meta["lead"].get(key)
+                if not clip:                          # шинэ хэллэг, аудио бэлдээгүй
+                    print(f"  [анхаар] '{key}' хэллэгийн аудио алга — «Аудио бэлдэх» дарна уу")
+                    continue
                 await say(*(en.clip(clip) if en else router.clip(clip)))
                 spoken.append(clip["text"])
         reply = " ".join(spoken)
@@ -448,7 +481,8 @@ class Call:
         try:
             lead_id = db.add_lead(self.uuid, flow.name, flow.phone, " | ".join(flow.phone_raw) or None,
                                   flow.caller, flow.reason, self.lead_question,
-                                  course=self.tenant.config().get("lead_label"), path=self.tenant.db_path)
+                                  course=flow.event["name"] if flow.event else self.tenant.config().get("lead_label"),
+                                  path=self.tenant.db_path)
             print(f"  [LEAD] {flow.name} {flow.phone or '(дугааргүй)'} ({flow.reason})")
             if flow.lang == "mn" and flow.name:
                 self.name_jobs.append((lead_id, flow.name, self.name_audio))
@@ -568,7 +602,7 @@ class Call:
         if not self.lead:                # "кодоо бичнэ үү" тоглож байхад дарсан цифрийг хадгална
             self.dtmf = "" if key in "*#" else (self.dtmf + key)[-12:]
             return
-        if not (self.lead and self.lead.state in ("name", "phone", "confirm")):
+        if not (self.lead and self.lead.state in ("name", "phone", "confirm", *ONE_KEY)):
             return
         if key == "*":                    # алдсан бол * дараад дахин эхэлнэ
             self.dtmf = ""
@@ -584,14 +618,14 @@ class Call:
                 self.dtmf += key
             return
         # Баталгаажуулах үед 1=зөв, 2=буруу. # хүлээлгүй шууд боловсруулна.
-        if self.lead.state == "confirm" and key in "12" and not self.dtmf:
+        if key in ONE_KEY.get(self.lead.state, "") and not self.dtmf:
             digits = key
         else:
             if key != "#":
                 self.dtmf += key
             digits = self.dtmf
         local = digits[3:] if digits.startswith("976") else digits
-        complete = self.lead.state == "confirm" and digits in ("1", "2")
+        complete = len(digits) == 1 and digits in ONE_KEY.get(self.lead.state, "")
         if complete or key == "#" or len(local) >= 8:  # 8 цифр болмогц автоматаар (эсвэл # дарахад)
             self.dtmf = ""
             print(f"  [товчлуур] {digits}")
