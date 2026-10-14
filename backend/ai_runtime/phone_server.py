@@ -37,7 +37,8 @@ import notify
 import people
 import tenant as tenants
 from lead import START_FAQ, LeadFlow
-from stt import BilingualSTT, WhisperSTT
+import names
+from stt import NAME_DECODES, BilingualSTT, WhisperSTT
 
 AI_PORT = int(os.getenv("AI_PORT", "9092"))
 
@@ -57,10 +58,24 @@ BARGE_IN = float(os.getenv("BARGE_IN", "0"))
 ECHO_TAIL = float(os.getenv("ECHO_TAIL", "0.8"))        # AI-ийн дуу дууссаны дараах echo-гийн хугацаа
 MIN_TEXT_CHARS = 3                                       # "а", "мн" гэх мэт STT үр дүнг чимээ гэж үзнэ
 ACK_AFTER = float(os.getenv("ACK_AFTER", "1.0"))        # STT ийм удаан бол hold тоглуулж эхэлнэ
+# Орчны дуу (өрөөнд ярьж буй бусад хүн): Silero үүнийг ч яриа гэж үздэг тул өгүүлбэр хэзээ ч дуусахгүй,
+# залгагчийн "байхгүй" танигдахгүй байсан (бодит дуудлага 10-14, 33с). Утсанд ойр ярьж буй хүний дуу
+# орчноос чанга -> сүүлийн NOISE_WINDOW секундын доод түвшнөөс SPEECH_SNR дахин чанга дууг л яриа гэнэ.
+SPEECH_SNR = float(os.getenv("SPEECH_SNR", "2.5"))       # ~8dB
+MIN_RMS = float(os.getenv("MIN_RMS", "0.004"))           # ~-48dBFS: чимээгүй өрөөнд ч үүнээс сул бол яриа биш
+NOISE_WINDOW = 3.0
+MAX_UTTERANCE = float(os.getenv("MAX_UTTERANCE", "8"))   # үүнээс урт бол таслаад таниулна (гацахгүй)
+# Утсанд хамгийн ойр (хамгийн чанга) нь залгагч. Өгүүлбэрийн оргилоос REL_SPEECH-ээс сул хэсэг = чимээгүй
+# (залгагч дуусмагц ард яриа байсан ч өгүүлбэр дуусна), залгагчийн түвшнөөс FAR_RATIO-оос сул өгүүлбэр = алсын хүн.
+VAD_DEBUG = os.getenv("VAD_DEBUG") == "1"              # өгүүлбэр бүрийн VAD шийдвэрийг лог руу
+REL_SPEECH = float(os.getenv("REL_SPEECH", "0.25"))    # ~-12dB
+FAR_RATIO = float(os.getenv("FAR_RATIO", "0.25"))      # ~-12dB
 PRE_ROLL = 0.5   # яриа эхлэхээс өмнөх аудио. AI дуусмагц шууд ярьвал эхний үе ("хич-ээл") таслагдахгүй
 # 8GB машинд дуудлагагүй үед macOS загваруудыг swap руу гаргаж, дараагийн дуудлагын эхний хариулт 10с+ болсон
 # (10-06 демо шалгалт: залгагч хариу сонсохгүй таслав). Үе үе жижиг STT + embedding -> санах ойд барина. 0 = унтраах
 KEEPALIVE = float(os.getenv("KEEPALIVE", "90"))
+BYE_WORDS = re.compile(r"баяртай|баярлалаа|байхгүй|үгүй|болоо|алга|дараа ярья")
+REPROMPT_AFTER = float(os.getenv("REPROMPT_AFTER", "6"))   # бүртгэлийн асуултын дараах чимээгүй (сек)
 DTMF_GAP = 5.0      # сек: товчлуур хооронд үүнээс удаан завсарлавал дугаарыг шинээр эхлүүлнэ
 REVIEW_PORT = int(os.getenv("REVIEW_PORT", "9093"))   # вэбийн "Хариулж чадаагүй" хуудсанд (зөвхөн 127.0.0.1)
 WARM_TEXTS = ["сайн байна уу", "сургалтын төлбөр хэд вэ", "хөтөлбөр хэдэн сар үргэлжилдэг вэ тэгээд төлбөрөө хувааж төлж болох уу"]
@@ -185,6 +200,11 @@ class Call:
         self.account: acct.AccountFlow | None = None   # залгагч өөрийн бүртгэлийг шалгаж/өөрчилж байвал
         self.dtmf = ""                   # товчлуураар бичиж буй дугаар
         self.dtmf_at = 0.0               # сүүлд товчлуур дарсан цаг (DTMF_GAP)
+        self.caller_level = 0.0          # залгагчийн ярианы түвшин (хүлээж авсан өгүүлбэрүүдийн оргил)
+        self.reprompt: asyncio.Task | None = None   # бүртгэлийн асуултыг давтах таймер
+        self.hearing = False             # залгагч яг одоо ярьж байна (VAD)
+        self.name_audio = None           # нэрийн бичлэг -> дуудлагын дараа нэрийг засна (fix_names)
+        self.name_jobs: list = []        # [(lead_id, нэр, бичлэг)]
         self.en: english.EnglishRouter | None = None   # байгууллага англи горимтой бол
         self.lang = "mn"                 # залгагчийн сүүлд ярьсан хэл
         self.en_misses = 0               # англиар дараалан олдоогүй асуулт
@@ -230,6 +250,13 @@ class Call:
     async def play_all(self, clips):
         for wav, sr in clips:
             await self.play(wav, sr)
+
+    async def hangup(self):
+        """AI утсаа салгана (sip_bridge -> утас руу BYE). Хариулт play()-д бүрэн илгээгдсэн."""
+        await asyncio.sleep(0.8)          # утасны jitter buffer-т үлдсэн сүүлийн үг
+        print("  AI утсаа салгалаа")
+        self.send(HANGUP)
+        await self.writer.drain()
 
     def flush(self):
         self.out.clear()
@@ -282,7 +309,10 @@ class Call:
             return
         self.log("user", text, stt_sec=stt_sec)
         t1 = time.perf_counter()
+        name_flow = self.lead if self.lead and self.lead.state == "name" else None
         if self.lead and await self.lead_turn(text):
+            if name_flow and name_flow.state != "name":    # нэрээ хэлсэн бичлэг
+                self.name_audio = audio
             return
         if self.account and lang != "en" and await self.account_turn(text=text):
             return
@@ -314,6 +344,10 @@ class Call:
         self.history = self.history[-8:]
         self.maybe_start_lead(meta, text)
         self.maybe_start_account(meta, text)
+        # "Өөр асуух зүйл байна уу?" -> "Байхгүй" -> баяртай гээд AI өөрөө утсаа салгана.
+        # Сонгогч "одоо", "хайр"-ыг ч баяртай гэж үзсэн удаатай -> ийм үг байвал л салгана.
+        if meta.get("faq_id") == "smalltalk_bye" and BYE_WORDS.search(text.lower()):
+            await self.hangup()
 
     def transcribe(self, audio: np.ndarray) -> tuple[str, str]:
         """-> (бичвэр, хэл). Англи горимгүй байгууллагад хэл танихгүй (хурд, санах ой)."""
@@ -366,6 +400,11 @@ class Call:
             self.lead = None
             return False
         spoken = []
+        replay = []                       # залгагч чимээгүй бол асуултыг давтах (arm_reprompt)
+
+        async def say(wav, sr):
+            replay.append((wav, sr))
+            await self.play(wav, sr)
         en = self.en if flow.lang == "en" and self.en else None
         code_keys = []
         if flow.finished and flow.result != "declined":
@@ -377,22 +416,24 @@ class Call:
         for key in keys:
             if key in code_keys and not key.startswith("digits:"):
                 clip = router.meta["account"][key]
-                await self.play(*router.clip(clip))
+                await say(*router.clip(clip))
                 spoken.append(clip["text"])
             elif key.startswith("digits:"):
                 digits = key.split(":", 1)[1]
-                await self.play(*self.digits_audio(digits, en))
+                await say(*self.digits_audio(digits, en))
                 spoken.append(" ".join(digits[i:i + 2] for i in range(0, len(digits), 2)))
             else:
                 clip = en.lead(key) if en else router.meta["lead"][key]
-                await self.play(*(en.clip(clip) if en else router.clip(clip)))
+                await say(*(en.clip(clip) if en else router.clip(clip)))
                 spoken.append(clip["text"])
         reply = " ".join(spoken)
         print(f"  AI [бүртгэл:{flow.state}]: {reply}")
         self.log("assistant", reply, route=f"lead_{flow.result or flow.state}")
         if flow.finished:
             self.lead = None
-        elif flow.state == "phone" and self.dtmf:   # нэрийн алхмын үед бичсэн цифрүүд
+        else:
+            self.arm_reprompt(replay)
+        if not flow.finished and flow.state == "phone" and self.dtmf:   # нэрийн алхмын үед бичсэн цифрүүд
             self.dtmf_at = time.monotonic()          # хэллэг тоглох хугацааг завсар гэж тооцохгүй
             local = self.dtmf[3:] if self.dtmf.startswith("976") else self.dtmf
             if len(local) >= 8:
@@ -409,6 +450,8 @@ class Call:
                                   flow.caller, flow.reason, self.lead_question,
                                   course=self.tenant.config().get("lead_label"), path=self.tenant.db_path)
             print(f"  [LEAD] {flow.name} {flow.phone or '(дугааргүй)'} ({flow.reason})")
+            if flow.lang == "mn" and flow.name:
+                self.name_jobs.append((lead_id, flow.name, self.name_audio))
             msg = notify.lead_message(flow.name, flow.phone, " | ".join(flow.phone_raw),
                                       flow.reason, self.lead_question)
             # дуудлагыг саатуулахгүй
@@ -430,6 +473,24 @@ class Call:
             except Exception as e:
                 print(f"  [SMS эхлүүлэх алдаа] {type(e).__name__}")
         return code
+
+    def fix_names(self, jobs):
+        """Дуудлагын дараа: нэрийн бичлэгийг нэрсийн санууллагатай дахин таниулж, монгол нэрсийн
+        жагсаалтаас хамгийн ойрыг сонгоно ("бэлэг сайхан" -> "Билэгсайхан"). Дуудлагын явцад
+        нэр муу танигддаг тул энд засна."""
+        lex = names.lexicon(os.path.join(self.tenant.dir, "names.txt"))
+        for lead_id, name, audio in jobs:
+            try:
+                texts = [name]
+                if audio is not None:
+                    texts += [self.m.stt.transcribe(audio, SR, **d) for d in NAME_DECODES]
+                fixed = names.fix(names.best_text(texts, lex), lex)
+                if fixed and fixed != name:
+                    db.set_lead_name(lead_id, fixed, path=self.tenant.db_path)
+                    people.docs(self.tenant.dir, lead_id)
+                print(f"  [нэр] #{lead_id} {texts!r} -> {fixed}")
+            except Exception as e:
+                print(f"  [нэр засах алдаа] {type(e).__name__}: {e}")
 
     # ---------- Бүртгэлээ шалгах / өөрчлөх (хувийн RAG) ----------
 
@@ -501,6 +562,7 @@ class Call:
     def on_dtmf(self, key: str):
         """Утасны товчлуур: бүртгэлийн дугаар асуух үед 8 цифр (эсвэл # хүртэл) цуглуулна.
         Яриагаар хэлсэн дугаарыг STT ихэвчлэн алддаг ("наян" -> "ноён"), товчлуур 100% зөв."""
+        self.cancel_reprompt()
         if self.account and not self.lead:
             return self.on_account_dtmf(key)
         if not self.lead:                # "кодоо бичнэ үү" тоглож байхад дарсан цифрийг хадгална
@@ -603,7 +665,31 @@ class Call:
         except Exception as e:
             print(f"  [лог алдаа] {e}")
 
+    def arm_reprompt(self, clips):
+        """Бүртгэлийн асуултын дараа залгагч REPROMPT_AFTER сек чимээгүй бол асуултаа нэг удаа давтана.
+        AI "Зөв үү? ... дарна уу" гэж ярьж байхад "зөв" гэвэл half-duplex-д алга болж, хоёр тал
+        бие биенээ хүлээгээд гацдаг байсан (туршилт)."""
+        self.cancel_reprompt()
+        if clips:
+            self.reprompt = asyncio.create_task(self._reprompt(list(clips)))
+
+    def cancel_reprompt(self):
+        if self.reprompt and not self.reprompt.done() and self.reprompt is not asyncio.current_task():
+            self.reprompt.cancel()
+        self.reprompt = None
+
+    async def _reprompt(self, clips):
+        await asyncio.sleep(REPROMPT_AFTER)
+        while self.hearing and not self.closed:     # ярьж эхэлсэн -> өгүүлбэр дуусахыг хүлээнэ
+            await asyncio.sleep(0.3)
+        if self.closed or not self.lead or self.busy or self.reprompt is not asyncio.current_task():
+            return
+        print("  [дахин асуув] залгагч чимээгүй")
+        for wav, sr in clips:
+            await self.play(wav, sr)
+
     def start_turn(self, audio: np.ndarray):
+        self.cancel_reprompt()
         if self.turn and not self.turn.done():
             self.turn.cancel()
         self.turn = asyncio.create_task(self.handle_utterance(audio))
@@ -630,6 +716,9 @@ class Call:
         barged = False
         muted = False
         chunk_sec = VAD_CHUNK / SR
+        levels: list[float] = []         # сүүлийн NOISE_WINDOW секундын түвшин (орчны дуу)
+        utt_rms: list[float] = []        # өгүүлбэрийн chunk бүрийн түвшин
+        utt_peak = 0.0
 
         try:
             while True:
@@ -683,6 +772,8 @@ class Call:
                 while len(pcm_buf) >= VAD_CHUNK:
                     chunk, pcm_buf = pcm_buf[:VAD_CHUNK], pcm_buf[VAD_CHUNK:]
                     if BARGE_IN <= 0 and self.ai_audible:
+                        if VAD_DEBUG and in_speech:
+                            print("  [vad] AI ярьж эхэлсэн -> залгагчийн өгүүлбэр хаагдлаа")
                         # Half-duplex: AI ярьж байхад ирсэн дуу нь ихэвчлэн AI-ийн өөрийнх нь echo
                         in_speech, speech, muted = False, [], True
                         pre = (pre + [chunk])[-int(PRE_ROLL / chunk_sec):]  # дуу хаагдсан ч хадгална
@@ -691,11 +782,20 @@ class Call:
                         self.vad.reset_states()
                         muted = False
                     prob = self.vad(torch.from_numpy(chunk), SR).item()
+                    rms = float(np.sqrt(np.mean(chunk * chunk)))
+                    levels = (levels + [rms])[-int(NOISE_WINDOW / chunk_sec):]
+                    noise = float(np.percentile(levels, 20)) if len(levels) > 10 else 0.0
+                    near = rms >= max(MIN_RMS, noise * SPEECH_SNR)
 
-                    if prob >= VAD_THRESHOLD:
+                    voiced = prob >= VAD_THRESHOLD and near
+                    if voiced and (not in_speech or rms >= utt_peak * REL_SPEECH):
                         if not in_speech:
                             in_speech, speech, speech_sec, barged = True, list(pre), 0.0, False
+                            utt_rms = [float(np.sqrt(np.mean(c * c))) for c in pre]
+                            utt_peak = 0.0
                         speech.append(chunk)
+                        utt_rms.append(rms)
+                        utt_peak = max(utt_peak, rms)
                         speech_sec += chunk_sec
                         silence_sec = 0.0
                         # AI ярьж байхад залгагч хангалттай урт ярьвал -> зогсооно
@@ -704,20 +804,35 @@ class Call:
                             barged = True
                     elif in_speech:
                         speech.append(chunk)
-                        silence_sec += chunk_sec
-                        if silence_sec >= END_SILENCE:
-                            in_speech = False
-                            if speech_sec >= MIN_SPEECH:
-                                if self.busy and not barged:
-                                    print("  [алгасав] AI хариу бэлдэж байх үеийн яриа")
-                                else:
-                                    self.start_turn(np.concatenate(speech))
-                            speech = []
+                        utt_rms.append(rms)
+                        silence_sec += chunk_sec      # оргилоос сул яриа (үгийн сүүл эсвэл ард яриа) -> төгсгөлд чимээгүй
+                        if voiced:
+                            speech_sec += chunk_sec   # ...гэхдээ MIN_SPEECH-д тоолно ("зөв" 0.19с болж алгасагдсан)
+                    if in_speech and (silence_sec >= END_SILENCE or len(speech) * chunk_sec >= MAX_UTTERANCE):
+                        if silence_sec < END_SILENCE:
+                            print(f"  [VAD] {MAX_UTTERANCE:.0f}с-ээс урт (орчны дуу {noise:.3f}) -> таниулна")
+                        in_speech = False
+                        if VAD_DEBUG:
+                            print(f"  [vad] {speech_sec:.2f}s оргил {utt_peak:.3f} залгагч {self.caller_level:.3f} "
+                                  f"busy={self.busy} орчин {noise:.3f}")
+                        if speech_sec >= MIN_SPEECH:
+                            if self.caller_level and utt_peak < self.caller_level * FAR_RATIO:
+                                print(f"  [алгасав] алсын яриа (орчны хүн) {utt_peak:.3f} < {self.caller_level:.3f}")
+                            elif self.busy and not barged:
+                                print("  [алгасав] AI хариу бэлдэж байх үеийн яриа")
+                            else:
+                                self.caller_level = (utt_peak if not self.caller_level
+                                                     else 0.7 * self.caller_level + 0.3 * utt_peak)
+                                self.start_turn(near_speech(speech, utt_rms, utt_peak, chunk_sec))
+                        speech = []
                     pre = (pre + [chunk])[-int(PRE_ROLL / chunk_sec):]
+                    self.hearing = in_speech
         except (asyncio.IncompleteReadError, ConnectionError):
             pass
         finally:
             self.closed = True
+            if self.name_jobs:   # утас тасарсны дараа -> дуудлагыг саатуулахгүй
+                asyncio.get_running_loop().run_in_executor(self.m.stt_pool, self.fix_names, list(self.name_jobs))
             if self.uuid:
                 try:
                     db.end_call(self.uuid, path=self.tenant.db_path)
@@ -727,6 +842,19 @@ class Call:
                 self.turn.cancel()
             sender.cancel()
             self.writer.close()
+
+
+def near_speech(chunks: list, levels: list, peak: float, chunk_sec: float, pad: float = 0.3) -> np.ndarray:
+    """Өгүүлбэрээс залгагчийн (ойрын, чанга) яриаг л үлдээнэ: эхний/сүүлийн чанга хэсгийн гадна талын
+    сул яриа (ард ярьж буй хүн) хасагдана, дотор нь сул хэсэг 0.25 болно. Шуугиантай туршилтад
+    ард яриа "юм уу мөнх" нь "зөв"-ийг дарж байсан."""
+    loud = [i for i, r in enumerate(levels) if r >= peak * REL_SPEECH]
+    if not loud:
+        return np.concatenate(chunks)
+    n = int(pad / chunk_sec)
+    lo, hi = max(0, loud[0] - n), min(len(chunks), loud[-1] + 1 + n)
+    return np.concatenate([c if levels[i] >= peak * REL_SPEECH or not (loud[0] <= i <= loud[-1]) else c * 0.25
+                           for i, c in enumerate(chunks[lo:hi], lo)])
 
 
 def selector_state(router) -> str:

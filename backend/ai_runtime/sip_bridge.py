@@ -154,6 +154,8 @@ class Call:
         self.task = None
         self.starting = False
         self.retry_at = 0.0              # AI сервер бэлэн биш бол дахин оролдох хугацаа
+        self.on_hangup = None            # AI утсаа салгавал (баяртай) -> SIPServer.bye
+        self.dialog = None               # BYE илгээхэд хэрэгтэй INVITE-ийн толгойнууд
         self.failed = False
 
     async def open_rtp(self):
@@ -238,6 +240,10 @@ class Call:
                 header = await reader.readexactly(3)
                 kind, length = header[0], struct.unpack(">H", header[1:])[0]
                 payload = await reader.readexactly(length) if length else b""
+                if kind == HANGUP:                   # AI баяртай гээд утсаа салгав
+                    if self.on_hangup:
+                        self.on_hangup()
+                    return
                 if kind != AUDIO or not self.transport:
                     continue
                 for i in range(0, len(payload), 320):
@@ -305,6 +311,24 @@ class SIPServer(asyncio.DatagramProtocol):
         else:
             send(response(405, "Method Not Allowed", headers))
 
+    def bye(self, call_id: str):
+        """AI утсаа салгана: утас руу BYE (бидний талаас эхэлсэн dialog-ийн хүсэлт)."""
+        call = self.calls.pop(call_id, None)
+        self.answers.pop(call_id, None)
+        if not call:
+            return
+        d = call.dialog
+        if d:
+            msg = "\r\n".join([
+                f"BYE {d['uri']} SIP/2.0",
+                f"Via: SIP/2.0/UDP {d['me']}:{SIP_PORT};branch=z9hG4bK{uuid.uuid4().hex[:12]};rport",
+                "Max-Forwards: 70", f"From: {d['local']}", f"To: {d['remote']}",
+                f"Call-ID: {call_id}", "CSeq: 1 BYE", "User-Agent: pinecone-sip-bridge",
+                "Content-Length: 0", "", ""])
+            d["send"](msg.encode())
+        call.close()
+        print(f"[SIP] AI утсаа салгалаа {call_id[:8]}")
+
     async def invite(self, headers, body, call_id, send, peer_ip, request_line=""):
         if call_id in self.answers:            # давтагдсан INVITE / re-INVITE
             send(self.answers[call_id])
@@ -339,10 +363,18 @@ class SIPServer(asyncio.DatagramProtocol):
             print(f"[SIP] RTP порт нээж чадсангүй: {e}")
             return
         self.calls[call_id] = call
+        to_tag = uuid.uuid4().hex[:8]
         ok = response(200, "OK", headers,
                       [f"Contact: <sip:ai@{me}:{SIP_PORT}>",
                        "Allow: INVITE, ACK, BYE, CANCEL, OPTIONS"],
-                      body=make_sdp(rtp_port, pt, me, dtmf_pt), to_tag=uuid.uuid4().hex[:8])
+                      body=make_sdp(rtp_port, pt, me, dtmf_pt), to_tag=to_tag)
+        contact = hget(headers, "Contact", "m")
+        uri = re.search(r"<([^>]+)>", contact)
+        to = hget(headers, "To", "t")
+        call.dialog = {"uri": uri.group(1) if uri else (contact.split(";")[0] or f"sip:{peer_ip}"),
+                       "local": to if ";tag=" in to else f"{to};tag={to_tag}",
+                       "remote": hget(headers, "From", "f"), "me": me, "send": send}
+        call.on_hangup = lambda: self.bye(call_id)
         self.answers[call_id] = ok
         send(ok)
         # Зарим softphone (ялангуяа VPN/LTE дээр) серверээс RTP иртэл өөрөө RTP
