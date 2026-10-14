@@ -24,6 +24,11 @@ START_FAQ = {"register": "lead", "human_request": "handoff"}
 
 YES = {"тийм", "за", "зөв", "мөн", "тиймээ", "болно", "болох", "тэгье", "тэгнэ", "зүгээр", "тиймэ"}
 NO = {"үгүй", "биш", "буруу", "болохгүй", "хэрэггүй", "үгүйээ"}
+# Зөвхөн дугаар баталгаажуулах үед: "зөв" -> STT "төв", "зөвөө" (бодит дуудлагаас)
+CONFIRM_YES = re.compile(r"\b(зөв\w*|төв)\b")
+# Нэр асуухад STT ийм үг л гаргавал нэр биш ("юу", "юм уу" нэрээр бүртгэгдэж байсан) -> дахин асууна
+NOT_NAME = {"юу", "юм", "уу", "үү", "вэ", "байна", "а", "аа", "өө", "за", "тийм", "үгүй", "одоо", "тэр", "энэ",
+            "хэн", "нэр", "нэрээ", "миний", "би", "гэсэн", "дээ"}
 
 UNITS = {"тэг": 0, "нэг": 1, "хоёр": 2, "гурав": 3, "гурван": 3, "дөрөв": 4, "дөрвөн": 4,
          "тав": 5, "таван": 5, "зургаа": 6, "зургаан": 6, "долоо": 7, "долоон": 7,
@@ -127,6 +132,8 @@ class LeadFlow:
         self.phone = None
         self.phone_raw = []
         self.phone_tries = 0
+        self.confirm_tries = 0
+        self.name_tries = 0
         self.result = None            # "saved" | "saved_no_phone" | "declined"
 
     def _yes_no(self, text: str) -> bool | None:
@@ -162,6 +169,10 @@ class LeadFlow:
             return ["ask_name_again"]
 
         if self.state == "name":
+            words = set(re.findall(r"[a-zа-яөүё]+", text.lower()))
+            if self.lang == "mn" and words <= NOT_NAME and self.name_tries < 1:
+                self.name_tries += 1
+                return ["ask_name_again"]
             self.name = self._name(text)
             suggested = phone_from_caller(self.caller)
             if suggested:
@@ -186,10 +197,16 @@ class LeadFlow:
 
         if self.state == "confirm":
             ans = self._yes_no(text)
+            if ans is None and self.lang == "mn" and CONFIRM_YES.search(text.lower()):
+                ans = True
             if ans is True:
                 self.result = "saved"
                 return ["done"]
-            self.phone = None
+            # "зөв"-ийг STT "төв дүү", "гэсэн" гэж сонсдог -> ойлгоогүй бол дугаарыг хаяхгүй, дахин асууна
+            if ans is None and self.confirm_tries < 1:
+                self.confirm_tries += 1
+                return ["readback", f"digits:{self.phone}", "confirm"]
+            self.phone, self.confirm_tries = None, 0
             self.phone_tries += 1
             if self.phone_tries >= 3:
                 self.result = "saved_no_phone"
