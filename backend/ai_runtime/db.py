@@ -109,6 +109,14 @@ def add_lead(call_uuid, name, phone, phone_raw, caller, reason, question=None,
         return cur.lastrowid
 
 
+def active_lead(phone: str, course: str, path: str | None = None) -> int | None:
+    """Энэ дугаар энэ хөтөлбөр/эвентэд цуцлаагүй бүртгэлтэй бол id (эвентэд давхар бүртгэхгүй)."""
+    with connect(path) as con:
+        row = con.execute("SELECT id FROM leads WHERE phone = ? AND course = ? AND IFNULL(status, 'new') != 'canceled' "
+                          "ORDER BY id DESC LIMIT 1", (phone, course)).fetchone()
+    return row["id"] if row else None
+
+
 def set_lead_name(lead_id: int, name: str, path: str | None = None):
     """Дуудлагын дараа засагдсан нэр (names.py)."""
     with connect(path) as con:

@@ -105,7 +105,9 @@ def main():
     account = {key: clip(text) for key, text in phrases["account"].items()}
     dates = {x: clip(x) for x in people.all_date_texts(people.booking(t.dir))}
     # Эвентийн нэр ("Эвентэд бүртгүүлмээр байна" -> "<нэр> <огноо> болно"). Тохиргоо -> Эвент-ээс
-    events = {e["name"]: clip(e["name"]) for e in people.events(t.dir)}
+    # + хөтөлбөрийн нэр (lead_label): цуцлахын өмнө "Pinecone Bootcamp. Энэ бүртгэлээ цуцлах уу?"
+    names = [e["name"] for e in people.events(t.dir)] + ([cfg["lead_label"]] if cfg.get("lead_label") else [])
+    events = {n: clip(n) for n in dict.fromkeys(names)}
 
     print("\nСэдвийн bridge:")
     topics = {tid: clip(x["bridge"]) for tid, x in src.get("topics", {}).items()}

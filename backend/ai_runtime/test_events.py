@@ -65,5 +65,57 @@ class EventFlowTest(unittest.TestCase):
         self.assertTrue(f.finished)
 
 
+class BookingAfterRegistrationTest(unittest.TestCase):
+    def registered(self, book=True, events=None, state="name"):
+        f = LeadFlow("event" if events else "lead", "event_start" if events else state, None,
+                     events=events, book=book)
+        if events:
+            f.handle("эвентэд бүртгүүлье")
+            f.handle("1")
+        f.handle("Номин")
+        f.handle("85222634")
+        return f
+
+    def test_offer_time_then_book(self):
+        f = self.registered()
+        self.assertEqual(f.handle("зөв"), ["done_book"])
+        self.assertTrue(f.save_pending)                 # бүртгэлийг одоо хадгална, урсгал үргэлжилнэ
+        self.assertFalse(f.finished)
+        self.assertEqual(f.handle("1"), ["@book"])       # -> account.py цаг санал болгоно
+        self.assertEqual(f.result, "book")
+
+    def test_decline_booking_or_new_question(self):
+        f = self.registered()
+        f.handle("зөв")
+        self.assertEqual(f.handle("2"), ["declined"])
+        self.assertEqual(f.result, "saved")
+        f = self.registered()
+        f.handle("зөв")
+        self.assertEqual(f.handle("төлбөр хэд вэ"), [])  # шинэ асуулт -> энгийн горим
+        self.assertEqual(f.result, "saved")
+
+    def test_no_booking_without_slots_or_for_events(self):
+        f = self.registered(book=False)
+        self.assertEqual(f.handle("зөв"), ["done"])
+        f = self.registered(events=EVENTS[:1])
+        self.assertEqual(f.handle("зөв"), ["event_done"])
+
+
+class DuplicateEventTest(unittest.TestCase):
+    def test_active_lead(self):
+        import os
+        import tempfile
+        import db
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "r.db")
+            a = db.add_lead("c1", "Номин", "85222634", None, None, "event", course="AI Hackathon", path=path)
+            self.assertEqual(db.active_lead("85222634", "AI Hackathon", path=path), a)
+            self.assertIsNone(db.active_lead("85222634", "How We Leap", path=path))
+            self.assertIsNone(db.active_lead("99112233", "AI Hackathon", path=path))
+            with db.connect(path) as con:
+                con.execute("UPDATE leads SET status='canceled' WHERE id=?", (a,))
+            self.assertIsNone(db.active_lead("85222634", "AI Hackathon", path=path))   # цуцалсан -> дахин бүртгэнэ
+
+
 if __name__ == "__main__":
     unittest.main()

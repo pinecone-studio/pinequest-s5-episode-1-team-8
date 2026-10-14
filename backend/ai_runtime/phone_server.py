@@ -78,7 +78,7 @@ KEEPALIVE = float(os.getenv("KEEPALIVE", "90"))
 BYE_WORDS = re.compile(r"баяртай|баярлалаа|байхгүй|үгүй|болоо|алга|дараа ярья")
 REPROMPT_AFTER = float(os.getenv("REPROMPT_AFTER", "6"))   # бүртгэлийн асуултын дараах чимээгүй (сек)
 # Нэг товчлуураар хариулдаг алхмууд: баталгаажуулах 1/2, эвент сонгох 1-3, эвентэд бүртгүүлэх эсэх 1/2
-ONE_KEY = {"confirm": "12", "event_pick": "123", "event_offer": "12"}
+ONE_KEY = {"confirm": "12", "event_pick": "123", "event_offer": "12", "book_offer": "12"}
 DTMF_GAP = 5.0      # сек: товчлуур хооронд үүнээс удаан завсарлавал дугаарыг шинээр эхлүүлнэ
 REVIEW_PORT = int(os.getenv("REVIEW_PORT", "9093"))   # вэбийн "Хариулж чадаагүй" хуудсанд (зөвхөн 127.0.0.1)
 WARM_TEXTS = ["сайн байна уу", "сургалтын төлбөр хэд вэ", "хөтөлбөр хэдэн сар үргэлжилдэг вэ тэгээд төлбөрөө хувааж төлж болох уу"]
@@ -208,6 +208,7 @@ class Call:
         self.hearing = False             # залгагч яг одоо ярьж байна (VAD)
         self.name_audio = None           # нэрийн бичлэг -> дуудлагын дараа нэрийг засна (fix_names)
         self.name_jobs: list = []        # [(lead_id, нэр, бичлэг)]
+        self.last_lead_id: int | None = None   # энэ дуудлагад хадгалсан бүртгэл (цаг товлоход)
         self.en: english.EnglishRouter | None = None   # байгууллага англи горимтой бол
         self.lang = "mn"                 # залгагчийн сүүлд ярьсан хэл
         self.en_misses = 0               # англиар дараалан олдоогүй асуулт
@@ -394,7 +395,9 @@ class Call:
         if meta.get("route") == "handoff":       # "ажилтан эргэж холбогдох уу?" гэж асуусан
             self.lead, self.lead_question = LeadFlow("handoff", "offer", caller), self.last_question(text)
         elif meta.get("faq_id") in START_FAQ:    # хариулт нь өөрөө нэр асуусан
-            self.lead = LeadFlow(START_FAQ[meta["faq_id"]], "name", caller)
+            reason = START_FAQ[meta["faq_id"]]
+            book = reason == "lead" and "account" in self.router.meta and bool(people.free_slots(self.tenant.dir))
+            self.lead = LeadFlow(reason, "name", caller, book=book)
             self.lead_question = None
 
     def upcoming_events(self) -> list[dict]:
@@ -423,12 +426,18 @@ class Call:
             await self.play(wav, sr)
         en = self.en if flow.lang == "en" and self.en else None
         code_keys = []
-        if flow.finished and flow.result != "declined":
+        if (flow.save_pending or (flow.finished and flow.result not in ("declined", "book"))) and not flow.saved:
+            flow.saved, flow.save_pending = True, False
             code = self.save_lead(flow)
+            if flow.duplicate:
+                keys = [k if k != "event_done" else "event_already" for k in keys]
             if code and not en and "account" in router.meta:
                 code_keys = ["your_code", f"digits:{code}", "code_remember"]
         if code_keys and keys:
             keys = keys[:-1] + code_keys + keys[-1:]
+        if keys == ["@book"]:                         # "Уулзалтын цаг товлох уу?" -> тийм
+            self.lead = None
+            return await self.start_booking(text)
         for key in keys:
             if key in code_keys and not key.startswith("digits:"):
                 clip = router.meta["account"][key]
@@ -479,10 +488,20 @@ class Call:
     def save_lead(self, flow: LeadFlow) -> str | None:
         """Бүртгэлийг хадгалж, хувийн RAG-д холбоно (код + баримтууд) -> бүртгэлийн код."""
         try:
+            course = flow.event["name"] if flow.event else self.tenant.config().get("lead_label")
+            existing = (db.active_lead(flow.phone, course, path=self.tenant.db_path)
+                        if flow.event and flow.phone else None)
+            if existing:                       # энэ эвентэд аль хэдийн бүртгэлтэй -> кодыг нь сануулна
+                flow.duplicate, self.last_lead_id = True, existing
+                print(f"  [LEAD] {flow.phone} {course}-д аль хэдийн бүртгэлтэй (#{existing})")
+                code = people.ensure_code(self.tenant.dir, existing)
+                asyncio.get_running_loop().run_in_executor(
+                    None, notify.send_registration_code, flow.phone, code, self.tenant.config().get("name") or "")
+                return code
             lead_id = db.add_lead(self.uuid, flow.name, flow.phone, " | ".join(flow.phone_raw) or None,
-                                  flow.caller, flow.reason, self.lead_question,
-                                  course=flow.event["name"] if flow.event else self.tenant.config().get("lead_label"),
+                                  flow.caller, flow.reason, self.lead_question, course=course,
                                   path=self.tenant.db_path)
+            self.last_lead_id = lead_id
             print(f"  [LEAD] {flow.name} {flow.phone or '(дугааргүй)'} ({flow.reason})")
             if flow.lang == "mn" and flow.name:
                 self.name_jobs.append((lead_id, flow.name, self.name_audio))
@@ -522,6 +541,10 @@ class Call:
                 if fixed and fixed != name:
                     db.set_lead_name(lead_id, fixed, path=self.tenant.db_path)
                     people.docs(self.tenant.dir, lead_id)
+                    # дуудлагын явцад ажилтанд таниагүй нэр ("Нөмнө") очсон -> засварыг мэдэгдэнэ
+                    org = self.tenant.config().get("name", self.tenant.slug)
+                    notify.send(f"{org}: бүртгэл #{lead_id}-ийн нэр засагдлаа — {name} → {fixed}",
+                                self.tenant.settings_path)
                 print(f"  [нэр] #{lead_id} {texts!r} -> {fixed}")
             except Exception as e:
                 print(f"  [нэр засах алдаа] {type(e).__name__}: {e}")
@@ -550,9 +573,30 @@ class Call:
         if keys is None:
             self.account = None
             return False
+        await self.play_account(flow, keys, text or f"[товчлуур] {digits}")
+        return True
+
+    async def start_booking(self, text: str) -> bool:
+        """Шинэ бүртгэлийн дараа шууд цаг товлох: кодоор нэвтэрсэн мэт account.py-ийн цаг санал болгох урсгал."""
+        lead = people.lead(self.tenant.dir, self.last_lead_id) if self.last_lead_id else None
+        if not lead:
+            return False
+        flow = acct.AccountFlow(self.tenant.dir, self.m.account_search, None, self.uuid)
+        flow.lead, flow.state = lead, "menu"
+        self.account = flow
+        keys = await asyncio.to_thread(flow._do, "change_time")
+        await self.play_account(flow, keys, text)
+        return True
+
+    async def play_account(self, flow, keys: list[str], said: str):
         spoken = []
         for key in keys:
-            if key.startswith("digits:"):
+            if key.startswith("ev:"):                 # бүртгэлийн нэр (эвент/хөтөлбөр) — цуцлахын өмнө
+                clip = self.router.meta.get("events", {}).get(key[3:])
+                if clip:
+                    await self.play(*self.router.clip(clip))
+                spoken.append(key[3:])
+            elif key.startswith("digits:"):
                 number = key.split(":", 1)[1]
                 await self.play(*self.digits_audio(number))
                 spoken.append(" ".join(number[i:i + 2] for i in range(0, len(number), 2)))
@@ -578,10 +622,8 @@ class Call:
         flow.events.clear()
         if flow.finished:
             self.account = None
-        self.history += [{"role": "user", "content": text or f"[товчлуур] {digits}"},
-                         {"role": "assistant", "content": reply}]
+        self.history += [{"role": "user", "content": said}, {"role": "assistant", "content": reply}]
         self.history = self.history[-8:]
-        return True
 
     def notify_change(self, lead: dict, ev: dict):
         """AI-ийн хийсэн өөрчлөлтийг ажилтанд (Telegram). Ажилтан гараар юу ч хийх шаардлагагүй."""

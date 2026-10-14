@@ -176,13 +176,17 @@ class LeadFlow:
     """Нэг дуудлагын бүртгэлийн яриа. handle(text) -> тоглуулах клипүүд, дууссан эсэх."""
 
     def __init__(self, reason: str, state: str, caller: str | None, lang: str = "mn",
-                 events: list[dict] | None = None):
+                 events: list[dict] | None = None, book: bool = False):
         self.lang = lang              # "mn" | "en" (english.py-ийн хэллэг, задлагч)
         self.reason = reason          # "lead" | "handoff" | "event"
         self.state = state            # event_start | event_pick | event_offer | offer | name | phone | confirm
         self.events = (events or [])[:3]   # удахгүй болох эвентүүд (ойроос нь)
         self.event: dict | None = None
         self.pick_tries = 0
+        self.book = book              # бүртгэлийн дараа "Уулзалтын цаг товлох уу?" (сул цаг байвал)
+        self.save_pending = False     # дугаар баталгаажсан -> phone_server одоо хадгална (урсгал үргэлжилнэ)
+        self.saved = False            # phone_server хадгалсан (давхар хадгалахгүй)
+        self.duplicate = False        # энэ эвентэд аль хэдийн бүртгэлтэй (phone_server тогтооно)
         self.caller = caller
         self.name = None
         self.phone = None
@@ -250,6 +254,16 @@ class LeadFlow:
             self.result = "declined"          # шинэ асуулт гэж үзээд энгийн горимд
             return []
 
+        if self.state == "book_offer":
+            ans = self._yes_no(text)
+            if ans and QUESTION.search(text.lower()):
+                ans = None
+            if ans is True:
+                self.result = "book"           # phone_server цаг санал болгоно (account.py)
+                return ["@book"]
+            self.result = "saved"
+            return ["declined"] if ans is False else []
+
         if self.state == "event_offer":
             ans = self._yes_no(text)
             if ans is None and any(w in text.lower() for w in JOIN_WORDS):
@@ -305,6 +319,9 @@ class LeadFlow:
             if ans is None and self.lang == "mn" and CONFIRM_YES.search(text.lower()):
                 ans = True
             if ans is True:
+                if self.book and not self.event:
+                    self.save_pending, self.state = True, "book_offer"
+                    return ["done_book"]
                 self.result = "saved"
                 return ["event_done" if self.event else "done"]
             # "зөв"-ийг STT "төв дүү", "гэсэн" гэж сонсдог -> ойлгоогүй бол дугаарыг хаяхгүй, дахин асууна
