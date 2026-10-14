@@ -14,6 +14,7 @@ class LeadDtmfTest(unittest.IsolatedAsyncioTestCase):
         call.lead.phone = "99112233"
         call.account = None
         call.dtmf = ""
+        call.dtmf_at = 0.0
         call.turn = None
         call.flush = Mock()
         call.log = Mock()
@@ -54,6 +55,65 @@ class LeadDtmfTest(unittest.IsolatedAsyncioTestCase):
         await queued
         call.lead_turn.assert_awaited_once_with("99112233")
         self.assertEqual(call.lead.state, "confirm")
+
+    async def test_digits_typed_during_name_step_are_kept(self):
+        # Нэрийг таниулж байх зуур "88" дарсан -> өмнө нь гээгдэж "00843288" болж байсан
+        call = self.make_call(state="name")
+        for key in "88":
+            call.on_dtmf(key)
+        self.assertEqual(call.dtmf, "88")
+        call.lead.state = "phone"
+        for key in "008432":
+            call.on_dtmf(key)
+        await call.turn
+        call.lead_turn.assert_awaited_once_with("88008432")
+
+    async def test_long_pause_restarts_number(self):
+        call = self.make_call(state="phone")
+        for key in "008432":
+            call.on_dtmf(key)
+        call.dtmf_at -= 10                 # хагас бичээд удаан хүлээсэн, дахин эхнээс нь бичнэ
+        for key in "88008432":
+            call.on_dtmf(key)
+        await call.turn
+        call.lead_turn.assert_awaited_once_with("88008432")
+
+    def test_filler_is_not_a_name(self):
+        flow = LeadFlow("lead", "name", None)
+        self.assertEqual(flow.handle("юм уу"), ["ask_name_again"])
+        self.assertEqual(flow.state, "name")
+        self.assertEqual(flow.handle("Билэгсайхан"), ["ask_phone"])
+        self.assertEqual(flow.name, "Билэгсайхан")
+
+    def test_filler_name_accepted_after_one_retry(self):
+        flow = LeadFlow("lead", "name", None)
+        flow.handle("юу")
+        self.assertEqual(flow.handle("юу"), ["ask_phone"])
+
+    def test_unclear_confirmation_keeps_phone(self):
+        # Бодит дуудлагаас: "зөв"-ийг STT "байна уу", "гэсэн" гэж сонссон -> дугаар устаж байсан
+        flow = LeadFlow("lead", "confirm", None)
+        flow.phone = "88008432"
+        self.assertEqual(flow.handle("байна уу"), ["readback", "digits:88008432", "confirm"])
+        self.assertEqual(flow.phone, "88008432")
+        self.assertEqual(flow.handle("1"), ["done"])
+        self.assertEqual(flow.result, "saved")
+
+    def test_misheard_zuv_is_yes(self):
+        for text in ("төв дүү", "зөвөө"):
+            with self.subTest(text=text):
+                flow = LeadFlow("lead", "confirm", None)
+                flow.phone = "88008432"
+                self.assertEqual(flow.handle(text), ["done"])
+
+    def test_no_after_retry_asks_phone_again(self):
+        flow = LeadFlow("lead", "confirm", None)
+        flow.phone = "88008432"
+        flow.handle("гэсэн")
+        self.assertEqual(flow.handle("гэсэн"), ["phone_retry"])
+        self.assertIsNone(flow.phone)
+        self.assertEqual(flow.handle("88008432"), ["readback", "digits:88008432", "confirm"])
+        self.assertEqual(flow.handle("байна уу"), ["readback", "digits:88008432", "confirm"])
 
     def test_numeric_yes_no(self):
         self.assertIs(yes_no("1"), True)
