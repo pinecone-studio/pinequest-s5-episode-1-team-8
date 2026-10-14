@@ -109,6 +109,12 @@ def add_lead(call_uuid, name, phone, phone_raw, caller, reason, question=None,
         return cur.lastrowid
 
 
+def set_lead_name(lead_id: int, name: str, path: str | None = None):
+    """Дуудлагын дараа засагдсан нэр (names.py)."""
+    with connect(path) as con:
+        con.execute("UPDATE leads SET name = ? WHERE id = ?", (name, lead_id))
+
+
 def caller_of(call_uuid: str, path: str | None = None) -> str | None:
     with connect(path) as con:
         row = con.execute("SELECT caller FROM calls WHERE uuid = ?", (call_uuid,)).fetchone()

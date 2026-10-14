@@ -32,6 +32,12 @@ def is_mlx(model: str) -> bool:
 WHISPER_MODEL = os.getenv("WHISPER_MODEL") or (MLX_MN if is_mlx(MLX_MN) else HF_MN)
 WHISPER_LANG = os.getenv("WHISPER_LANG", "mn")
 # Whisper-т сэдвийн үгсийг санууллага болгон өгнө -> англи нэр томьёо зөв бичигдэнэ
+# Дуудлагын дараа нэрийн бичлэгийг дахин таниулахад (names.py): "бэлэг сайхан" -> "билэг сайхан"
+NAME_PROMPT = "Нэр: Батболд, Энхжаргал, Мөнхбаяр, Билгүүн, Төгөлдөр, Номин, Оюунчимэг, Тэмүүлэн, Сайханбилэг."
+# Санууллагатай таниулахад заримдаа "гүгүгү" гацдаг -> давталтын хязгаартай хоёр хувилбар (names.py хамгийн
+# ойрыг сонгоно). Туршилт: аль нэг хувилбар бүх нэрт сайн биш, хамтдаа 5/5.
+NAME_DECODES = [{"prompt": NAME_PROMPT, "repetition_penalty": 1.3},
+                {"prompt": NAME_PROMPT, "num_beams": 4, "no_repeat_ngram_size": 3}]
 INITIAL_PROMPT = os.getenv(
     "WHISPER_PROMPT",
     "Pinecone Academy, Software Engineer, bootcamp, AI, coding. Сайн байна уу.",
@@ -98,14 +104,18 @@ class WhisperSTT:
             self._pipe = pipeline("automatic-speech-recognition", model=model, device=device,
                                   torch_dtype=torch.float32 if device == "cpu" else torch.float16)
 
-    def transcribe(self, audio: np.ndarray, sr: int, language: str = WHISPER_LANG) -> str:
-        """audio: float32 mono [-1, 1]. Whisper 16kHz шаарддаг тул хөрвүүлнэ."""
+    def transcribe(self, audio: np.ndarray, sr: int, language: str = WHISPER_LANG,
+                   prompt: str | None = None, **decode) -> str:
+        """audio: float32 mono [-1, 1]. Whisper 16kHz шаарддаг тул хөрвүүлнэ.
+        prompt: зөвхөн нэрийн бичлэгт (NAME_PROMPT) — энгийн ярианд танилтыг эвддэг."""
         if sr != 16000:
             audio = resample_poly(audio, 16000, sr).astype(np.float32)
         if not self.use_mlx:
-            out = self._pipe({"raw": audio, "sampling_rate": 16000},
-                             generate_kwargs={"num_beams": 1})
-            return out["text"].strip()
+            kw = {"num_beams": 1, **decode}          # decode: зөвхөн нэрийн бичлэгт (NAME_DECODES)
+            if prompt:
+                kw["prompt_ids"] = self._pipe.tokenizer.get_prompt_ids(prompt, return_tensors="pt").to(self._pipe.device)
+            out = self._pipe({"raw": audio, "sampling_rate": 16000}, generate_kwargs=kw)
+            return clean(out["text"])            # "а а а а" гацалт энэ замд цэвэрлэгдэхгүй байсан
         with self._lock:
             from mlx_whisper.transcribe import ModelHolder
             ModelHolder.model, ModelHolder.model_path = self._model, self.model
@@ -114,8 +124,8 @@ class WhisperSTT:
                 path_or_hf_repo=self.model,
                 language=language,
                 # монгол үгтэй санууллага англи таниулахад саад болно -> латин хэсгийг нь л
-                initial_prompt=(re.sub(r"[^\x00-\x7f]+[^.]*\.?", "", self.prompt).strip() if language == "en"
-                                else self.prompt) if self.prompt else None,
+                initial_prompt=prompt or ((re.sub(r"[^\x00-\x7f]+[^.]*\.?", "", self.prompt).strip() if language == "en"
+                                           else self.prompt) if self.prompt else None),
                 condition_on_previous_text=False,
                 # Давталтад гацвал (compression ratio > 2.4) өндөр temperature-ээр дахин таниулна.
                 # Бодит дуудлагад "л л л ...", "үлдээд үлдээд ..." гарсан (10-05).
