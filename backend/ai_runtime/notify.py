@@ -16,18 +16,25 @@ SENDSMS_API = "https://smsapi.buural.mn/api/user/send"
 
 def send_registration_code(phone: str | None, code: str, company: str = "") -> bool:
     """Баталгаажсан Монгол дугаар руу SendSMS.mn эсвэл SMS gateway-аар илгээнэ."""
-    url = os.getenv("SMS_API_URL", "").strip()
-    api_key = os.getenv("SMS_API_KEY", "").strip()
-    token = os.getenv("SMS_API_TOKEN", "").strip()
-    digits = re.sub(r"\D", "", phone or "")
-    if not re.fullmatch(r"\d{8}", digits):
-        print("  [SMS] илгээгээгүй: баталгаажсан 8 оронтой дугаар алга")
-        return False
     if not re.fullmatch(r"\d{4}", code):
         print("  [SMS] илгээгээгүй: 4 оронтой код алга")
         return False
     label = f"{company.strip()[:20]}: " if company and company.strip() else ""
-    message = f"{label}Бүртгэлийн код: {code}. Бусдад бүү хэл."
+    return send_sms(phone, f"{label}Бүртгэлийн код: {code}. Бусдад бүү хэл.")
+
+
+def send_sms(phone: str | None, message: str) -> bool:
+    """SMS (бүртгэлийн код, уулзалт/эвентийн сануулга). SMS_API_KEY+SMS_API_TOKEN (SendSMS.mn) эсвэл
+    SMS_API_URL+SMS_API_TOKEN (Bearer gateway). SMS_DRY_RUN=1 бол илгээхгүй (туршилт)."""
+    url = os.getenv("SMS_API_URL", "").strip()
+    api_key = os.getenv("SMS_API_KEY", "").strip()
+    token = os.getenv("SMS_API_TOKEN", "").strip()
+    digits = re.sub(r"\D", "", phone or "")
+    if len(digits) == 11 and digits.startswith("976"):
+        digits = digits[3:]
+    if not re.fullmatch(r"\d{8}", digits):
+        print("  [SMS] илгээгээгүй: баталгаажсан 8 оронтой дугаар алга")
+        return False
     if api_key and token:
         url = SENDSMS_API
         payload = {"apiKey": api_key, "apiToken": token, "phone": digits, "message": message}
@@ -38,6 +45,9 @@ def send_registration_code(phone: str | None, code: str, company: str = "") -> b
     else:
         print("  [SMS] илгээгээгүй: SMS_API_KEY/SMS_API_TOKEN тохируулаагүй")
         return False
+    if os.getenv("SMS_DRY_RUN") == "1":
+        print(f"  [SMS dry-run] {digits[:2]}****{digits[-2:]}: {message}")
+        return True
     try:
         response = httpx.post(url, json=payload, headers=headers, timeout=10)
         response.raise_for_status()
