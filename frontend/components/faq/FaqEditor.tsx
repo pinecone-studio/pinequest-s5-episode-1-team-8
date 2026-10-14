@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 
 import { BuildPanel } from "@/components/knowledge/BuildPanel";
 import { ActionStatus } from "@/components/ui/Alert";
@@ -15,6 +15,7 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
   const [greeting, setGreeting] = useState(initial.greeting);
   const [items, setItems] = useState(initial.faq);
   const [searchQuery, setSearchQuery] = useState("");
+  const [onlyTodo, setOnlyTodo] = useState(false);
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
   const [duplicateMessage, setDuplicateMessage] = useState<string | null>(null);
 
@@ -26,10 +27,7 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
     return () => clearTimeout(timer);
   }, [duplicateMessage]);
 
-  const update = (
-    index: number,
-    patch: Partial<FaqItem>
-  ) =>
+  const update = (index: number, patch: Partial<FaqItem>) =>
     setItems((rows) =>
       rows.map((row, current) =>
         current === index ? { ...row, ...patch } : row
@@ -62,12 +60,7 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
           .map((question) => question.trim())
           .filter(Boolean),
       }))
-      .filter(
-        (row) =>
-          row.id &&
-          row.answer &&
-          row.questions.length
-      );
+      .filter((row) => row.id && row.answer && row.questions.length);
 
     void run(
       () =>
@@ -87,17 +80,27 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
     }
   }
 
-  // Хайлтын шүүлтүүр (ID, Асуулт, Хариултаар хайна)
-  const filteredItems = items.map((item, index) => ({ item, index })).filter(({ item }) => {
+  const filteredItems = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
-    if (!query) return true;
-    
-    const matchId = item.id.toLowerCase().includes(query);
-    const matchAnswer = item.answer.toLowerCase().includes(query);
-    const matchQuestions = item.questions.some((q) => q.toLowerCase().includes(query));
 
-    return matchId || matchAnswer || matchQuestions;
-  });
+    return items
+      .map((item, originalIndex) => ({ item, originalIndex }))
+      .filter(({ item }) => {
+        if (onlyTodo && !item.answer.includes("TODO")) {
+          return false;
+        }
+
+        if (!query) return true;
+
+        const matchId = item.id.toLowerCase().includes(query);
+        const matchAnswer = item.answer.toLowerCase().includes(query);
+        const matchQuestions = item.questions.some((q) =>
+          q.toLowerCase().includes(query)
+        );
+
+        return matchId || matchAnswer || matchQuestions;
+      });
+  }, [items, searchQuery, onlyTodo]);
 
   return (
     <div className="space-y-7">
@@ -108,21 +111,14 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
           </span>
         )}
         <div className="ml-auto flex items-center gap-3">
-          <Button
-            variant="primary"
-            size="lg"
-            onClick={save}
-            disabled={pending}
-          >
+          <Button variant="primary" size="lg" onClick={save} disabled={pending}>
             Хадгалах
           </Button>
         </div>
       </div>
 
       <section className="rounded-[14px] bg-panel px-[22px] py-5">
-        <label className="mb-2 block text-sm text-muted">
-          Мэндчилгээ
-        </label>
+        <label className="mb-2 block text-sm text-muted">Мэндчилгээ</label>
 
         <input
           className="w-full rounded-[10px] border border-line-2 bg-bg px-4 py-3 outline-none focus:border-brand"
@@ -132,16 +128,27 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
 
         <div className="mt-6 mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-fg">
-            Нийт {items.length} FAQ {filteredItems.length !== items.length && `(Шүүгдсэн: ${filteredItems.length})`}
+            Харагдаж буй {filteredItems.length} / Нийт {items.length} FAQ
           </h2>
 
-          {/* Хайлтын талбар */}
-          <input
-            className="w-full sm:w-[280px] rounded-[10px] border border-line-2 bg-bg px-3 py-2 text-sm outline-none focus:border-brand"
-            placeholder="ID, асуулт эсвэл хариултаар хайх..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+            <input
+              className="w-full sm:w-[260px] rounded-[10px] border border-line-2 bg-bg px-3 py-2 text-sm outline-none focus:border-brand"
+              placeholder="ID, асуулт эсвэл хариултаар хайх..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+
+            <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-fg">
+              <input
+                type="checkbox"
+                checked={onlyTodo}
+                onChange={(e) => setOnlyTodo(e.target.checked)}
+                className="w-4 h-4 rounded border-line-2"
+              />
+              Зөвхөн TODO
+            </label>
+          </div>
         </div>
 
         {items.length === 0 ? (
@@ -168,50 +175,39 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
           </div>
         ) : filteredItems.length === 0 ? (
           <div className="mt-5 rounded-[10px] border border-line-2 bg-bg px-5 py-8 text-center">
-            <p className="text-sm text-muted">
-              Хайлтын үр дүн олдсонгүй.
-            </p>
+            <p className="text-sm text-muted">Тохирох FAQ олдсонгүй</p>
           </div>
         ) : (
           <div className="mt-6 divide-y divide-line">
-            {filteredItems.map(({ item, index }) => (
-              <div
-                key={`${item.id}-${index}`}
-                className="py-5 first:pt-0"
-              >
+            {filteredItems.map(({ item, originalIndex }) => (
+              <div key={`${item.id}-${originalIndex}`} className="py-5 first:pt-0">
                 <div className="mb-3 flex flex-wrap items-center gap-3">
                   <input
                     className="w-[260px] rounded-[10px] border border-line-2 bg-bg px-3 py-2 font-mono text-sm outline-none focus:border-brand"
                     value={item.id}
                     onChange={(event) =>
-                      update(index, {
+                      update(originalIndex, {
                         id: event.target.value,
                       })
                     }
                   />
 
                   {item.answer.includes("TODO") && (
-                    <Tag tone="warn">
-                      TODO — алгасна
-                    </Tag>
+                    <Tag tone="warn">TODO — алгасна</Tag>
                   )}
 
-                  {item.auto && (
-                    <Tag tone="gray">
-                      автомат
-                    </Tag>
-                  )}
+                  {item.auto && <Tag tone="gray">автомат</Tag>}
 
                   <div className="ml-auto flex items-center gap-2">
                     <Button
-                      onClick={() => duplicateItem(index)}
+                      onClick={() => duplicateItem(originalIndex)}
                       title="Энэ FAQ-г хувилах"
                     >
                       Хувилах
                     </Button>
                     <Button
                       className="text-danger"
-                      onClick={() => setDeleteIndex(index)}
+                      onClick={() => setDeleteIndex(originalIndex)}
                     >
                       Устгах
                     </Button>
@@ -221,12 +217,11 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
                 <div className="grid gap-4 lg:grid-cols-2">
                   <label className="text-sm text-muted">
                     Асуултууд (мөр бүрд нэг)
-
                     <textarea
                       className="mt-2 min-h-32 w-full rounded-[10px] border border-line-2 bg-bg p-3 text-fg outline-none focus:border-brand"
                       value={item.questions.join("\n")}
                       onChange={(event) =>
-                        update(index, {
+                        update(originalIndex, {
                           questions: event.target.value.split("\n"),
                         })
                       }
@@ -235,12 +230,11 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
 
                   <label className="text-sm text-muted">
                     Хариулт
-
                     <textarea
                       className="mt-2 min-h-32 w-full rounded-[10px] border border-line-2 bg-bg p-3 text-fg outline-none focus:border-brand"
                       value={item.answer}
                       onChange={(event) =>
-                        update(index, {
+                        update(originalIndex, {
                           answer: event.target.value,
                         })
                       }
@@ -270,18 +264,11 @@ export function FaqEditor({ initial }: { initial: FaqData }) {
             </Button>
           )}
 
-          <Button
-            variant="primary"
-            onClick={save}
-            disabled={pending}
-          >
+          <Button variant="primary" onClick={save} disabled={pending}>
             Хадгалах
           </Button>
 
-          <ActionStatus
-            error={error}
-            message={message}
-          />
+          <ActionStatus error={error} message={message} />
         </div>
       </section>
 
