@@ -755,10 +755,25 @@ class FAQRouter:
     def _config_path(self) -> str:
         return os.path.join(os.path.dirname(os.path.abspath(self.index_dir)), "config.json")
 
+    # Бүх байгууллагад нийтлэг STT алдаа (бодит дуудлагын логоос, 10-15). Байгууллагын өөрийн stt_fixes араас нь.
+    COMMON_STT_FIXES = [
+        {"heard": r"юм[эе]н[дт]\w*", "fix": "эвентэд"},                       # "юмэнд бүртгүүлмээр"
+        {"heard": r"[эие]в[эе]{1,2}н(?=т)", "fix": "эвен"},                    # "эвээнтэд" -> "эвентэд"
+        {"heard": r"[эи]вээн(?![а-яөүё])", "fix": "эвент"},                   # "ивээн тэтгэвэрт"
+        {"heard": r"тэтгэвэрт гүйл\w*|т[үу]ртгэл\w*", "fix": "бүртгүүлмээр"},
+        {"heard": r"бүтгүү[дл]\w*|бүртгүүлэл", "fix": "бүртгүүлмээр"},
+        {"heard": r"цуцаг(?![а-яөүё])", "fix": "цуцлах"},
+        {"heard": r"мэдээ ?[жл] авъя", "fix": "мэдээлэл авъя"},
+        {"heard": r"мэдээллэнэ|мэдээллээ(?= ?$)", "fix": "мэдээлэл"},
+        {"heard": r"ө?х[өо]д[өо]лб[өэ]р", "fix": "хөтөлбөр"},
+        {"heard": r"колынг", "fix": "кодоо"},
+    ]
+
     def _load_stt_fixes(self):
         """Яриа таних байнгын алдааны засвар (байгууллагын config.json "stt_fixes": [{"heard": regex, "fix": "..."}]).
         Бодит дуудлага 10-06: "зээл"->"дээл", "Bootcamp хөтөлбөр"->"бүдгээ бүтэлбэр", "Pinecone"->"понь кон"."""
-        self.stt_fixes = []
+        self.stt_fixes = [(re.compile(r"(?<![а-яөүёa-z])(?:" + x["heard"] + ")", re.I), x["fix"])
+                          for x in self.COMMON_STT_FIXES]
         try:
             with open(self._config_path(), encoding="utf-8") as f:
                 items = json.load(f).get("stt_fixes", [])
