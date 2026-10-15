@@ -435,7 +435,8 @@ class Call:
             flow.saved, flow.save_pending = True, False
             code = self.save_lead(flow)
             if flow.duplicate:
-                keys = [k if k != "event_done" else "event_already" for k in keys]
+                flow.saved, flow.result, flow.state = False, "duplicate", "duplicate"
+                keys = ["already_registered"]
             if code and not en and "account" in router.meta:
                 code_keys = ["your_code", f"digits:{code}", "code_remember"]
         if code_keys and keys:
@@ -496,15 +497,12 @@ class Call:
         """Бүртгэлийг хадгалж, хувийн RAG-д холбоно (код + баримтууд) -> бүртгэлийн код."""
         try:
             course = flow.event["name"] if flow.event else self.tenant.config().get("lead_label")
-            existing = (db.active_lead(flow.phone, course, path=self.tenant.db_path)
-                        if flow.event and flow.phone else None)
-            if existing:                       # энэ эвентэд аль хэдийн бүртгэлтэй -> кодыг нь сануулна
+            existing = (db.active_lead(flow.phone, path=self.tenant.db_path)
+                        if flow.reason in ("lead", "event") and flow.phone else None)
+            if existing:
                 flow.duplicate, self.last_lead_id = True, existing
-                print(f"  [LEAD] {flow.phone} {course}-д аль хэдийн бүртгэлтэй (#{existing})")
-                code = people.ensure_code(self.tenant.dir, existing)
-                asyncio.get_running_loop().run_in_executor(
-                    None, notify.send_registration_code, flow.phone, code, self.tenant.config().get("name") or "")
-                return code
+                print(f"  [LEAD] өмнө бүртгэлтэй хэрэглэгч (#{existing})")
+                return None
             lead_id = db.add_lead(self.uuid, flow.name, flow.phone, " | ".join(flow.phone_raw) or None,
                                   flow.caller, flow.reason, self.lead_question, course=course,
                                   path=self.tenant.db_path)
