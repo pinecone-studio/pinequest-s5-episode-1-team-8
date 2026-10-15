@@ -50,7 +50,8 @@ def learn(t: Tenant, heard: str, correct: str, source: str = "засвар") -> 
     known = {(f.get("heard"), f.get("fix")) for f in fixes}
     added = []
     for old, new in pairs:
-        pattern = r"\s?".join(re.escape(w) for w in old.split())   # "пайн кун" ~ "пайнкун"
+        # "пайн кун" ~ "пайнкун"; бүтэн үг л ("хэмжээн" -> "хэмжээний" нь "хэмжээнд"-ийг эвдэхгүй)
+        pattern = r"\s?".join(re.escape(w) for w in old.split()) + r"(?![а-яөүёa-z])"
         # Аль хэдийн засагддаг үг (өөр regex-д багтсан) эсвэл эсрэг засвар байвал нэмэхгүй
         if (pattern, new) in known or any(re.fullmatch(f.get("heard", "$^"), old, re.I)
                                           for f in fixes if _valid(f.get("heard"))):
