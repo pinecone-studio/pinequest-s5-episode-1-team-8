@@ -38,7 +38,7 @@ import english
 import notify
 import people
 import tenant as tenants
-from lead import START_FAQ, LeadFlow, wants_event
+from lead import START_FAQ, LeadFlow, wants_event, wants_register
 import names
 from stt import NAME_DECODES, BilingualSTT, WhisperSTT, create_mn_stt
 
@@ -327,10 +327,21 @@ class Call:
         if self.account and lang != "en" and await self.account_turn(text=text):
             return
         if (lang != "en" and not self.lead and not self.account and "lead" in self.router.meta
-                and wants_event(text, self.upcoming_events())):
+                and (wants_event(text, self.upcoming_events())
+                     or wants_event(self.router.fix_stt(text), self.upcoming_events()))):
             caller = db.caller_of(self.uuid, path=self.tenant.db_path) if self.uuid else None
             self.lead = LeadFlow("event", "event_start", caller, events=self.upcoming_events())
             print("  [эвент] бүртгүүлэх хүсэлт")
+            if await self.lead_turn(text):
+                return
+        elif (lang != "en" and not self.lead and not self.account and "which_ask" in self.router.meta.get("lead", {})
+                and self.upcoming_events() and wants_register(self.router.fix_stt(text))):
+            # "Бүртгүүлмээр байна" (юунд гэдгийг хэлээгүй, эвент байгаа) -> хөтөлбөр үү, эвент үү гэж асууна
+            caller = db.caller_of(self.uuid, path=self.tenant.db_path) if self.uuid else None
+            book = "account" in self.router.meta and bool(people.free_slots(self.tenant.dir))
+            self.lead = LeadFlow("lead", "which_start", caller, events=self.upcoming_events(), book=book)
+            print("  [бүртгэл] хөтөлбөр үү, эвент үү?")
+            self.lead_question = None
             if await self.lead_turn(text):
                 return
         if lang == "en":
@@ -640,6 +651,14 @@ class Call:
                f"{what} {ev['old'] or '—'} → {new} ({who})")
         print(f"  [өөрчлөлт] {msg}")
         asyncio.get_running_loop().run_in_executor(None, notify.send, msg, self.tenant.settings_path)
+        phone = lead.get("phone") or lead.get("caller")
+        if ev["field"] == "appointment" and ev["new"] and phone and not ev.get("staff"):
+            try:
+                if notify.load_settings(self.tenant.settings_path).get("sms_on_register"):
+                    text = notify.event_sms_text(self.tenant.config().get("name") or "", "уулзалт", ev["new"], None)
+                    asyncio.get_running_loop().run_in_executor(None, notify.send_sms, phone, text)
+            except Exception as e:
+                print(f"  [SMS эхлүүлэх алдаа] {type(e).__name__}")
 
     def on_dtmf(self, key: str):
         """Утасны товчлуур: бүртгэлийн дугаар асуух үед 8 цифр (эсвэл # хүртэл) цуглуулна.

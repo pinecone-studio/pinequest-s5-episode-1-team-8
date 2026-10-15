@@ -128,5 +128,27 @@ class NoisyEventSttTest(unittest.TestCase):
             self.assertFalse(wants_event(t, []), t)
 
 
+class WhichRegistrationTest(unittest.TestCase):
+    """10-15: "юмэнд бүртгүүлмээр" -> хөтөлбөр гэж ойлгоод уулзалтын цаг санал болгосон."""
+    EV = [{"name": "AI Hackathon", "at": "2026-10-18T10:00"}]
+
+    def test_stt_variant_is_event(self):
+        from lead import wants_event
+        self.assertTrue(wants_event("юмэнд бүртгүүлмээр байна аа", []))
+
+    def test_generic_register_asks_which(self):
+        from lead import LeadFlow, wants_register
+        self.assertTrue(wants_register("бүртгүүлмээр байна"))
+        self.assertFalse(wants_register("хөтөлбөрт бүртгүүлмээр байна"))
+        f = LeadFlow("lead", "which_start", None, events=self.EV, book=True)
+        self.assertEqual(f.handle("бүртгүүлмээр байна"), ["which_ask"])
+        self.assertEqual(f.handle("арга хэмжээнд"), ["ev:AI Hackathon", "date:2026-10-18T10:00", "event_ask"])
+        self.assertEqual((f.reason, f.book), ("event", False))
+        g = LeadFlow("lead", "which_start", None, events=self.EV, book=True)
+        g.handle("бүртгүүлмээр байна")
+        self.assertEqual(g.handle("хөтөлбөрт"), ["ask_name_again"])
+        self.assertEqual((g.reason, g.book), ("lead", True))
+
+
 if __name__ == "__main__":
     unittest.main()
