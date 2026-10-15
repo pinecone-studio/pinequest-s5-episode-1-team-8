@@ -84,6 +84,37 @@ class DuplicatePhoneTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.count(), 2)
         self.assertFalse(flow.duplicate)
 
+    async def test_storage_failure_does_not_claim_success_and_can_retry(self):
+        self.call.router.meta["error"] = {"text": "Хадгалж чадсангүй"}
+        self.call.router.meta["lead"]["done_book"] = {"text": "Бүртгэл амжилттай"}
+        flow = self.flow(book=True)
+        with patch("phone_server.db.add_lead", side_effect=RuntimeError("storage unavailable")):
+            await self.call.lead_turn("зөв")
+        self.assertEqual(self.count(), 0)
+        self.assertEqual((flow.saved, flow.save_pending, flow.result, flow.state), (False, False, None, "confirm"))
+        self.assertEqual(flow.phone, "99112233")
+        self.assertIs(self.call.lead, flow)
+        self.assertEqual(self.call.log.call_args.kwargs["route"], "lead_save_failed")
+        self.sms.assert_not_called()
+        self.staff.assert_not_called()
+        self.code.assert_not_called()
+        self.call.hangup.assert_not_awaited()
+        await self.call.lead_turn("зөв")
+        self.assertEqual(self.count(), 1)
+        self.assertTrue(flow.saved)
+        self.assertEqual(flow.state, "book_offer")
+
+    async def test_code_failure_after_insert_does_not_lose_saved_registration(self):
+        self.call.router.meta["lead"]["done"] = {"text": "Бүртгэл амжилттай"}
+        flow = self.flow()
+        self.code.side_effect = RuntimeError("code unavailable")
+        await self.call.lead_turn("зөв")
+        self.assertEqual(self.count(), 1)
+        self.assertTrue(flow.saved)
+        self.assertEqual(flow.result, "saved")
+        self.assertNotEqual(self.call.log.call_args.kwargs["route"], "lead_save_failed")
+        self.sms.assert_not_called()
+
     async def test_canceled_or_handoff_is_not_an_active_registration(self):
         original = self.seed()
         with db.connect(self.path) as con:
