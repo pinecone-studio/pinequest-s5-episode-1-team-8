@@ -33,8 +33,17 @@ from tenant import Tenant, load_faq, write_json
 
 router = APIRouter(prefix="/api/voice", tags=["voice"])
 
-# SIM-TRUNK lead.DIGITS (утасны дугаарыг цифр бүрээр уншина)
+# ai_runtime/lead.py-тэй ижил: цифр + хоёр оронтой хос (утасны дугаарыг хоёр хоёроор уншина)
 DIGITS = ["тэг", "нэг", "хоёр", "гурав", "дөрөв", "тав", "зургаа", "долоо", "найм", "ес"]
+TENS = ["", "арав", "хорь", "гуч", "дөч", "тавь", "жар", "дал", "ная", "ер"]
+TENS_ATTR = ["", "арван", "хорин", "гучин", "дөчин", "тавин", "жаран", "далан", "наян", "ерэн"]
+
+
+def pair_word(pair: str) -> str:
+    tens, unit = int(pair[0]), int(pair[1])
+    if tens == 0:
+        return f"{DIGITS[0]} {DIGITS[unit]}"
+    return TENS[tens] if unit == 0 else f"{TENS_ATTR[tens]} {DIGITS[unit]}"
 
 
 def load_json(path: str, default):
@@ -57,6 +66,7 @@ def all_texts(t: Tenant) -> list[tuple[str, str]]:
     items += [("bridge", x["bridge"]) for x in src.get("topics", {}).values()]
     items += [("бүртгэл", x) for x in ph["lead"].values()]
     items += [("цифр", d) for d in DIGITS]
+    items += [("цифр хос", pair_word(f"{i:02d}")) for i in range(100)]
     items += [("бүртгэлээ шалгах", x) for x in ph["account"].values()]
     items += [("огноо", x) for x in people.all_date_texts(people.booking(t.dir))]
     items += [(f"FAQ {x['id']}", x["answer"]) for x in src.get("faq", []) if "TODO" not in x["answer"]]
