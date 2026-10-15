@@ -1,11 +1,11 @@
-/** Лого: ногоон хаалт + байгууллагын нэр (өгөөгүй бол "AI РЕСЕПШН") */
+/** Лого: цэнхэр + улбар шар хаалт + байгууллагын нэр (өгөөгүй бол "AI РЕСЕПШН") */
 export function Brand({ name }: { name?: string }) {
   return (
     <span className="flex items-center gap-3">
       <svg viewBox="0 0 38 34" fill="none" stroke="currentColor" strokeWidth={5.5} strokeLinecap="round"
-        strokeLinejoin="round" className="h-[34px] w-[38px] shrink-0 text-brand" aria-hidden>
-        <path d="M13 4 L4 17 L13 30" />
-        <path d="M25 4 L34 17 L25 30" />
+        strokeLinejoin="round" className="h-[34px] w-[38px] shrink-0" aria-hidden>
+        <path d="M13 4 L4 17 L13 30" className="stroke-brand" />
+        <path d="M25 4 L34 17 L25 30" className="stroke-accent" />
       </svg>
       <b className="max-w-[160px] text-[15px] leading-[1.15] font-extrabold tracking-[.06em] break-words text-fg uppercase">
         {name ?? (

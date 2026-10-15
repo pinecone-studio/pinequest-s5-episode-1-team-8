@@ -175,7 +175,7 @@ export function AssistantChat({ roster, staffPin }: { roster: RosterItem[]; staf
             )}
             {msgs.map((m, i) => (
               <div key={i} className={`flex ${m.who === "user" ? "justify-end" : ""}`}>
-                <div className={`max-w-[85%] rounded-[12px] px-3.5 py-2 text-[15px] leading-6 ${m.who === "user" ? "bg-brand text-[#07130c]" : "bg-panel-2"}`}>
+                <div className={`max-w-[85%] rounded-[12px] px-3.5 py-2 text-[15px] leading-6 ${m.who === "user" ? "bg-brand text-on-brand" : "bg-panel-2"}`}>
                   {m.text}
                 </div>
               </div>

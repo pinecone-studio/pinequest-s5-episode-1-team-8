@@ -9,7 +9,7 @@ export function AuthCard({ title, sub, footer, children }: {
   children: ReactNode;
 }) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(600px_360px_at_50%_0%,rgba(95,214,143,.08),transparent_70%)] px-4 py-6">
+    <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(600px_360px_at_50%_0%,rgba(31,0,255,.06),transparent_70%)] px-4 py-6">
       <div className="flex w-full max-w-[420px] flex-col gap-4 rounded-2xl border border-line bg-panel px-7 py-8">
         <div className="pb-2">
           <Brand />
