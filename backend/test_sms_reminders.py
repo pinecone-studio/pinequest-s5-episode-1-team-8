@@ -35,8 +35,8 @@ class SmsReminderTest(unittest.TestCase):
         self.assertEqual(sent, [])                                      # 3 цагийн өмнө -> хэт эрт
         done, sent, data = self.run_due(items, datetime(2026, 10, 18, 8, 30, tzinfo=TZ))
         self.assertEqual(done, [("pinecone", 7, True)])
-        self.assertEqual(sent, [("85222634", "Pinecone Academy: Сануулга - AI Hackathon өнөөдөр 10:00 цагт. "
-                                             "Ирэх боломжгүй бол 72700800 руу залгаарай.")])
+        self.assertEqual(sent, [("85222634", "Pinecone Academy: Сануулга - AI Hackathon өнөөдөр 10:00 цагт.")])
+        self.assertLessEqual(len(sent[0][1]), reminders.SMS_MAX)
         self.assertTrue(data["items"]["7"]["sms_at"])
         _, sent, _ = self.run_due(items, datetime(2026, 10, 18, 9, 0, tzinfo=TZ))
         self.assertEqual(sent, [])                                      # нэг л удаа

@@ -23,16 +23,26 @@ def send_registration_code(phone: str | None, code: str, company: str = "") -> b
     return send_sms(phone, f"{label}Бүртгэлийн код: {code}. Бусдад бүү хэл.")
 
 
+SMS_MAX = 70   # SendSMS.mn: Монгол үсэгтэй мессеж хамгийн ихдээ 70 тэмдэгт (урт бол HTTP 400)
+
+
 def event_sms_text(company: str, event: str, at: str, code: str | None) -> str:
-    """Эвентэд бүртгүүлэхэд шууд очих сануулга: "Pinecone Academy: AI Hackathon 10/18 10:00 цагт. Код: 4052"."""
+    """Эвентэд бүртгүүлэхэд шууд очих SMS (<= 70 тэмдэгт):
+    "Pinecone Academy: Нээлттэй өдөрлөг 10/15 18:00 бүртгэгдлээ. Код: 3746"."""
     from datetime import datetime
     try:
         when = datetime.strptime(at[:16], "%Y-%m-%dT%H:%M").strftime("%m/%d %H:%M")
     except (TypeError, ValueError):
         when = ""
     label = f"{company.strip()[:20]}: " if company and company.strip() else ""
-    text = f"{label}Сануулга - {event[:40]} {when} цагт. Таныг бүртгэлээ."
-    return text + (f" Код: {code}" if code and re.fullmatch(r"\d{4}", code) else "")
+    tail = f" Код: {code}" if code and re.fullmatch(r"\d{4}", code) else ""
+    event = event.strip()
+    over = len(f"{label}{event} {when}".rstrip()) + 1 + len(tail) - SMS_MAX   # +1: цэг
+    if over > 0:                                    # нэр урт бол эвентийн нэрийг таслана
+        event = event[:max(4, len(event) - over - 1)] + "…"
+    head = f"{label}{event} {when}".rstrip()
+    done = " бүртгэгдлээ."
+    return head + (done if len(head + done + tail) <= SMS_MAX else ".") + tail
 
 
 def send_event_sms(phone: str | None, company: str, event: str, at: str, code: str | None) -> bool:
@@ -61,6 +71,9 @@ def send_sms(phone: str | None, message: str) -> bool:
     else:
         print("  [SMS] илгээгээгүй: SMS_API_KEY/SMS_API_TOKEN тохируулаагүй")
         return False
+    if not message.isascii() and len(message) > SMS_MAX:
+        print(f"  [SMS] {len(message)} тэмдэгт -> {SMS_MAX} болгож таслав")
+        message = message[:SMS_MAX - 1] + "…"
     if os.getenv("SMS_DRY_RUN") == "1":
         print(f"  [SMS dry-run] {digits[:2]}****{digits[-2:]}: {message}")
         return True
