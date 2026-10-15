@@ -17,7 +17,7 @@ export function DataInfo({ info }: { info: Info }) {
         </div>
         <div className="flex flex-wrap gap-2">
           <a href="/api/database/export?format=csv" download
-            className="rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-[#07130c] hover:bg-brand-2">⬇ Бүгдийг татах (Excel/CSV)</a>
+            className="rounded-[10px] bg-brand px-4 py-2 text-sm font-semibold text-on-brand hover:bg-brand-2">⬇ Бүгдийг татах (Excel/CSV)</a>
           <a href="/api/database/export?format=db" download
             className="rounded-[10px] border-[1.5px] border-line-2 px-4 py-2 text-sm font-semibold hover:border-brand">⬇ SQLite файл (.db)</a>
         </div>

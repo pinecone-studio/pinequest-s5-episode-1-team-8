@@ -47,7 +47,7 @@ export default async function DashboardPage() {
             <Link href="/knowledge" className="font-bold hover:underline">AI-ийн мэдээлэл засах</Link>
             <Link
               href="/unanswered"
-              className="rounded-[10px] bg-brand px-[26px] py-[15px] font-semibold text-[#07130c] hover:bg-brand-2"
+              className="rounded-[10px] bg-brand px-[26px] py-[15px] font-semibold text-on-brand hover:bg-brand-2"
             >
               {stats.unanswered ? `${stats.unanswered} асуулт шалгах` : "Шалгах зүйл алга"}
             </Link>

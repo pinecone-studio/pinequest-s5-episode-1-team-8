@@ -116,7 +116,7 @@ export function KnowledgeManager({ initial, isAdmin }: { initial: KnowledgeRespo
         <h2 className="mb-1 font-semibold">Мэдээлэл нэмэх</h2>
         <p className="mb-3 text-sm text-muted">PDF, Word, Markdown эсвэл TXT файл оруулах, эсвэл шинэ текст бичиж болно.</p>
         <div className="flex flex-wrap gap-2.5">
-          <label className={`${button} cursor-pointer border-brand bg-brand text-bg hover:bg-brand-2`}>
+          <label className={`${button} cursor-pointer border-brand bg-brand text-on-brand hover:bg-brand-2`}>
             <input className="hidden" type="file" accept=".md,.txt,.pdf,.docx" onChange={upload} />
             ↑ Компьютероос файл оруулах
           </label>
@@ -129,7 +129,7 @@ export function KnowledgeManager({ initial, isAdmin }: { initial: KnowledgeRespo
       </div>
       {activeFile ? activeFile.editable ? <>
         <textarea aria-label={`${active} агуулга`} disabled={docLoading} value={content} onChange={(e) => setContent(e.target.value)} className="min-h-[430px] w-full resize-y rounded-[12px] border-[1.5px] border-line-2 bg-bg p-4 font-mono text-sm leading-6 text-fg outline-none focus:border-brand disabled:text-muted" />
-        <div className="mt-3 flex flex-wrap items-center gap-3"><button className={`${button} border-brand bg-brand text-bg hover:bg-brand-2`} onClick={save} disabled={pending}>Хадгалах</button><button className={`${button} text-danger hover:border-danger`} onClick={remove} disabled={pending}>Устгах</button><span className="text-sm text-muted">{active}</span></div>
+        <div className="mt-3 flex flex-wrap items-center gap-3"><button className={`${button} border-brand bg-brand text-on-brand hover:bg-brand-2`} onClick={save} disabled={pending}>Хадгалах</button><button className={`${button} text-danger hover:border-danger`} onClick={remove} disabled={pending}>Устгах</button><span className="text-sm text-muted">{active}</span></div>
       </> : (
         <div className="rounded-[12px] border border-brand/40 bg-brand/5 p-5">
           <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -146,7 +146,7 @@ export function KnowledgeManager({ initial, isAdmin }: { initial: KnowledgeRespo
       {!isAdmin && (
         <div className="mt-6 flex justify-end">
           <button
-            className={`${button} border-brand bg-brand text-bg hover:bg-brand-2`}
+            className={`${button} border-brand bg-brand text-on-brand hover:bg-brand-2`}
             onClick={startBuild}
             disabled={!data.files.length || build.running || build.state === "done"}
           >
@@ -157,7 +157,7 @@ export function KnowledgeManager({ initial, isAdmin }: { initial: KnowledgeRespo
     </section>
 
     {isAdmin && <section className="rounded-[18px] bg-panel p-7 max-md:p-4">
-      <div className="flex flex-wrap items-center gap-4"><h2 className="flex-1 text-base font-semibold">{isAdmin ? "Өөрчлөлтийг ашиглах" : "Дуудлагад ашиглах"}</h2><button className={`${button} border-brand bg-brand text-bg hover:bg-brand-2`} onClick={startBuild} disabled={build.running}>{buildButton}</button>{build.running && <button className={`${button} hover:border-danger hover:text-danger`} onClick={cancelBuild} disabled={pending}>⏹ Зогсоох</button>}</div>
+      <div className="flex flex-wrap items-center gap-4"><h2 className="flex-1 text-base font-semibold">{isAdmin ? "Өөрчлөлтийг ашиглах" : "Дуудлагад ашиглах"}</h2><button className={`${button} border-brand bg-brand text-on-brand hover:bg-brand-2`} onClick={startBuild} disabled={build.running}>{buildButton}</button>{build.running && <button className={`${button} hover:border-danger hover:text-danger`} onClick={cancelBuild} disabled={pending}>⏹ Зогсоох</button>}</div>
       <p className="mt-5 text-sm leading-6 text-muted">
         {isAdmin
           ? <>Мэдээллээс асуулт, тодруулах сэдэв, FAQ-г автоматаар үүсгэж, шинэ/өөрчлөгдсөн өгүүлбэрийг аудио болгоно. <b className="text-fg">Бэлдэх хугацаанд AI сервер түр зогсоно.</b></>

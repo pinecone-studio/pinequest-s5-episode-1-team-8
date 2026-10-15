@@ -10,7 +10,7 @@ export function SetupBanner() {
           <h2 className="mb-1.5 text-[15px] font-semibold">AI ресепшнээ тохируулж дуусгаарай</h2>
           <p className="text-muted">Байгууллагын мэдээлэл → мэдээлэл оруулах → бэлдэх. Код бичих шаардлагагүй, ~10-30 минут.</p>
         </div>
-        <Link href="/setup" className="w-full text-center sm:w-auto rounded-[10px] bg-brand px-[26px] py-[15px] font-semibold text-[#07130c] hover:bg-brand-2">
+        <Link href="/setup" className="w-full text-center sm:w-auto rounded-[10px] bg-brand px-[26px] py-[15px] font-semibold text-on-brand hover:bg-brand-2">
           Тохируулах →
         </Link>
       </div>

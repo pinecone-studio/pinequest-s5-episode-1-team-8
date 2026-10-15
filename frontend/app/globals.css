@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
-/* Цагаан (цайвар) хэв маяг: цагаан самбар, бараан текст, ногоон брэнд, monospace тоо.
-   Өнгө: bg-panel, text-muted, border-line, bg-brand/12 ...
-   Ногоон нь цагаан дээр уншигдахуйц бараан (#16a34a); товч дээрх текст бараан (#07130c). */
+/* Цагаан (цайвар) хэв маяг — илтгэлийн слайдтай нэг өнгө: цэнхэр брэнд (#1F00FF), улбар шар туслах өнгө.
+   Цэнхрийг зөвхөн товч, идэвхтэй төлөв, логод хэрэглэнэ; бусад нь цагаан/саарал.
+   Өнгө: bg-panel, text-muted, border-line, bg-brand/12, text-on-brand, text-accent ... */
 @theme {
   --color-bg: #f5f7fb;
   --color-panel: #ffffff;
@@ -12,8 +12,10 @@
   --color-fg: #0f1729;
   --color-muted: #5b6475;
   --color-dim: #8a93a6;
-  --color-brand: #16a34a;
-  --color-brand-2: #15803d;
+  --color-brand: #1f00ff;
+  --color-brand-2: #1800c4;
+  --color-on-brand: #ffffff;
+  --color-accent: #ff5a1f;
   --color-warn: #d97706;
   --color-danger: #dc2626;
 
