@@ -1,4 +1,4 @@
-"""Давтан дуудлага өмнөх бүртгэлийг ашиглаж, өөр хөтөлбөрийг хаахгүй."""
+"""Давтан дугаарт шинэ бүртгэл үүсгэхгүй; уулзалтын санал руу шилжихгүй."""
 import os
 import tempfile
 import unittest
@@ -33,33 +33,33 @@ class DuplicateRegistrationTest(unittest.IsolatedAsyncioTestCase):
         with db.connect(self.path) as con:
             return con.execute("SELECT COUNT(*) FROM leads").fetchone()[0]
 
-    async def test_repeat_registration_reuses_record_and_code(self):
+    async def test_repeat_registration_preserves_record_without_returning_a_code(self):
         for course in (None, "Bootcamp"):
             self.call.tenant.config.return_value["lead_label"] = course
-            first = self.call.save_lead(self.flow())
+            self.call.save_lead(self.flow())
             lead_id, count = self.call.last_lead_id, self.count()
             jobs = len(self.call.name_jobs)
             repeat = self.flow()
             repeat.name = "Нөмийн"
-            self.assertEqual(self.call.save_lead(repeat), first)
+            self.assertIsNone(self.call.save_lead(repeat))
             self.assertTrue(repeat.duplicate)
             self.assertEqual(self.call.last_lead_id, lead_id)
             self.assertEqual(self.count(), count)
             self.assertEqual(len(self.call.name_jobs), jobs)
             self.assertEqual(people.lead(self.temp.name, lead_id)["name"], "Номин")
 
-    async def test_other_course_phone_and_canceled_registration_are_allowed(self):
+    async def test_other_phone_and_canceled_registration_are_allowed_but_other_course_is_duplicate(self):
         self.call.save_lead(self.flow())
         original = self.call.last_lead_id
         self.call.save_lead(self.flow(phone="88776655"))
         self.call.save_lead(self.flow("event", event={"name": "Hackathon"}))
-        self.assertEqual(self.count(), 3)
+        self.assertEqual(self.count(), 2)
         with db.connect(self.path) as con:
             con.execute("UPDATE leads SET status='canceled' WHERE id=?", (original,))
         flow = self.flow()
         self.call.save_lead(flow)
         self.assertFalse(flow.duplicate)
-        self.assertEqual(self.count(), 4)
+        self.assertEqual(self.count(), 3)
 
     async def test_handoff_does_not_block_registration(self):
         self.call.save_lead(self.flow("handoff"))
@@ -73,13 +73,12 @@ class DuplicateRegistrationTest(unittest.IsolatedAsyncioTestCase):
         self.call.save_lead(self.flow(phone=None))
         self.assertEqual(self.count(), 2)
 
-    async def test_duplicate_reply_and_booking_use_existing_registration(self):
+    async def test_duplicate_reply_stops_booking(self):
         self.call.save_lead(self.flow())
         lead_id = self.call.last_lead_id
         self.call.en = None
         self.call.router = Mock(meta={"lead": {
-            "already": {"text": "Already registered"},
-            "already_book": {"text": "Already registered. Book?"}}})
+            "already_registered": {"text": "Already registered"}}})
         self.call.router.clip.return_value = ([], 8000)
         self.call.play = AsyncMock()
         self.call.log = Mock()
@@ -92,10 +91,10 @@ class DuplicateRegistrationTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(self.count(), 1)
             self.assertEqual(self.call.last_lead_id, lead_id)
             self.assertTrue(flow.duplicate)
-            self.assertEqual(self.call.log.call_args.args[1],
-                             "Already registered. Book?" if book else "Already registered")
+            self.assertEqual(self.call.log.call_args.args[1], "Already registered")
+            self.assertEqual(flow.result, "duplicate")
             if book:
-                self.assertEqual(flow.handle("1"), ["@book"])
+                self.assertEqual(flow.handle("1"), [])
 
 
 if __name__ == "__main__":
