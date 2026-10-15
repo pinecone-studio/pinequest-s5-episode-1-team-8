@@ -96,7 +96,7 @@ export default async function CallPage({ params }: PageProps<"/calls/[uuid]">) {
               uuid={call.uuid}
               createdAt={call.started_at}
               phone={call.caller}
-              duration={call.duration}
+              duration={call.duration ?? undefined}
               messages={messages}
             />
             <Link href="/calls" className="font-bold hover:underline">
