@@ -22,11 +22,11 @@ export function TenantList({ tenants }: TenantListProps) {
     return tenants.filter((t) => {
       // Төлөвийн шүүлтүүр
       if (statusFilter !== "ALL") {
-        if (statusFilter === "READY" && t.status !== "READY") return false;
-        if (statusFilter === "NOT_READY" && t.status !== "NOT_READY") return false;
-        if (statusFilter === "ACTIVE" && t.status !== "ACTIVE") return false;
-        if (statusFilter === "ERROR" && t.status !== "ERROR") return false;
-        // Төслийн бүтэц дэх бодит status утгуудаар энд нарийвчлан тохируулж болно
+        // AdminTenant-д status талбар байхгүй: ready (бэлэн эсэх), job (idle|queued|running|done|error)
+        if (statusFilter === "READY" && !t.ready) return false;
+        if (statusFilter === "NOT_READY" && t.ready) return false;
+        if (statusFilter === "ACTIVE" && t.job !== "running" && t.job !== "queued") return false;
+        if (statusFilter === "ERROR" && t.job !== "error") return false;
       }
 
       if (!query) return true;
@@ -34,7 +34,7 @@ export function TenantList({ tenants }: TenantListProps) {
       const nameMatch = t.name?.toLowerCase().includes(query) ?? false;
       const slugMatch = t.slug?.toLowerCase().includes(query) ?? false;
       const orgEmailMatch = t.email?.toLowerCase().includes(query) ?? false;
-      const userEmailMatch = t.userEmail?.toLowerCase().includes(query) ?? false;
+      const userEmailMatch = t.users.some((u) => u.toLowerCase().includes(query));
 
       return nameMatch || slugMatch || orgEmailMatch || userEmailMatch;
     });
