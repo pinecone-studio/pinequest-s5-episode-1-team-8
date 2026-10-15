@@ -21,7 +21,7 @@ import numpy as np
 import soundfile as sf
 
 import tenant as tenants
-from lead import DIGITS
+from lead import DIGITS, PAIRS, pair_word
 import people
 from recordings import recording_for, text_hash
 from stream_voice import OronTTS, clip_key, clip_seed, eleven_sample_path, engine_for, tts_engine, tts_seeds, voice_tag
@@ -100,6 +100,7 @@ def main():
     print("\nБүртгэл (lead) / цифр:")
     lead = {key: clip(text) for key, text in phrases["lead"].items()}
     digits = [clip(d) for d in DIGITS]
+    pairs = {p: clip(pair_word(p)) for p in PAIRS}   # дугаарыг хоёр хоёр оронгоор
 
     print("\nБүртгэлээ шалгах/өөрчлөх (account) / огноо:")
     account = {key: clip(text) for key, text in phrases["account"].items()}
@@ -158,6 +159,7 @@ def main():
         "generic_stems": sorted(t.generic_stems()),
         "lead": lead,
         "digits": digits,
+        "pairs": pairs,
         "account": account,
         "dates": dates,
         "events": events,

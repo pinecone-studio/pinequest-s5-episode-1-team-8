@@ -18,6 +18,17 @@ from tenant import DEFAULT_PHRASES  # noqa: E402
 
 PROMPTS = DEFAULT_PHRASES["lead"]
 DIGITS = ["тэг", "нэг", "хоёр", "гурав", "дөрөв", "тав", "зургаа", "долоо", "найм", "ес"]
+# Дугаарыг хоёр хоёр оронгоор уншина ("85" -> "наян тав", "20" -> "хорь", "08" -> "тэг найм")
+PAIR_TENS = ["", "арав", "хорь", "гуч", "дөч", "тавь", "жар", "дал", "ная", "ер"]
+PAIR_TENS_ATTR = ["", "арван", "хорин", "гучин", "дөчин", "тавин", "жаран", "далан", "наян", "ерэн"]
+PAIRS = [f"{i:02d}" for i in range(100)]
+
+
+def pair_word(pair: str) -> str:
+    tens, unit = int(pair[0]), int(pair[1])
+    if tens == 0:
+        return f"{DIGITS[0]} {DIGITS[unit]}"
+    return PAIR_TENS[tens] if unit == 0 else f"{PAIR_TENS_ATTR[tens]} {DIGITS[unit]}"
 
 # Эдгээр FAQ хариултын дараа нэр асуух алхам эхэлнэ (хариулт нь өөрөө нэр асуудаг)
 START_FAQ = {"register": "lead", "human_request": "handoff"}

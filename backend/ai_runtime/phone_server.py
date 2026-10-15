@@ -473,6 +473,8 @@ class Call:
         self.log("assistant", reply, route=f"lead_{flow.result or flow.state}")
         if flow.finished:
             self.lead = None
+            if flow.event and flow.saved:          # "бүртгэж авлаа ... баяртай" -> яриаг дуусгана
+                await self.hangup()
         else:
             self.arm_reprompt(replay)
         if not flow.finished and flow.state == "phone" and self.dtmf:   # нэрийн алхмын үед бичсэн цифрүүд
@@ -675,11 +677,7 @@ class Call:
             self.flush()
 
             async def run():
-                if prev and not prev.done():
-                    try:
-                        await prev
-                    except asyncio.CancelledError:
-                        pass
+                await self.interrupt(prev)
                 if self.lead:
                     await self.dtmf_turn(digits)
             self.turn = asyncio.create_task(run())
@@ -704,14 +702,21 @@ class Call:
         self.flush()
 
         async def run():
-            if prev and not prev.done():
-                try:
-                    await prev
-                except asyncio.CancelledError:
-                    pass
+            await self.interrupt(prev)
             if self.account:
                 await self.account_turn(digits=digits)
         self.turn = asyncio.create_task(run())
+
+    @staticmethod
+    async def interrupt(prev):
+        """Товчлуур дарахад AI-ийн одоо ярьж буй хэллэгийг (жишээ нь эвентийн огноо) тасална:
+        өмнө нь дуусахыг хүлээгээд дараа нь хариулдаг байсан. flush() тоглож буй дууг цэвэрлэсэн."""
+        if prev and not prev.done():
+            prev.cancel()
+            try:
+                await prev
+            except asyncio.CancelledError:
+                pass
 
     async def dtmf_turn(self, digits: str):
         self.log("user", f"[товчлуур] {digits}")
@@ -723,10 +728,19 @@ class Call:
         await self.lead_turn(digits)
 
     def digits_audio(self, digits: str, en: "english.EnglishRouter | None" = None):
-        """Дугаарыг цифр бүрийн бэлэн аудиогоор уншина: хос бүрийн дараа урт завсар."""
+        """Дугаарыг хоёр хоёр оронгоор уншина ("85 22" -> "наян тав, хорин хоёр"). Хосын аудио
+        бэлдээгүй (хуучин индекс) эсвэл англи бол цифр бүрээр: хос бүрийн дараа урт завсар."""
         src = en or self.router
-        clips = en.digits() if en else self.router.meta["digits"]
+        pairs = None if en else self.router.meta.get("pairs")
         parts, sr = [], 24000
+        if pairs:
+            for i in range(0, len(digits), 2):
+                chunk = digits[i:i + 2]
+                clip = pairs.get(chunk) if len(chunk) == 2 else self.router.meta["digits"][int(chunk)]
+                wav, sr = src.clip(clip)
+                parts += [wav, np.zeros(int(sr * 0.25), np.float32)]
+            return np.concatenate(parts), sr
+        clips = en.digits() if en else self.router.meta["digits"]
         for i, d in enumerate(digits):
             wav, sr = src.clip(clips[int(d)])
             parts += [wav, np.zeros(int(sr * (0.3 if i % 2 else 0.08)), np.float32)]

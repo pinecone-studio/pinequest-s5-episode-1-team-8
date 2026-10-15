@@ -3,7 +3,7 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, Mock
 
-from lead import LeadFlow, yes_no
+from lead import LeadFlow, pair_word, yes_no
 from phone_server import Call
 
 
@@ -146,6 +146,30 @@ class LeadDtmfTest(unittest.IsolatedAsyncioTestCase):
         self.assertIs(yes_no("1"), True)
         self.assertIs(yes_no("2"), False)
         self.assertIsNone(yes_no("99112233"))
+
+
+class InterruptTest(unittest.IsolatedAsyncioTestCase):
+    async def test_keypress_cuts_current_speech(self):
+        speaking = asyncio.create_task(asyncio.sleep(10))   # эвентийн огноог уншиж байна
+        await asyncio.sleep(0)
+        await Call.interrupt(speaking)
+        self.assertTrue(speaking.cancelled())
+
+
+class PairWordTest(unittest.TestCase):
+    def test_phone_read_in_pairs(self):
+        self.assertEqual([pair_word(p) for p in ("85", "22", "26", "34")],
+                         ["наян тав", "хорин хоёр", "хорин зургаа", "гучин дөрөв"])
+        self.assertEqual([pair_word(p) for p in ("08", "00", "10", "20", "11")],
+                         ["тэг найм", "тэг тэг", "арав", "хорь", "арван нэг"])
+
+    def test_digits_audio_uses_pairs(self):
+        call = Call.__new__(Call)
+        clip = lambda c: (__import__("numpy").ones(10, "float32"), 24000)  # noqa: E731
+        call.router = Mock(meta={"pairs": {f"{i:02d}": f"p{i:02d}" for i in range(100)},
+                                 "digits": [f"d{i}" for i in range(10)]}, clip=Mock(side_effect=clip))
+        call.digits_audio("85222634")
+        self.assertEqual([c.args[0] for c in call.router.clip.call_args_list], ["p85", "p22", "p26", "p34"])
 
 
 if __name__ == "__main__":
