@@ -435,7 +435,8 @@ class Call:
             flow.saved, flow.save_pending = True, False
             code = self.save_lead(flow)
             if flow.duplicate:
-                keys = [k if k != "event_done" else "event_already" for k in keys]
+                keys = [{"event_done": "event_already", "done": "already", "done_book": "already_book"}.get(k, k)
+                        for k in keys]
             if code and not en and "account" in router.meta:
                 code_keys = ["your_code", f"digits:{code}", "code_remember"]
         if code_keys and keys:
@@ -497,8 +498,8 @@ class Call:
         try:
             course = flow.event["name"] if flow.event else self.tenant.config().get("lead_label")
             existing = (db.active_lead(flow.phone, course, path=self.tenant.db_path)
-                        if flow.event and flow.phone else None)
-            if existing:                       # энэ эвентэд аль хэдийн бүртгэлтэй -> кодыг нь сануулна
+                        if flow.reason in ("lead", "event") and flow.phone else None)
+            if existing:                       # өмнөх бүртгэлийг ашиглаж, кодыг нь сануулна
                 flow.duplicate, self.last_lead_id = True, existing
                 print(f"  [LEAD] {flow.phone} {course}-д аль хэдийн бүртгэлтэй (#{existing})")
                 code = people.ensure_code(self.tenant.dir, existing)

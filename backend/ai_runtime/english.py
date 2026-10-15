@@ -43,6 +43,8 @@ DEFAULT_PHRASES_EN = {
                           "Is there anything else I can help you with?"),
         "declined": "Alright. Is there anything else I can help you with?",
         "ask_name_again": "Sure. May I have your name, please?",
+        "already": "You are already registered. Is there anything else I can help you with?",
+        "already_book": "You are already registered. Would you like to book an appointment?",
     },
 }
 # Бүх байгууллагад автоматаар үүсдэг FAQ (tenant.standard_faq)-ийн англи хувилбар. Хаяг, цагийн хуваарь
@@ -285,8 +287,8 @@ class EnglishRouter:
     def phrase(self, key: str) -> dict:
         return self.meta["phrases"][key]
 
-    def lead(self, key: str) -> dict:
-        return self.meta["phrases"]["lead"][key]
+    def lead(self, key: str) -> dict | None:
+        return self.meta["phrases"]["lead"].get(key)
 
     def digits(self) -> list[dict]:
         return self.meta["digits"]
