@@ -48,18 +48,20 @@ class DuplicateRegistrationTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(self.call.name_jobs), jobs)
             self.assertEqual(people.lead(self.temp.name, lead_id)["name"], "Номин")
 
-    async def test_other_phone_and_canceled_registration_are_allowed_but_other_course_is_duplicate(self):
+    async def test_other_phone_canceled_and_event_are_allowed(self):
         self.call.save_lead(self.flow())
         original = self.call.last_lead_id
         self.call.save_lead(self.flow(phone="88776655"))
-        self.call.save_lead(self.flow("event", event={"name": "Hackathon"}))
-        self.assertEqual(self.count(), 2)
+        self.call.save_lead(self.flow("event", event={"name": "Hackathon"}))   # хөтөлбөрийн сурагч эвентэд -> болно
+        self.assertEqual(self.count(), 3)
+        self.call.save_lead(self.flow())                                       # хөтөлбөрт дахин -> давхар
+        self.assertEqual(self.count(), 3)
         with db.connect(self.path) as con:
             con.execute("UPDATE leads SET status='canceled' WHERE id=?", (original,))
         flow = self.flow()
         self.call.save_lead(flow)
         self.assertFalse(flow.duplicate)
-        self.assertEqual(self.count(), 3)
+        self.assertEqual(self.count(), 4)
 
     async def test_handoff_does_not_block_registration(self):
         self.call.save_lead(self.flow("handoff"))

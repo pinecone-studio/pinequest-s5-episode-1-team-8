@@ -541,8 +541,11 @@ class Call:
         """Бүртгэлийг хадгалж, хувийн RAG-д холбоно (код + баримтууд) -> бүртгэлийн код."""
         try:
             course = people.event_course(flow.event) if flow.event else self.tenant.config().get("lead_label")
-            existing = (db.active_lead(flow.phone, path=self.tenant.db_path)
-                        if flow.reason in ("lead", "event") and flow.phone else None)
+            # Хөтөлбөрт: дугаар хөтөлбөрт бүртгэлтэй бол давхар (#180). Эвентэд: зөвхөн тэр өдрийн тэр эвентэд
+            # бүртгэлтэй бол давхар — Bootcamp-ийн сурагч Нээлттэй өдөрлөгт бүртгүүлж болно.
+            existing = (db.active_lead(flow.phone, course, path=self.tenant.db_path) if flow.event
+                        else db.active_lead(flow.phone, path=self.tenant.db_path, reason="lead"))
+            existing = existing if flow.reason in ("lead", "event") and flow.phone else None
             if existing:
                 flow.duplicate, self.last_lead_id = True, existing
                 print(f"  [LEAD] өмнө бүртгэлтэй хэрэглэгч (#{existing})")

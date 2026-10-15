@@ -109,12 +109,14 @@ def add_lead(call_uuid, name, phone, phone_raw, caller, reason, question=None,
         return cur.lastrowid
 
 
-def active_lead(phone: str, course: str | None = None, path: str | None = None) -> int | None:
-    """Дугаарын идэвхтэй бүртгэл; course өгсөн үед тухайн хөтөлбөрөөр шүүнэ."""
+def active_lead(phone: str, course: str | None = None, path: str | None = None,
+                reason: str | None = None) -> int | None:
+    """Дугаарын идэвхтэй бүртгэл; course өгсөн үед тухайн хөтөлбөрөөр, reason ("lead"|"event") өгсөн үед төрлөөр шүүнэ."""
     with connect(path) as con:
         row = con.execute("SELECT id FROM leads WHERE phone = ? AND (? IS NULL OR course = ?) "
-                          "AND reason IN ('lead', 'event') AND IFNULL(status, 'new') != 'canceled' "
-                          "ORDER BY id DESC LIMIT 1", (phone, course, course)).fetchone()
+                          "AND reason IN ('lead', 'event') AND (? IS NULL OR reason = ?) "
+                          "AND IFNULL(status, 'new') != 'canceled' "
+                          "ORDER BY id DESC LIMIT 1", (phone, course, course, reason, reason)).fetchone()
     return row["id"] if row else None
 
 
