@@ -469,11 +469,19 @@ class Call:
         en = self.en if flow.lang == "en" and self.en else None
         code_keys = []
         if (flow.save_pending or (flow.finished and flow.result not in ("declined", "book"))) and not flow.saved:
-            flow.saved, flow.save_pending = True, False
+            flow.save_pending = False
             code = self.save_lead(flow)
             if flow.duplicate:
                 flow.saved, flow.result, flow.state = False, "duplicate", "duplicate"
                 keys = ["already_registered"]
+            elif not flow.saved:
+                flow.result, flow.state = None, "confirm" if flow.phone else "phone"
+                clip = en.phrase("error") if en else router.meta["error"]
+                audio = en.clip(clip) if en else router.clip(clip)
+                await self.play(*audio)
+                self.last_reply, self.last_reply_text = [audio], clip["text"]
+                self.log("assistant", clip["text"], route="lead_save_failed")
+                return True
             if code and not en and "account" in router.meta:
                 code_keys = ["your_code", f"digits:{code}", "code_remember"]
         if code_keys and keys:
@@ -545,6 +553,7 @@ class Call:
             lead_id = db.add_lead(self.uuid, flow.name, flow.phone, " | ".join(flow.phone_raw) or None,
                                   flow.caller, flow.reason, self.lead_question, course=course,
                                   path=self.tenant.db_path)
+            flow.saved = True
             self.last_lead_id = lead_id
             print(f"  [LEAD] {flow.name} {flow.phone or '(дугааргүй)'} ({flow.reason})")
             if flow.lang == "mn" and flow.name:
