@@ -39,7 +39,7 @@ import people
 import tenant as tenants
 from lead import START_FAQ, LeadFlow, wants_event
 import names
-from stt import NAME_DECODES, BilingualSTT, WhisperSTT
+from stt import NAME_DECODES, BilingualSTT, WhisperSTT, create_mn_stt
 
 AI_PORT = int(os.getenv("AI_PORT", "9092"))
 
@@ -109,7 +109,7 @@ class Models:
         self.embedder = router.embedder             # бүх байгууллага нэг embedding загвар
         self.account_search = acct.Search(self.embedder.query)   # хувийн RAG (бүртгэлээ шалгах/өөрчлөх)
         self.routers = {default.slug: router}
-        self.stt = WhisperSTT()
+        self.stt = create_mn_stt()
         self.stt.warmup()
         self.bilingual: BilingualSTT | None = None      # англи горимтой байгууллага байвал л (~0.5GB)
         self.en_routers: dict[str, english.EnglishRouter] = {}
@@ -302,6 +302,11 @@ class Call:
         holder = asyncio.create_task(self.hold_while(stt))
         try:
             text, lang = await stt
+        except RuntimeError as exc:
+            print(f"  [STT алдаа] {exc}")
+            holder.cancel()
+            await self.play(*self.router.clip(self.router.meta["error"]))
+            return
         finally:
             holder.cancel()     # тоглож байгаа hold дуусаад хариу араас нь тоглоно
         stt_sec = time.perf_counter() - t0
@@ -537,7 +542,7 @@ class Call:
         for lead_id, name, audio in jobs:
             try:
                 texts = [name]
-                if audio is not None:
+                if audio is not None and isinstance(self.m.stt, WhisperSTT):
                     texts += [self.m.stt.transcribe(audio, SR, **d) for d in NAME_DECODES]
                 fixed = names.fix(names.best_text(texts, lex), lex)
                 if fixed and fixed != name:
