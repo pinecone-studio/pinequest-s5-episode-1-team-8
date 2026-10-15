@@ -40,17 +40,24 @@ def log(msg: str):
     print(f"[tunnel] {time.strftime('%H:%M:%S')} {msg}", flush=True)
 
 
-def publish(url: str):
-    """Worker-ийн KV-д одоогийн хаягийг бичнэ (wrangler-ийн OAuth нэвтрэлтээр)."""
+def publish(url: str) -> bool:
+    """Worker-ийн KV-д одоогийн хаягийг бичнэ (wrangler-ийн OAuth нэвтрэлтээр).
+    OAuth token-ы хугацаа дууссан бол "Authentication error [10000]" -> `wrangler whoami` token-ыг
+    сэргээгээд дахин оролдоно (10-15: сэргээгээгүйгээс сайт хуучин хаяг руу заагаад унасан)."""
     if not os.path.exists(WRANGLER):
         log("wrangler алга (cd cloudflare && npm install)")
-        return
-    r = subprocess.run([WRANGLER, "kv", "key", "put", "origin", url, "--binding", "ORIGIN", "--remote"],
-                       cwd=CF_DIR, env=ENV, capture_output=True, text=True, timeout=120)
-    if r.returncode == 0:
-        log(f"тогтмол хаяг -> {url}")
-    else:
-        log(f"KV-д бичиж чадсангүй (cd cloudflare && npx wrangler login): {r.stderr[-300:]}")
+        return False
+    for attempt in range(4):
+        r = subprocess.run([WRANGLER, "kv", "key", "put", "origin", url, "--binding", "ORIGIN", "--remote"],
+                           cwd=CF_DIR, env=ENV, capture_output=True, text=True, timeout=120)
+        if r.returncode == 0:
+            log(f"тогтмол хаяг -> {url}")
+            return True
+        log(f"KV-д бичиж чадсангүй ({attempt + 1}/4): {r.stderr[-200:]}")
+        subprocess.run([WRANGLER, "whoami"], cwd=CF_DIR, env=ENV, capture_output=True, text=True, timeout=60)
+        time.sleep(5 * (attempt + 1))
+    log("KV-д бичиж чадсангүй (cd cloudflare && npx wrangler login) — watch() дахин оролдоно")
+    return False
 
 
 def alive(url: str) -> bool:
@@ -70,6 +77,8 @@ def watch(proc: subprocess.Popen, state: dict):
         time.sleep(CHECK_EVERY)
         if not state.get("url") or proc.poll() is not None:
             continue
+        if not state.get("published"):          # өмнө KV-д бичиж чадаагүй -> дахин
+            state["published"] = publish(state["url"])
         fails = 0 if alive(state["url"]) else fails + 1
         if fails >= MAX_FAILS:
             log(f"{state['url']} {MAX_FAILS} удаа хариу өгсөнгүй -> шинэ tunnel")
@@ -91,7 +100,7 @@ def run_once():
         m = URL.search(line)
         if m and not state.get("url"):
             state["url"] = m.group(0)
-            publish(state["url"])
+            state["published"] = publish(state["url"])
         if any(d in line for d in DEAD) and proc.poll() is None:
             log("Cloudflare tunnel-ийг устгасан -> шинэ tunnel")
             proc.terminate()
