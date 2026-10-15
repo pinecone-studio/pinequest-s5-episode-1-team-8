@@ -138,7 +138,7 @@ export type Lead = {
   phone_raw: string | null; // STT-ийн сонссон бичвэр
   caller: string | null; // Caller ID
   course: string | null; // бүртгүүлсэн хөтөлбөр / эвент
-  reason: "lead" | "handoff";
+  reason: "lead" | "event" | "handoff";
   question: string | null;
   status: LeadStatus;
   notes: string | null;

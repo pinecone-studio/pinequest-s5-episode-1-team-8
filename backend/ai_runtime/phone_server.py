@@ -58,6 +58,7 @@ MIN_SPEECH = float(os.getenv("MIN_SPEECH", "0.25"))      # үүнээс боги
 BARGE_IN = float(os.getenv("BARGE_IN", "0"))
 ECHO_TAIL = float(os.getenv("ECHO_TAIL", "0.8"))        # AI-ийн дуу дууссаны дараах echo-гийн хугацаа
 MIN_TEXT_CHARS = 3                                       # "а", "мн" гэх мэт STT үр дүнг чимээ гэж үзнэ
+REPEAT_LAST = re.compile(r"\b(?:(?:дахиад|дахин|давтаад)\s+(?:нэг\s+)?(?:хэл|ярь|яри)\w*|юу\s+гэнээ|сая\s+юу\s+гэсэн\s+бэ)\b")
 ACK_AFTER = float(os.getenv("ACK_AFTER", "1.0"))        # STT ийм удаан бол hold тоглуулж эхэлнэ
 # Орчны дуу (өрөөнд ярьж буй бусад хүн): Silero үүнийг ч яриа гэж үздэг тул өгүүлбэр хэзээ ч дуусахгүй,
 # залгагчийн "байхгүй" танигдахгүй байсан (бодит дуудлага 10-14, 33с). Утсанд ойр ярьж буй хүний дуу
@@ -312,11 +313,20 @@ class Call:
         stt_sec = time.perf_counter() - t0
         print(f"  [STT {time.perf_counter() - t0:.2f}s]{' [' + lang + ']' if self.en else ''} {text!r}")
         self.lang = lang
-        # Бүртгэлийн үед "за" (2 үсэг) хүчинтэй хариулт
-        if len(re.sub(r"\W", "", text)) < (2 if self.lead or self.account else MIN_TEXT_CHARS):
+        # Эвент сонгох ганц цифрийг STT "1" гэж бичдэг; чимээ гэж хаяхгүй.
+        event_choice = (self.lead and self.lead.state == "event_pick"
+                        and re.fullmatch(r"\s*[1-3][.!?]?\s*", text))
+        if not event_choice and len(re.sub(r"\W", "", text)) < (2 if self.lead or self.account else MIN_TEXT_CHARS):
             print("  [алгасав] хэт богино (чимээ/echo)")
             return
         self.log("user", text, stt_sec=stt_sec)
+        if REPEAT_LAST.search(text.lower()) and self.last_reply:
+            for wav, sr in self.last_reply:
+                await self.play(wav, sr)
+            self.log("assistant", self.last_reply_text, route="repeat_last")
+            if self.lead:
+                self.arm_reprompt(self.last_reply)
+            return
         t1 = time.perf_counter()
         name_flow = self.lead if self.lead and self.lead.state == "name" else None
         if self.lead and await self.lead_turn(text):
@@ -347,7 +357,7 @@ class Call:
             for wav, sr in self.last_reply:
                 await self.play(wav, sr)
             reply = f"{reply} {self.last_reply_text}".strip()
-        elif meta.get("route") not in ("repeat", "clarify"):
+        else:
             fillers = {id(self.router.clip(c)[0]) for c in self.router.meta["fillers"] + self.router.meta["holds"]}
             answer = [(w, s) for w, s in played if id(w) not in fillers]
             if answer:
@@ -369,7 +379,7 @@ class Call:
         """-> (бичвэр, хэл). Англи горимгүй байгууллагад хэл танихгүй (хурд, санах ой)."""
         if not self.en:
             return self.m.stt.transcribe(audio, SR), "mn"
-        if self.lead and self.lead.state in ("name", "phone", "confirm"):
+        if self.lead and self.lead.state in ("name", "phone", "confirm", "event_pick", "event_offer"):
             # нэр, дугаар, тийм/үгүй богино -> хэл буруу танигдана: бүртгэлийн хэлээр шууд
             return self.m.bilingual.transcribe_as(audio, SR, self.lead.lang), self.lead.lang
         return self.m.bilingual.transcribe(audio, SR, self.lang)
@@ -378,7 +388,10 @@ class Call:
         """Англи асуулт: орчуулгатай хариулт, эсвэл ажилтан эргэж залгах санал."""
         r = await asyncio.to_thread(self.en.respond, text, self.en_misses)
         self.en_misses = self.en_misses + 1 if r["route"] == "repeat" else 0
-        await self.play(*self.en.clip(r["clip"]))
+        clip = self.en.clip(r["clip"])
+        await self.play(*clip)
+        if r["route"] != "repeat":
+            self.last_reply, self.last_reply_text = [clip], r["text"]
         print(f"  AI [en:{r['route']} {r['score']:.2f}]: {r['text']}")
         self.log("assistant", r["text"], route=f"en_{r['route']}", score=r["score"],
                  latency=time.perf_counter() - t1)
@@ -475,6 +488,8 @@ class Call:
                 await say(*(en.clip(clip) if en else router.clip(clip)))
                 spoken.append(clip["text"])
         reply = " ".join(spoken)
+        if replay:
+            self.last_reply, self.last_reply_text = list(replay), reply
         print(f"  AI [бүртгэл:{flow.state}]: {reply}")
         self.log("assistant", reply, route=f"lead_{flow.result or flow.state}")
         if flow.finished:
@@ -595,31 +610,39 @@ class Call:
 
     async def play_account(self, flow, keys: list[str], said: str):
         spoken = []
+        replay = []
+
+        async def say(wav, sr):
+            replay.append((wav, sr))
+            await self.play(wav, sr)
+
         for key in keys:
             if key.startswith("ev:"):                 # бүртгэлийн нэр (эвент/хөтөлбөр) — цуцлахын өмнө
                 clip = self.router.meta.get("events", {}).get(key[3:])
                 if clip:
-                    await self.play(*self.router.clip(clip))
+                    await say(*self.router.clip(clip))
                 spoken.append(key[3:])
             elif key.startswith("digits:"):
                 number = key.split(":", 1)[1]
-                await self.play(*self.digits_audio(number))
+                await say(*self.digits_audio(number))
                 spoken.append(" ".join(number[i:i + 2] for i in range(0, len(number), 2)))
             elif key.startswith("date:"):
                 parts = people.slot_parts(people.parse_local(key.split(":", 1)[1]))
                 for part in parts:
                     clip = self.router.meta.get("dates", {}).get(part)
                     if clip:
-                        await self.play(*self.router.clip(clip))
+                        await say(*self.router.clip(clip))
                 spoken.append(" ".join(parts))
             else:
                 clip = self.router.meta["account"].get(key)
                 if not clip:                        # «Аудио бэлдэх»-ээс өмнөх индекст шинэ хэллэг алга
                     print(f"  [анхаар] '{key}' хэллэгийн аудио алга — «Аудио бэлдэх» дарна уу")
                     continue
-                await self.play(*self.router.clip(clip))
+                await say(*self.router.clip(clip))
                 spoken.append(clip["text"])
         reply = " ".join(spoken)
+        if replay:
+            self.last_reply, self.last_reply_text = replay, reply
         print(f"  AI [бүртгэлээ шалгах:{flow.state}]: {reply}")
         self.log("assistant", reply, route=f"account_{flow.state}")
         for ev in flow.events:
@@ -835,11 +858,11 @@ class Call:
                     greeting = self.router.meta["greeting"]
                     clips = [self.router.clip(greeting)]
                     text = greeting["text"]
-                    self.last_reply, self.last_reply_text = list(clips), text
                     if self.en:              # "For English, please go ahead and speak English."
                         suffix = self.en.phrase("greeting_suffix")
                         clips.append(self.en.clip(suffix))
                         text += " " + suffix["text"]
+                    self.last_reply, self.last_reply_text = list(clips), text
                     self.turn = asyncio.create_task(self.play_all(clips))
                     # Мэндчилгээ тоглох зуур загваруудыг swap-аас санах ойд буцаана: 8GB дээр
                     # дуудлагын эхний STT 6–20с болж байсан. stt_pool (1 thread) -> эхний яриа араас нь
