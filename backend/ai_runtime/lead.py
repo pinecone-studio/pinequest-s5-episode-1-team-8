@@ -43,6 +43,58 @@ TENS.update({"ноён": 80, "ноян": 80, "оройн": 80, "наянн": 80}
 UNIT_AFTER_TENS = {"тавь": 5, "ер": 9}
 
 
+# ---------------- Эвентийн бүртгэл ----------------
+# "Хакатонд бүртгүүлмээр байна" (эвент) ба "Бүртгүүлмээр байна" (хөтөлбөр) өөр. Эвентийн үг эсвэл эвентийн нэр +
+# оролцох үйл үг -> эвент. "Хакатоны талаар" (мэдээлэл) FAQ-д үлдэнэ, "эвентийн бүртгэлээ цуцлах" бүртгэл биш.
+# STT "эвент"-ийг "эвээнт", "ивэнт", "эвэнд" гэж бичдэг (бодит туршилт)
+EVENT_RE = re.compile(r"[эи]в[эеи]*н[тд]|event|арга хэмжээ|х[аэ]кк?[аэ]тон|hackathon|уралдаан|семинар")
+JOIN_WORDS = ("бүртг", "бүтгүү", "бүрдүүл", "оролц", "очмоор", "очъё", "явмаар", "суумаар", "ирмээр", "хамрагд")
+NOT_JOIN = ("цуца", "цуцл", "болих", "больё", "болъё", "гармаар", "хасуул", "чадахгүй", "өөрчл", "солих", "солимоор",
+            "шалга", "хэзээ", "хаана")
+EVENT_GENERIC = {"эвен", "ивен", "арга", "хэмж", "хэмжээ"}
+QUESTION = re.compile(r"\b(хаана|хэзээ|хэдэн|хэд|ямар|юу|вэ|бэ)\b")
+ORDINAL_WORDS = {"нэг": 0, "эхн": 0, "хоёр": 1, "гура": 2, "гурв": 2, "сүүл": -1}
+_LAT = [("sh", "ш"), ("ch", "ч"), ("kh", "х"), ("ts", "ц"), ("ck", "к"), ("ph", "ф"), ("th", "т"), ("qu", "кв"),
+        ("x", "кс")] + list(zip("abcdefghijklmnopqrstuvwyz", "абкдэфгхижклмнопкрстуввйз"))
+
+
+def _cyr(word: str) -> str:
+    """Латин эвентийн нэр -> кирилл (STT кириллээр бичдэг): "hackathon" -> "хакатон"."""
+    for a, b in _LAT:
+        word = word.replace(a, b)
+    return word
+
+
+def _words(text: str) -> list[str]:
+    return [_cyr(w).replace("е", "э") for w in re.findall(r"[a-zа-яөүё]+", text.lower()) if len(w) >= 3]
+
+
+def _close(a: str, b: str) -> bool:
+    """Ижил үг (STT эгшгийг андуурдаг: "пайн" ~ "пин", "демо" ~ "дэмо")."""
+    from names import _lev
+    a, b = a[:6], b[:6]
+    return a[:4] == b[:4] or _lev(a, b, 2) <= max(1, min(len(a), len(b)) // 3)
+
+
+def match_event(text: str, events: list[dict]) -> dict | None:
+    """Залгагч нэрлэсэн эвент ("хакатонд", "пайнквест демо") -> эвент (нэрийн үгсийн тал нь таарвал)."""
+    said, best, score = _words(text), None, 0.0
+    for e in events:
+        words = [w for w in _words(e["name"]) if w[:4] not in EVENT_GENERIC]
+        if words:
+            hit = sum(any(_close(a, b) for a in said) for b in words) / len(words)
+            if hit > score:
+                best, score = e, hit
+    return best if score >= 0.33 else None     # 3 үгтэй нэрийн 1 нь ("демо") хангалттай
+
+
+def wants_event(text: str, events: list[dict]) -> bool:
+    t = text.lower()
+    if any(w in t for w in NOT_JOIN) or not any(w in t for w in JOIN_WORDS):
+        return False
+    return bool(EVENT_RE.search(t)) or match_event(text, events) is not None
+
+
 def parse_phone(text: str) -> str:
     """Монголоор хэлсэн дугаарыг цифр болгоно: "далан хоёр долоон зуу найман зуу" -> "72700800",
     "наян найм ерэн нэг" -> "8891". STT цифрээр бичсэн бол шууд авна."""
@@ -123,10 +175,18 @@ def phone_from_caller(caller: str | None) -> str | None:
 class LeadFlow:
     """Нэг дуудлагын бүртгэлийн яриа. handle(text) -> тоглуулах клипүүд, дууссан эсэх."""
 
-    def __init__(self, reason: str, state: str, caller: str | None, lang: str = "mn"):
+    def __init__(self, reason: str, state: str, caller: str | None, lang: str = "mn",
+                 events: list[dict] | None = None, book: bool = False):
         self.lang = lang              # "mn" | "en" (english.py-ийн хэллэг, задлагч)
-        self.reason = reason          # "lead" | "handoff"
-        self.state = state            # offer | name | phone | confirm
+        self.reason = reason          # "lead" | "handoff" | "event"
+        self.state = state            # event_start | event_pick | event_offer | offer | name | phone | confirm
+        self.events = (events or [])[:3]   # удахгүй болох эвентүүд (ойроос нь)
+        self.event: dict | None = None
+        self.pick_tries = 0
+        self.book = book              # бүртгэлийн дараа "Уулзалтын цаг товлох уу?" (сул цаг байвал)
+        self.save_pending = False     # дугаар баталгаажсан -> phone_server одоо хадгална (урсгал үргэлжилнэ)
+        self.saved = False            # phone_server хадгалсан (давхар хадгалахгүй)
+        self.duplicate = False        # энэ эвентэд аль хэдийн бүртгэлтэй (phone_server тогтооно)
         self.caller = caller
         self.name = None
         self.phone = None
@@ -154,8 +214,67 @@ class LeadFlow:
             return parse_phone_en(text) or parse_phone(text)
         return parse_phone(text)
 
+    def _offer_event(self, ev: dict) -> list[str]:
+        self.event, self.state = ev, "event_offer"
+        return [f"ev:{ev['name']}", f"date:{ev['at']}", "event_ask"]
+
+    def _pick_event(self, text: str) -> dict | None:
+        digits = re.sub(r"\D", "", text)
+        if len(digits) == 1 and 1 <= int(digits) <= len(self.events):
+            return self.events[int(digits) - 1]
+        for w in re.findall(r"[а-яөүё]+", text.lower()):
+            i = ORDINAL_WORDS.get(w[:4], ORDINAL_WORDS.get(w[:3]))
+            if i is not None and i < len(self.events):
+                return self.events[i]
+        return match_event(text, self.events)
+
     def handle(self, text: str) -> list[str]:
-        """Буцаах: тоглуулах prompt түлхүүрүүд ("digits:72700800" = дугаарыг уншина)."""
+        """Буцаах: тоглуулах prompt түлхүүрүүд ("digits:72700800" = дугаарыг уншина,
+        "ev:<нэр>" = эвентийн нэр, "date:2026-10-18T10:00" = гараг сар өдөр цаг)."""
+        if self.state == "event_start":
+            if not self.events:
+                self.result = "declined"
+                return ["event_none"]
+            ev = self.events[0] if len(self.events) == 1 else match_event(text, self.events)
+            if ev:
+                return self._offer_event(ev)
+            self.state = "event_pick"
+            keys = ["event_list"]
+            for i, e in enumerate(self.events):
+                keys += [f"ord_{i + 1}", f"ev:{e['name']}", f"date:{e['at']}"]
+            return keys + ["event_pick"]
+
+        if self.state == "event_pick":
+            ev = self._pick_event(text)
+            if ev:
+                return self._offer_event(ev)
+            if self.pick_tries < 1:
+                self.pick_tries += 1
+                return ["event_pick"]
+            self.result = "declined"          # шинэ асуулт гэж үзээд энгийн горимд
+            return []
+
+        if self.state == "book_offer":
+            ans = self._yes_no(text)
+            if ans and QUESTION.search(text.lower()):
+                ans = None
+            if ans is True:
+                self.result = "book"           # phone_server цаг санал болгоно (account.py)
+                return ["@book"]
+            self.result = "saved"
+            return ["declined"] if ans is False else []
+
+        if self.state == "event_offer":
+            ans = self._yes_no(text)
+            if ans is None and any(w in text.lower() for w in JOIN_WORDS):
+                ans = True                     # "бүртгүүлье"
+            if ans and QUESTION.search(text.lower()):
+                ans = None                     # "хаана болох вэ" ("болох" тийм биш) -> шинэ асуулт
+            if ans is True:
+                self.state = "name"
+                return ["ask_name_again"]
+            self.result = "declined"
+            return ["declined"] if ans is False else []
         if self.state == "offer":
             ans = self._yes_no(text)
             if ans is False:
@@ -200,8 +319,11 @@ class LeadFlow:
             if ans is None and self.lang == "mn" and CONFIRM_YES.search(text.lower()):
                 ans = True
             if ans is True:
+                if self.book and not self.event:
+                    self.save_pending, self.state = True, "book_offer"
+                    return ["done_book"]
                 self.result = "saved"
-                return ["done"]
+                return ["event_done" if self.event else "done"]
             # "зөв"-ийг STT "төв дүү", "гэсэн" гэж сонсдог -> ойлгоогүй бол дугаарыг хаяхгүй, дахин асууна
             if ans is None and self.confirm_tries < 1:
                 self.confirm_tries += 1

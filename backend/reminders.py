@@ -48,6 +48,10 @@ UNIT_GEN = ["", "нэгний", "хоёрны", "гурвын", "дөрвөни�
 TENS = {1: ("арван", "аравны"), 2: ("хорин", "хорины"), 3: ("гучин", "гучны")}
 
 _lock = threading.Lock()          # нэг удаад нэг дуудлага (gateway 1 суваг)
+# Уулзалт/эвент эхлэхээс SMS_BEFORE_HOURS цагийн өмнө SMS сануулга. Залгах gateway-гүй үед ч ажиллана.
+# Байгууллагын settings.json "sms_reminders": true үед л (тест, шинэ байгууллагад санамсаргүй SMS явахгүй).
+SMS_BEFORE = timedelta(hours=float(os.getenv("SMS_BEFORE_HOURS", "2")))
+SMS_TEMPLATE = "{org}: Сануулга - {what} {day} {time} цагт. Ирэх боломжгүй бол {phone} руу залгаарай."
 data_lock = threading.RLock()     # reminders.json уншиж-бичих (вэб ба залгагч зэрэг)
 _wake = threading.Event()
 
@@ -264,6 +268,46 @@ def run_due(now: float | None = None, check_ready: bool = True) -> list[tuple[st
     return done
 
 
+def sms_text(t: Tenant, item: dict, now: datetime) -> str:
+    at = parse_local(item["appointment"])
+    cfg = t.config()
+    day = {0: "өнөөдөр", 1: "маргааш"}.get((at.date() - now.date()).days, at.strftime("%m/%d"))
+    text = SMS_TEMPLATE.format(org=cfg.get("name", t.slug)[:30], what=item.get("event") or "таны уулзалт",
+                               day=day, time=at.strftime("%H:%M"), phone=cfg.get("phone") or "бидэн")
+    return text.replace(" бидэн руу залгаарай", " бидэнтэй холбогдоорой")
+
+
+def sms_due(now: datetime | None = None, send=None) -> list[tuple[str, int, bool]]:
+    """Эхлэхэд SMS_BEFORE үлдсэн уулзалт/эвентэд нэг удаа SMS (item["sms_at"]). Цуцалсан, ирэхгүй гэсэн бол алгасна."""
+    if send is None:
+        from sms import send_sms as send
+    now = now or datetime.now(TZ)
+    done = []
+    for t in all_tenants():
+        if not settings(t).get("sms_reminders"):
+            continue
+        with data_lock:
+            data = load(t)
+            changed = False
+            for k, v in data["items"].items():
+                if (v.get("sms_at") or not v.get("appointment") or v.get("status") in ("declined", "canceled")
+                        or v.get("attendance") is False):
+                    continue
+                at = parse_local(v["appointment"])
+                if not (at - SMS_BEFORE <= now < at):
+                    continue
+                lead = lead_of(t, int(k))
+                if not lead or lead.get("status") == "canceled":
+                    continue
+                ok = send(lead.get("phone") or lead.get("caller"), sms_text(t, v, now))
+                v.update(sms_at=now.timestamp(), sms_ok=bool(ok))
+                changed = True
+                done.append((t.slug, int(k), bool(ok)))
+            if changed:
+                save(t, data)
+    return done
+
+
 def sync_events():
     """Эвентэд бүртгүүлсэн шинэ хүмүүст өмнөх өдрийн дуудлагыг автоматаар товлоно (бүх байгууллага)."""
     import people
@@ -281,6 +325,7 @@ def _loop():
         _wake.clear()
         try:
             sync_events()
+            sms_due()
             run_due()
         except Exception as exc:
             print(f"  [сануулга] {exc}")

@@ -36,11 +36,12 @@ OFFER = 3               # нэг удаад санал болгох сул ца�
 # Залгагчийн хүсэлтүүд (хувийн баримтуудтай хамт хайлтад орно)
 INTENTS = {
     "cancel_registration": ["Бүртгэлээ цуцлах", "Бүртгэлээ цуцалмаар байна", "Эвентэд очиж чадахгүй боллоо",
-                            "Хөтөлбөрт суухаа больсон", "Оролцож чадахгүй нь", "Ирж чадахгүй нь цуцалъя", "Явахгүй болсон"],
+                            "Хөтөлбөрт суухаа больсон", "Оролцож чадахгүй нь", "Ирж чадахгүй нь цуцалъя", "Явахгүй болсон",
+                            "Эвентийн бүртгэлээ цуцлах", "Арга хэмжээнд оролцохгүй", "Эвентээс гармаар байна"],
     "change_phone": ["Дугаараа солимоор байна", "Утасны дугаараа өөрчлөх", "Шинэ дугаар өгье", "Дугаар солих",
                      "Дугаар маань солигдсон"],
     "change_time": ["Цагаа солимоор байна", "Өөр цаг авъя", "Уулзалтын цагаа хойшлуулах", "Цагаа өөрчлөх",
-                    "Өөр өдөр болох уу", "Цагаа шилжүүлэх"],
+                    "Өөр өдөр болох уу", "Цагаа шилжүүлэх", "Цаг авмаар байна", "Уулзалтын цаг товлох"],
     "cancel": ["Цагаа цуцлах", "Уулзалтаа цуцалмаар байна", "Товлосон цагаа цуцлах"],
     "ask_time": ["Миний цаг хэзээ билээ", "Хэдэн цагт очих вэ", "Уулзалт хэзээ вэ", "Хэдний өдөр очих вэ"],
     "ask_phone": ["Ямар дугаар бүртгэлтэй вэ", "Миний дугаар зөв үү", "Бүртгэлтэй дугаараа шалгах"],
@@ -101,7 +102,10 @@ class Search:
 def detect_intent(search: Search, text: str) -> str | None:
     """Код асуухаас өмнө: залгагч юу хүссэн бэ (хувийн өгөгдөлгүй, зөвхөн хүсэлтүүдээс)."""
     ranked = search.rank(text, [(k, q) for k, qs in INTENTS.items() for q in qs])
-    return ranked[0][0] if ranked and ranked[0][1] >= MATCH else None
+    if ranked and ranked[0][1] >= MATCH:
+        return ranked[0][0]
+    # STT "эвээн тийм бүртгэлээ цуцаг" -> утгаар босгоос доош -> түлхүүр үгээр (код асуусны дараа цэс уншихгүй)
+    return keyword_intent(text)
 
 
 CHANGE_STEMS = ("шилж", "соли", "солъ", "соль", "өөрч", "хойш", "урагш")
@@ -113,7 +117,7 @@ def keyword_intent(text: str) -> str | None:
     st = stems(text)
     low = text.lower()
     reg = any(x.startswith(("бүрт", "хөтө", "эвен", "сурга", "boot")) for x in st)
-    if any(x.startswith("цуца") for x in st):
+    if any(x.startswith(("цуца", "цуцл")) for x in st):
         return "cancel_registration" if reg or not any(x.startswith(("цаг", "уулз")) for x in st) else "cancel"
     if any(c in low for c in CANT_GO) and any(x.startswith(("чада", "боло", "боль")) for x in st):
         return "cancel_registration"
@@ -315,7 +319,9 @@ class AccountFlow:
             if (people.lead(self.tdir, lead_id) or {}).get("status") == "canceled":
                 return ["status_canceled", self._end()]
             self.state = "reg_cancel_confirm"
-            return ["ask_cancel_reg"]
+            course = (people.lead(self.tdir, lead_id) or {}).get("course")
+            # "AI Hackathon. Энэ бүртгэлээ цуцлах уу?" — Bootcamp ба эвентэд хоёуланд нь бүртгэлтэй байж болно
+            return ([f"ev:{course}"] if course else []) + ["ask_cancel_reg"]
         if intent == "ask_attendance":
             coming = people.attendance(self.tdir, lead_id)
             self.state = "menu"
@@ -403,7 +409,8 @@ class AccountFlow:
                 return ["slot_taken"] + self._offer("")
             self.events.append({"field": "appointment", "old": old and people.fmt(old), "new": people.fmt(self.chosen),
                                 "lead": self.lead, "staff": self.staff})
-            return ["appt_done", f"date:{people.fmt(self.chosen)}", self._end()]
+            # анх товлосон бол "товлолоо", өмнө цагтай байсан бол "солилоо"
+            return ["appt_done" if old else "appt_booked", f"date:{people.fmt(self.chosen)}", self._end()]
         if not ans:                           # cancel_confirm, reg_cancel_confirm
             return ["unchanged", self._end()]
         if state == "reg_cancel_confirm":

@@ -10,8 +10,6 @@ import knowledge_jobs
 from config import DATA_DIR, TENANTS_DIR
 
 COMMANDS = {"phone": "phone_server.py", "sip": "sip_bridge.py"}
-
-
 def main() -> None:
     name = sys.argv[1] if len(sys.argv) > 1 else ""
     script = COMMANDS.get(name)

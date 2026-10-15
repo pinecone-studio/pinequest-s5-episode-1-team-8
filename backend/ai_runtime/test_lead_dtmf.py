@@ -15,6 +15,7 @@ class LeadDtmfTest(unittest.IsolatedAsyncioTestCase):
         call.account = None
         call.dtmf = ""
         call.dtmf_at = 0.0
+        call.reprompt = None
         call.turn = None
         call.flush = Mock()
         call.log = Mock()
@@ -89,6 +90,32 @@ class LeadDtmfTest(unittest.IsolatedAsyncioTestCase):
         flow = LeadFlow("lead", "name", None)
         flow.handle("юу")
         self.assertEqual(flow.handle("юу"), ["ask_phone"])
+
+    async def test_silent_caller_gets_question_again(self):
+        # AI ярьж байхад "зөв" гэвэл алга болдог -> чимээгүй бол асуултаа давтана, товчлуур дарвал үгүй
+        import phone_server
+        phone_server.REPROMPT_AFTER = 0.05
+        for pressed in (False, True):
+            call = self.make_call()
+            call.closed, call.hearing, call.out, call.last_out = False, False, bytearray(), 0.0
+            call.play = AsyncMock()
+            call.arm_reprompt([("wav", 8000)])
+            if pressed:
+                call.on_dtmf("1")
+            await asyncio.sleep(0.15)
+            self.assertEqual(call.play.await_count, 0 if pressed else 1)
+
+    def test_near_speech_drops_background_before_caller(self):
+        # Ард яриа (0.02) -> залгагч "зөв" (0.15) -> ард яриа: зөвхөн залгагчийн хэсэг (+0.3с) үлдэнэ
+        import numpy as np
+        from phone_server import near_speech
+        sec = 0.032
+        levels = [0.02] * 30 + [0.15, 0.12, 0.02, 0.14] + [0.02] * 30
+        chunks = [np.full(256, lv, np.float32) for lv in levels]
+        out = near_speech(chunks, levels, 0.15, sec)
+        pad = int(0.3 / sec)
+        self.assertEqual(len(out), (4 + 2 * pad) * 256)
+        self.assertAlmostEqual(float(out[(pad + 2) * 256]), 0.02 * 0.25, places=5)   # дотор сул -> 0.25
 
     def test_unclear_confirmation_keeps_phone(self):
         # Бодит дуудлагаас: "зөв"-ийг STT "байна уу", "гэсэн" гэж сонссон -> дугаар устаж байсан

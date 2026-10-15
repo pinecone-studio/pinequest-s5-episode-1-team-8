@@ -100,7 +100,7 @@ def main(embed):
     check("2 -> сонгосон цагийг уншаад асууна", keys == ["you_chose", f"date:{people.fmt(second)}", "confirm"], str(keys))
     check("батлахаас өмнө бичээгүй", people.appointment(tdir, bold) is None)
     keys = flow.handle_dtmf("1")
-    check("1 -> товлолоо", keys[0] == "appt_done" and people.appointment(tdir, bold) == second, str(keys))
+    check("1 -> товлолоо (анхны цаг)", keys[0] == "appt_booked" and people.appointment(tdir, bold) == second, str(keys))
     item = json.load(open(people.reminders_path(tdir)))["items"][str(bold)]
     check("reminders.json: сануулга өмнөх өдөр 11:00, AI өөрчилсөн", item["status"] in ("scheduled", "confirmed")
           and item["changed_by"] == "ai" and item["text"] is None, item["status"])
@@ -185,7 +185,7 @@ def main(embed):
           and staff.offered and all(x.weekday() == 4 for x in staff.offered), str(keys[:3]))
     staff.handle_dtmf("1")
     keys = staff.handle_dtmf("1")
-    check("товлоод дараагийн хүн рүү", keys[0] == "appt_done" and keys[-1] == "staff_next" and staff.state == "target"
+    check("товлоод дараагийн хүн рүү", keys[0] == "appt_booked" and keys[-1] == "staff_next" and staff.state == "target"
           and people.appointment(tdir, bold) == staff.chosen, str(keys))
     last = people.changes(tdir, bold)[0]
     check("түүхэнд ажилтан өөрчилсөн (source=staff)", last["source"] == "staff" and last["call_uuid"] == "call-s")
@@ -242,7 +242,9 @@ def web_parity(embed):
     keys = flow.handle("Ирнэ гэж бүртгэгдсэн үү")
     check("«Ирнэ гэж бүртгэгдсэн үү» -> attendance_yes", keys[0] == "attendance_yes", keys)
     keys = flow.handle_dtmf("4")
-    check("цэс 4 -> бүртгэл цуцлах уу", keys == ["ask_cancel_reg"] and flow.state == "reg_cancel_confirm", keys)
+    course = people.lead(tdir, a)["course"]
+    check("цэс 4 -> «<эвент>. Энэ бүртгэлээ цуцлах уу»",
+          keys == ([f"ev:{course}"] if course else []) + ["ask_cancel_reg"] and flow.state == "reg_cancel_confirm", keys)
     keys = flow.handle_dtmf("1")
     check("утсаар бүртгэл цуцлагдлаа", keys[0] == "reg_cancel_done" and people.lead(tdir, a)["status"] == "canceled"
           and flow.events[-1]["field"] == "status", keys)
