@@ -1,0 +1,18 @@
+# Dependencies and generated builds
+**/node_modules/
+**/.next/
+**/dist/
+**/build/
+**/__pycache__/
+.venv/
+
+# Large generated dependency metadata
+**/package-lock.json
+**/bun.lock
+
+# Local and generated files
+.git/
+.env
+logs/
+**/*.log
+**/.DS_Store

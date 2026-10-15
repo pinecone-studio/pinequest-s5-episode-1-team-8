@@ -3,7 +3,6 @@
 import { formatDateTime } from "@/lib/format";
 import type { Message } from "@/lib/types";
 
-/** Дуудлагын яриаг TXT файлаар татах (хөтөч дээр файл үүсгэдэг тул client компонент) */
 export function DownloadTranscriptButton({
   uuid,
   createdAt,
@@ -17,27 +16,41 @@ export function DownloadTranscriptButton({
   duration?: number | null;
   messages: Message[];
 }) {
-  const isDisabled = messages.length === 0;
+  const isDisabled = !messages || messages.length === 0;
 
   const handleDownload = () => {
     if (isDisabled) return;
 
+    const formattedDate = formatDateTime(createdAt);
+    const displayPhone = phone ? phone : "дугаар тодорхойгүй";
+    const displayDuration = duration != null ? `${duration} сек` : "тодорхойгүй";
+
     const header = [
-      `Дуудлагын огноо: ${formatDateTime(createdAt)}`,
-      `Залгагчийн дугаар: ${phone || "дугаар тодорхойгүй"}`,
-      `Үргэлжилсэн хугацаа: ${duration != null ? `${duration} сек` : "тодорхойгүй"}`,
+      `Дуудлагын огноо: ${formattedDate}`,
+      `Залгагчийн дугаар: ${displayPhone}`,
+      `Үргэлжилсэн хугацаа: ${displayDuration}`,
       "----------------------------------------",
       "",
     ].join("\n");
-    const body = messages.map((m) => `${m.role === "user" ? "Залгагч" : "AI"}: ${m.text}`).join("\n");
 
-    const url = URL.createObjectURL(new Blob([header + body], { type: "text/plain;charset=utf-8" }));
+    const body = messages
+      .map((msg) => {
+        const roleLabel = msg.role === "user" ? "Залгагч" : "AI";
+        return `${roleLabel}: ${msg.text}`;
+      })
+      .join("\n");
+
+    const content = header + body;
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+
     const link = document.createElement("a");
     link.href = url;
     link.download = `call-${uuid}.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+
     URL.revokeObjectURL(url);
   };
 
@@ -47,7 +60,9 @@ export function DownloadTranscriptButton({
       onClick={handleDownload}
       disabled={isDisabled}
       className={`cursor-pointer rounded-[10px] border border-line-2 px-3 py-1.5 text-sm font-semibold transition ${
-        isDisabled ? "cursor-not-allowed bg-panel-2 text-muted opacity-50" : "bg-panel hover:border-brand hover:text-fg"
+        isDisabled
+          ? "opacity-50 cursor-not-allowed bg-panel-2 text-muted"
+          : "bg-panel hover:border-brand hover:text-fg"
       }`}
     >
       TXT татах
