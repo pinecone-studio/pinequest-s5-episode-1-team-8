@@ -273,6 +273,11 @@ def runtime_symlink():
         r = subprocess.run([sys.executable, "-c", "import people; print(people.EMBED_ON_WRITE, hasattr(people, 'cancel_registration'))"],
                            cwd=d, env={**os.environ, "PYTHONPATH": d}, capture_output=True, text=True)
         check("symlink-ээр ачаалахад backend/people.py олдоно", r.stdout.strip() == "False True", (r.stderr or r.stdout).strip()[-200:])
+        os.symlink(os.path.join(here, "speech_parse.py"), os.path.join(d, "speech_parse.py"))
+        r = subprocess.run([sys.executable, "-c", "from speech_parse import clean_name; print(clean_name('Намайг Батболд гэдэг юм аа'))"],
+                           cwd=d, env={**os.environ, "PYTHONPATH": d}, capture_output=True, text=True)
+        check("symlink-ээр нэрийн хамтын задлагч ачаална", r.returncode == 0 and r.stdout.strip() == "Батболд",
+              (r.stderr or r.stdout).strip()[-200:])
 
 
 if __name__ == "__main__":

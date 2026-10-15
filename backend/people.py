@@ -33,6 +33,8 @@ TZ = ZoneInfo("Asia/Ulaanbaatar")
 CODE_LEN = 4
 STAFF_PIN_LEN = 6        # ажилтны код: утсаар бусдын бүртгэлийг өөрчлөх эрх (settings.json "staff_pin")
 NAME_MATCH = 0.75        # нэрээр хайх доод оноо (STT "Балд" ~ "Болд")
+NAME_SUFFIXES = ("гийн", "ийн", "ын", "ыг", "ийг", "д", "т", "аас", "ээс", "оос", "өөс",
+                 "аар", "ээр", "оор", "өөр", "тай", "тэй", "той", "руу", "рүү")
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS lead_codes (
     lead_id    INTEGER PRIMARY KEY,
@@ -258,7 +260,14 @@ def name_score(text: str, name: str) -> float:
         if len(n) < 3:
             continue
         for w in _words(text):
-            best = max(best, difflib.SequenceMatcher(None, w[:len(n)], n).ratio() if len(w) >= len(n) - 1 else 0.0)
+            variants = [w] + [w[:-len(s)] for s in NAME_SUFFIXES if w.endswith(s)]
+            for v in variants:
+                if v == n:
+                    return 1.0
+                if len(v) >= 3 and abs(len(v) - len(n)) <= 1:
+                    score = difflib.SequenceMatcher(None, v, n).ratio()
+                    if score >= max(NAME_MATCH, 1 - 1 / len(n)):
+                        best = max(best, score)
     return best
 
 
@@ -280,9 +289,8 @@ def find_by_name(tdir: str, text: str) -> list[dict]:
 
 def strip_name(text: str, name: str) -> str:
     """Командаас нэрийг хасна: "Болдын цагийг солих" -> "цагийг солих" (хүсэлт таних, өдөр хайхад)."""
-    names = [n for n in _words(name) if len(n) >= 3]
     keep = [w for w in (text or "").split()
-            if not any(difflib.SequenceMatcher(None, w.lower()[:len(n)], n).ratio() >= NAME_MATCH for n in names)]
+            if name_score(w, name) < NAME_MATCH]
     return " ".join(keep)
 
 

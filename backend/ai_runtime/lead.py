@@ -11,6 +11,7 @@ Lead бүртгэл + ажилтанд шилжүүлэх (олон алхамт
     Мэдээлэл олдсонгүй    (error хэллэг)       -> "эргэж холбогдох уу?" -> тийм -> нэр
 """
 import re
+from speech_parse import clean_name
 
 # Бүртгэлийн хэллэгүүд: байгууллага бүрийн config-оос (tenant.Tenant.phrases()["lead"]).
 # Энд түлхүүрүүд л хэрэгтэй (LeadFlow.handle эдгээрийг буцаана).
@@ -37,9 +38,6 @@ YES = {"тийм", "за", "зөв", "мөн", "тиймээ", "болно", "б
 NO = {"үгүй", "биш", "буруу", "болохгүй", "хэрэггүй", "үгүйээ"}
 # Зөвхөн дугаар баталгаажуулах үед: "зөв" -> STT "төв", "зөвөө" (бодит дуудлагаас)
 CONFIRM_YES = re.compile(r"\b(зөв\w*|төв)\b")
-# Нэр асуухад STT ийм үг л гаргавал нэр биш ("юу", "юм уу" нэрээр бүртгэгдэж байсан) -> дахин асууна
-NOT_NAME = {"юу", "юм", "уу", "үү", "вэ", "байна", "а", "аа", "өө", "за", "тийм", "үгүй", "одоо", "тэр", "энэ",
-            "хэн", "нэр", "нэрээ", "миний", "би", "гэсэн", "дээ"}
 
 UNITS = {"тэг": 0, "нэг": 1, "хоёр": 2, "гурав": 3, "гурван": 3, "дөрөв": 4, "дөрвөн": 4,
          "тав": 5, "таван": 5, "зургаа": 6, "зургаан": 6, "долоо": 7, "долоон": 7,
@@ -153,14 +151,6 @@ def parse_phone(text: str) -> str:
     return out
 
 
-def clean_name(text: str) -> str:
-    """"Миний нэр Батболд", "Намайг Батболд гэдэг" -> "Батболд"."""
-    t = re.sub(r"[^\w\s-]", " ", text).strip()
-    t = re.sub(r"^(миний\s+нэр(ийг)?|намайг|нэр\s+минь|би)\s+", "", t, flags=re.I)
-    t = re.sub(r"\s+(гэдэг|гэнэ|гэж\s+хэлдэг|байна|байгаа)$", "", t, flags=re.I)
-    return " ".join(w.capitalize() for w in t.split()) or text.strip()
-
-
 def yes_no(text: str) -> bool | None:
     digits = re.sub(r"\D", "", text or "")
     if digits == "1":
@@ -197,14 +187,13 @@ class LeadFlow:
         self.book = book              # бүртгэлийн дараа "Уулзалтын цаг товлох уу?" (сул цаг байвал)
         self.save_pending = False     # дугаар баталгаажсан -> phone_server одоо хадгална (урсгал үргэлжилнэ)
         self.saved = False            # phone_server хадгалсан (давхар хадгалахгүй)
-        self.duplicate = False        # энэ эвентэд аль хэдийн бүртгэлтэй (phone_server тогтооно)
+        self.duplicate = False        # энэ хөтөлбөр/эвентэд аль хэдийн бүртгэлтэй (phone_server тогтооно)
         self.caller = caller
         self.name = None
         self.phone = None
         self.phone_raw = []
         self.phone_tries = 0
         self.confirm_tries = 0
-        self.name_tries = 0
         self.result = None            # "saved" | "saved_no_phone" | "declined"
 
     def _yes_no(self, text: str) -> bool | None:
@@ -299,11 +288,10 @@ class LeadFlow:
             return ["ask_name_again"]
 
         if self.state == "name":
-            words = set(re.findall(r"[a-zа-яөүё]+", text.lower()))
-            if self.lang == "mn" and words <= NOT_NAME and self.name_tries < 1:
-                self.name_tries += 1
+            name = self._name(text)
+            if not name:
                 return ["ask_name_again"]
-            self.name = self._name(text)
+            self.name = name
             suggested = phone_from_caller(self.caller)
             if suggested:
                 self.phone, self.state = suggested, "confirm"
