@@ -16,6 +16,7 @@ from audio_files import text_hash
 import db
 from deps import current_tenant
 import knowledge_jobs
+import stt_learn
 from routes import training
 from tenant import Tenant
 
@@ -159,7 +160,9 @@ def add_answer(body: NewAnswerBody, t: Tenant = Depends(current_tenant)):
         os.replace(tmp, t.faq_path)
     add_pending(t, f"шинэ хариулт: {answer[:60]}")
     hide(QuestionBody(q=body.q), t)
-    return {"ok": True, "id": fid}
+    # Ажилтны бичсэн зөв хувилбараас STT-ийн алдааг сурна ("цургалт" -> "сургалт"), дараагийн дуудлагаас засна
+    learned = [x for v in body.questions for x in stt_learn.learn(t, body.q, v, "хариулж чадаагүй асуулт")]
+    return {"ok": True, "id": fid, "learned": [f"{x['note'].split(': ', 1)[-1]}" for x in learned]}
 
 
 class TeachBody(BaseModel):
