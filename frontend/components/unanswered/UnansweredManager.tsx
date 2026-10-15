@@ -75,9 +75,10 @@ export function UnansweredManager({ initial, answers }: { initial: UnansweredRev
 
   async function saveAnswer(item: UnansweredReviewItem, answer: string, questions: string[]) {
     await action(`answer:${item.q}`, async () => {
-      await apiSend("/api/unanswered/answer", "POST", { q: item.q, answer, questions });
+      const r = await apiSend<{ learned?: string[] }>("/api/unanswered/answer", "POST", { q: item.q, answer, questions });
       setItems((all) => all.filter((row) => row.q !== item.q));
-      setPendingNotes((all) => [...all, `шинэ хариулт: ${answer.slice(0, 60)}`]);
+      setPendingNotes((all) => [...all, `шинэ хариулт: ${answer.slice(0, 60)}`,
+        ...(r.learned ?? []).map((fix) => `яриа таних засвар сурлаа: ${fix}`)]);
     }, "Шинэ хариултыг хадгаллаа ✓");
   }
 
@@ -211,6 +212,7 @@ function QuestionCard({ item, answers, busy, onHide, onTeach, onSave }: {
           placeholder="Байгууллагын баталгаатай хариултыг бичнэ үү"
           className="mt-2 w-full resize-y rounded-[10px] border border-line-2 bg-bg px-3 py-2.5 focus:border-brand focus:outline-none" />
         <label className="mt-4 block text-sm text-muted">Ижил утгатай өөр асуултууд · мөр бүрд нэг</label>
+        <p className="mt-1 text-[13px] text-dim">AI буруу сонссон бол зөв бичвэрийг энд бичээрэй — буруу сонссон үгийг өөрөө сурч, дараагийн дуудлагаас засна.</p>
         <textarea value={questions} onChange={(event) => setQuestions(event.target.value)} rows={2}
           placeholder={item.now?.fixed || item.q}
           className="mt-2 w-full resize-y rounded-[10px] border border-line-2 bg-bg px-3 py-2.5 focus:border-brand focus:outline-none" />

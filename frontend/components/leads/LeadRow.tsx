@@ -20,7 +20,7 @@ const CONTROL =
 -  бүртгэлийн код ба залгагч утсаар хийсэн өөрчлөлтүүд (хувийн RAG) */
 export function LeadRow({ lead, reminder, code, changes = [] }: { lead: Lead; reminder?: Reminder; code?: string; changes?: LeadChange[] }) {
   const { pending, error, message, run } = useAction();
-  const save = (body: { status?: LeadStatus; notes?: string }) =>
+  const save = (body: { status?: LeadStatus; notes?: string; name?: string }) =>
     run(() => apiSend(`/api/leads/${lead.id}`, "PATCH", body), "Хадгаллаа ✓");
 
   const [phoneCopied, setPhoneCopied] = useState(false);
@@ -75,7 +75,19 @@ export function LeadRow({ lead, reminder, code, changes = [] }: { lead: Lead; re
         <div><Link href={`/calls/${lead.call_uuid}`} className="text-[13px] text-muted hover:underline">яриа</Link></div>
       </Td>
       <Td className="min-w-[240px]">
-        {lead.name || "—"}
+        {/* Нэрийг засвал AI нэрсийн толиндоо нэмж, дараагийн удаа зөв таньна */}
+        <input
+          aria-label="Нэр"
+          defaultValue={lead.name ?? ""}
+          placeholder="Нэр"
+          maxLength={80}
+          onBlur={(e) => {
+            const name = e.target.value.trim();
+            if (name && name !== (lead.name ?? "")) save({ name });
+          }}
+          title="Нэрийг засвал AI дараагийн удаа зөв таньна"
+          className={`${CONTROL} font-semibold`}
+        />
         {code && (
           <div className="text-[13px] text-muted flex items-center gap-2 flex-wrap mt-1">
             <span>Код <b className="font-mono text-fg">{code}</b></span>
