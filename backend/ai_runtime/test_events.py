@@ -168,5 +168,46 @@ class DailyEventTest(unittest.TestCase):
             self.assertEqual(people.event_defs(d)[0]["repeat"], "daily")
 
 
+class RealCallsOct15Test(unittest.TestCase):
+    """10-15 оройн бодит дуудлагууд: өдөр бүрийн эвентийн 3 өдрийг уншаад гацсан, «Баасан гараг» ойлгоогүй,
+    ойлгомжгүй хариултад бүртгэлээс гарсан, «евинт», «удахгүй болох...»-ыг эвент гэж таниагүй."""
+    DAILY = [{"name": "Нээлттэй өдөрлөг", "at": f"2026-10-{d}T18:00"} for d in range(16, 23)]   # Баасан..Пүрэв
+
+    def test_daily_event_is_offered_directly(self):
+        f = LeadFlow("event", "event_start", None, events=self.DAILY)
+        keys = f.handle("евентет бүртгүүлье ээ")
+        self.assertEqual((f.state, f.event["at"]), ("event_offer", "2026-10-16T18:00"))
+        self.assertNotIn("event_list", keys)
+
+    def test_weekday_picks_that_day(self):
+        f = LeadFlow("event", "event_start", None, events=self.DAILY)
+        f.handle("бямба гарагийнх руу бүртгүүлье")
+        self.assertEqual(f.event["at"], "2026-10-17T18:00")
+        f.handle("баатон гарагийн нээлттэй өдөрлөг")         # саналын үед өөр өдөр хэлбэл солино
+        self.assertEqual((f.state, f.event["at"]), ("event_offer", "2026-10-16T18:00"))
+
+    def test_unclear_answer_reoffers_instead_of_leaving(self):
+        f = LeadFlow("event", "event_start", None, events=self.DAILY)
+        f.handle("эвентэд бүртгүүлье")
+        keys = f.handle("тэр хүрэх банд ирсэн")
+        self.assertEqual(f.state, "event_offer")
+        self.assertIn("event_ask", keys)
+        self.assertFalse(f.finished)
+        self.assertEqual(f.handle("тийм"), ["ask_name_again"])
+
+    def test_stt_variants_and_soon_mean_event(self):
+        self.assertTrue(wants_event("евинт бүртгүүлсэн", EVENTS))
+        f = LeadFlow("lead", "which", None, events=self.DAILY)
+        f.handle("удахгүй бол гаргах юм гэж энэ бүртгүүлээ")
+        self.assertEqual(f.reason, "event")
+        self.assertEqual(f.state, "event_offer")
+
+    def test_repeat_request_detected(self):
+        from phone_server import REPEAT_ASK
+        for text in ["ахиад хэл дээ", "дахиад хэлээч", "сонсогдсонгүй"]:
+            self.assertTrue(REPEAT_ASK.search(text), text)
+        self.assertFalse(REPEAT_ASK.search("дахин бүртгүүлье"))
+
+
 if __name__ == "__main__":
     unittest.main()

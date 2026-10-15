@@ -433,7 +433,7 @@ class Call:
         """Удахгүй болох эвентүүд (Тохиргоо -> Эвент), ойроос нь. "Эвентэд бүртгүүлмээр байна" -> эдгээрээс."""
         now = datetime.now(people.TZ)
         evs = [e for e in people.events(self.tenant.dir) if people.parse_local(e["at"]) > now]
-        return sorted(evs, key=lambda e: e["at"])[:3]
+        return sorted(evs, key=lambda e: e["at"])[:7]     # LeadFlow эхний 3-ыг уншина, бусдыг гарагаар сонгоно
 
     def last_question(self, fallback: str) -> str:
         """Ажилтанд шилжүүлэх үеийн жинхэнэ асуулт ("дахин хэлнэ үү"-гийн өмнөх)."""
@@ -443,6 +443,13 @@ class Call:
     async def lead_turn(self, text: str) -> bool:
         """Бүртгэлийн нэг алхам. False = энэ нь хариулт биш шинэ асуулт -> энгийн горим."""
         router, flow = self.router, self.lead
+        if REPEAT_ASK.search(text.lower()) and self.last_reply:    # "ахиад хэлээч" -> асуултаа давтана
+            for wav, sr in self.last_reply:
+                await self.play(wav, sr)
+            print(f"  AI [бүртгэл:{flow.state}] (давтав): {self.last_reply_text}")
+            self.log("assistant", self.last_reply_text, route="repeat_last")
+            self.arm_reprompt(list(self.last_reply))
+            return True
         keys = flow.handle(text)
         if not keys:
             self.lead = None
@@ -499,6 +506,8 @@ class Call:
                 await say(*(en.clip(clip) if en else router.clip(clip)))
                 spoken.append(clip["text"])
         reply = " ".join(spoken)
+        if replay:                                    # "ахиад хэл" -> бүртгэлийн сүүлийн асуултыг давтана
+            self.last_reply, self.last_reply_text = list(replay), reply
         print(f"  AI [бүртгэл:{flow.state}]: {reply}")
         self.log("assistant", reply, route=f"lead_{flow.result or flow.state}")
         if flow.finished:
@@ -999,6 +1008,7 @@ def selector_state(router) -> str:
     return f"{'идэвхтэй' if sel.enabled else 'идэвхгүй'}, {len(router.sel_answers)} хариулт"
 
 
+REPEAT_ASK = re.compile(r"\b(ахиад|дахиад|дахин)\s+(хэл|нэг\s+хэл)|давтаж\s+хэл|сонсогдсонгүй")
 GENERIC_FAQ = ("smalltalk_", "phone_", "repeat_last", "register", "human_request", "contact_phone")
 
 
