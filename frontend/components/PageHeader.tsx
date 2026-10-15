@@ -14,7 +14,7 @@ export function PageHeader({ title, sub, actions, note }: { title: string; sub?:
         <h1 className="text-[46px] leading-[1.1] font-extrabold tracking-[-.02em] max-md:text-[34px]">{title}</h1>
         {sub && <p className="mt-2.5 max-w-[820px] text-muted">{sub}</p>}
       </div>
-      {actions && <div className="flex items-center gap-[22px]">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-x-[22px] gap-y-3 max-md:w-full">{actions}</div>}
     </div>
   );
 }
