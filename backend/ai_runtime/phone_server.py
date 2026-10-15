@@ -321,10 +321,10 @@ class Call:
         stt_sec = time.perf_counter() - t0
         print(f"  [STT {time.perf_counter() - t0:.2f}s]{' [' + lang + ']' if self.en else ''} {text!r}")
         self.lang = lang
-        # Эвент сонгох ганц цифрийг STT "1" гэж бичдэг; чимээ гэж хаяхгүй.
-        event_choice = (self.lead and self.lead.state == "event_pick"
-                        and re.fullmatch(r"\s*[1-3][.!?]?\s*", text))
-        if not event_choice and len(re.sub(r"\W", "", text)) < (2 if self.lead or self.account else MIN_TEXT_CHARS):
+        # STT-ийн ганц цифр зөвхөн тухайн алхмын хүчинтэй сонголт байвал чимээ биш.
+        short_choice = (self.lead and re.fullmatch(r"\s*[1-3][.!?]?\s*", text)
+                        and re.sub(r"\D", "", text) in ONE_KEY.get(self.lead.state, ""))
+        if not short_choice and len(re.sub(r"\W", "", text)) < (2 if self.lead or self.account else MIN_TEXT_CHARS):
             print("  [алгасав] хэт богино (чимээ/echo)")
             return
         self.log("user", text, stt_sec=stt_sec)
