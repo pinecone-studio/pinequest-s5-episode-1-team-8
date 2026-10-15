@@ -332,8 +332,11 @@ class LeadFlow:
                 self.result = "saved"
                 return ["event_done" if self.event else "done"]
             # "зөв"-ийг STT "төв дүү", "гэсэн" гэж сонсдог -> ойлгоогүй бол дугаарыг хаяхгүй, дахин асууна
-            if ans is None and self.confirm_tries < 1:
+            # Ойлгомжгүй бол 2 удаа дахин асууна (2 дахь нь яаж хариулахыг тайлбарлана), 3 дахь нь л дугаарыг дахин асууна
+            if ans is None and self.confirm_tries < 2:
                 self.confirm_tries += 1
+                if self.confirm_tries == 2:
+                    return ["confirm_hint", "readback", f"digits:{self.phone}", "confirm"]
                 return ["readback", f"digits:{self.phone}", "confirm"]
             self.phone, self.confirm_tries = None, 0
             self.phone_tries += 1

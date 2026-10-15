@@ -14,6 +14,7 @@ AI Receptionist - AudioSocket утасны сервер (олон байгуул
   .venv/bin/python phone_server.py
 """
 import asyncio
+import base64
 import copy
 import faulthandler
 import json
@@ -1005,10 +1006,18 @@ async def review_http(models: Models, reader, writer):
         head = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 10)
         length = int(re.search(rb"content-length: *(\d+)", head, re.I).group(1))
         body = json.loads(await reader.readexactly(length))
+        if head.startswith(b"POST /stt"):      # вэбийн сануулгын дуудлага (outbound/session.py): яриа -> бичвэр
+            pcm = np.frombuffer(base64.b64decode(body["audio"]), "<i2").astype(np.float32) / 32768
+            text = await asyncio.get_running_loop().run_in_executor(
+                models.stt_pool, models.stt.transcribe, pcm, int(body.get("sr", SR)))
+            data = json.dumps({"text": text}, ensure_ascii=False).encode()
+            raise StopAsyncIteration
         t = tenants.Tenant(body["tenant"])
         router = await asyncio.to_thread(models.router_for, t)
         out = [await review_one(router, q) for q in body.get("questions", [])[:60]]
         data = json.dumps(out, ensure_ascii=False).encode()
+    except StopAsyncIteration:
+        pass
     except Exception as e:
         code, data = "400 Bad Request", json.dumps({"error": str(e)}, ensure_ascii=False).encode()
     writer.write(f"HTTP/1.1 {code}\r\nContent-Type: application/json\r\nContent-Length: {len(data)}\r\n"

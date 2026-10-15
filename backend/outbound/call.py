@@ -33,6 +33,7 @@ class CallIO:
         self._samples = 0
         self._last_tone = -SR        # сүүлд таньсан товчлуурын үнэмлэхүй байрлал (давхар тоолохгүй)
         self._digits: list[str] = []
+        self._speech: list[np.ndarray] | None = None   # listen() үед ирсэн бүх дуу (яриа таних)
         self.ended = threading.Event()       # нөгөө тал тасалсан
 
     # ---- залгагч дуудна ----
@@ -40,6 +41,8 @@ class CallIO:
         with self._lock:
             self._inbound.append(audio8k)
             self._samples += len(audio8k)
+            if self._speech is not None:
+                self._speech.append(audio8k)
 
     def _event(self, digit: str):
         with self._lock:
@@ -83,6 +86,35 @@ class CallIO:
                 return found
             time.sleep(0.05)
         return self.digits()
+
+    def listen(self, seconds: float, silence: float = 0.9, level: float = 0.02) -> tuple[list[str], np.ndarray | None]:
+        """Товчлуур ЭСВЭЛ яриа хүлээнэ. Яриа эхлээд silence сек чимээгүй болмогц (эсвэл хугацаа дуусахад)
+        -> ([], яриа 8kHz). Товчлуур дармагц -> (товчнууд, None)."""
+        with self._lock:
+            self._speech = []
+        end, spoke, quiet_since = time.monotonic() + seconds, False, None
+        try:
+            while time.monotonic() < end and not self.ended.is_set():
+                found = self.digits()
+                if found:
+                    return found, None
+                with self._lock:
+                    tail = np.concatenate(self._speech[-6:]) if self._speech else np.zeros(0, np.float32)
+                loud = len(tail) and float(np.sqrt(np.mean(tail[-int(SR * 0.2):] ** 2))) > level
+                if loud:
+                    spoke, quiet_since = True, None
+                    end = max(end, time.monotonic() + 1.5)     # ярьж байхад таслахгүй
+                elif spoke:
+                    quiet_since = quiet_since or time.monotonic()
+                    if time.monotonic() - quiet_since >= silence:
+                        break
+                time.sleep(0.05)
+            with self._lock:
+                audio = np.concatenate(self._speech) if self._speech else None
+            return self.digits(), (audio if spoke else None)
+        finally:
+            with self._lock:
+                self._speech = None
 
     def play(self, audio: np.ndarray, sr: int):
         """Дуу тоглуулна (дуустал хүлээнэ). Энэ хугацаанд дарсан товчлуур хадгалагдана."""

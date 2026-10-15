@@ -149,6 +149,7 @@ class LeadDtmfTest(unittest.IsolatedAsyncioTestCase):
         flow = LeadFlow("lead", "confirm", None)
         flow.phone = "88008432"
         flow.handle("гэсэн")
+        self.assertEqual(flow.handle("гэсэн")[0], "confirm_hint")      # 2 дахь удаа: яаж хариулахыг тайлбарлана
         self.assertEqual(flow.handle("гэсэн"), ["phone_retry"])
         self.assertIsNone(flow.phone)
         self.assertEqual(flow.handle("88008432"), ["readback", "digits:88008432", "confirm"])
@@ -191,6 +192,12 @@ class SpokenEventFlowTest(unittest.TestCase):
     def test_question_is_not_yes(self):
         f, out = self.talk(["эвент", "хэдэн цагт болох вэ"])
         self.assertEqual((out[-1], f.result), ([], "declined"))   # энгийн горимд асуултад хариулна
+
+    def test_unclear_confirm_gets_hint_then_retry(self):
+        f, out = self.talk(["эвент", "тийм", "сараа", "88112233", "аан", "мм"])
+        self.assertEqual(out[4], ["readback", "digits:88112233", "confirm"])
+        self.assertEqual(out[5][0], "confirm_hint")
+        self.assertEqual(f.handle("тийм"), ["event_done"])
 
     def test_wrong_number_then_retry(self):
         f, out = self.talk(["эвент", "тийм", "сараа", "88112233", "үгүй буруу", "88112244", "зөв байна"])
