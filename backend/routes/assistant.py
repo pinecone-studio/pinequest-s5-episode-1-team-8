@@ -129,7 +129,7 @@ def add_samples(t: Tenant = Depends(current_tenant)):
         out.append(person_view(t, {"id": lead_id}))
     if not people.event_of(t.dir, "AI Hackathon эвент"):      # жишээ эвент: 2 хоногийн дараа 10:00
         at = (now + timedelta(days=2)).replace(hour=10, minute=0, second=0, microsecond=0)
-        people.set_events(t.dir, people.events(t.dir) + [{"name": "AI Hackathon эвент", "at": people.fmt(at)}])
+        people.set_events(t.dir, people.event_defs(t.dir) + [{"name": "AI Hackathon эвент", "at": people.fmt(at)}])
     with reminders.data_lock:
         people.sync_event_reminders(t.dir, now)
     return {"people": [person_view(t, p) for p in out], "staff_pin": people.staff_pin(t.dir)}

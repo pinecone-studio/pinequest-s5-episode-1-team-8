@@ -1,4 +1,5 @@
 """Эвентийн бүртгэл утсаар (lead.py): "Эвентэд бүртгүүлмээр байна" ба энгийн бүртгэлийг ялгах, эвент сонгох."""
+import os
 import unittest
 from unittest.mock import AsyncMock, Mock
 
@@ -165,6 +166,54 @@ class SpokenEventChoiceTest(unittest.IsolatedAsyncioTestCase):
         for text in ("3", "0"):
             with self.subTest(text=text):
                 self.assertIsNone(flow._pick_event(text))
+
+class NoisyEventSttTest(unittest.TestCase):
+    """10-15 бодит дуудлага: STT "эвентэд бүртгүүлмээр байна"-г эвдэж бичсэн."""
+    def test_misheard_requests(self):
+        from lead import wants_event
+        for t in ("эвээн түртгэлдсэн", "ивээн тэтгэвэрт гүйлмээр байна", "эвээн тэтгэвэл төсөө", "эвээн тэтгэвэл мэр байна аа", "эвентэд бүртгүүлмээр байна", "ивэнтэд оролцмоор байна"):
+            self.assertTrue(wants_event(t, []), t)
+        for t in ("эвентийн талаар мэдмээр байна", "эвентийн мэдээлэл авмаар байна", "эвентийн бүртгэлээ цуцлах"):
+            self.assertFalse(wants_event(t, []), t)
+
+
+class WhichRegistrationTest(unittest.TestCase):
+    """10-15: "юмэнд бүртгүүлмээр" -> хөтөлбөр гэж ойлгоод уулзалтын цаг санал болгосон."""
+    EV = [{"name": "AI Hackathon", "at": "2026-10-18T10:00"}]
+
+    def test_stt_variant_is_event(self):
+        from lead import wants_event
+        self.assertTrue(wants_event("юмэнд бүртгүүлмээр байна аа", []))
+
+    def test_generic_register_asks_which(self):
+        from lead import LeadFlow, wants_register
+        self.assertTrue(wants_register("бүртгүүлмээр байна"))
+        self.assertFalse(wants_register("хөтөлбөрт бүртгүүлмээр байна"))
+        f = LeadFlow("lead", "which_start", None, events=self.EV, book=True)
+        self.assertEqual(f.handle("бүртгүүлмээр байна"), ["which_ask"])
+        self.assertEqual(f.handle("арга хэмжээнд"), ["ev:AI Hackathon", "date:2026-10-18T10:00", "event_ask"])
+        self.assertEqual((f.reason, f.book), ("event", False))
+        g = LeadFlow("lead", "which_start", None, events=self.EV, book=True)
+        g.handle("бүртгүүлмээр байна")
+        self.assertEqual(g.handle("хөтөлбөрт"), ["ask_name_again"])
+        self.assertEqual((g.reason, g.book), ("lead", True))
+
+
+
+class DailyEventTest(unittest.TestCase):
+    def test_daily_expands_and_courses_are_per_day(self):
+        import tempfile, people
+        from datetime import datetime
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "data"))
+            people.set_events(d, [{"name": "Нээлттэй өдөрлөг", "at": "2026-10-15T18:00", "repeat": "daily"}])
+            now = datetime(2026, 10, 20, 19, 0, tzinfo=people.TZ)        # 18:00 өнгөрсөн -> маргаашаас
+            evs = people.events(d, now)
+            self.assertEqual(len(evs), people.REPEAT_DAYS)
+            self.assertEqual(evs[0]["at"], "2026-10-21T18:00")
+            course = people.event_course(evs[1])
+            self.assertEqual(course, "Нээлттэй өдөрлөг 2026-10-22")
+            self.assertEqual(people.event_defs(d)[0]["repeat"], "daily")
 
 
 if __name__ == "__main__":

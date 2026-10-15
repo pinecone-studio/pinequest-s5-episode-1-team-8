@@ -79,7 +79,7 @@ def main():
     r = say(c, None, "Цагаа солимоор байна")
     sid = r["session"]
     r = say(c, sid, dtmf=ppl["Болд"]["code"])
-    check("сул цагуудыг санал болгоно", r["state"] == "slot" and any(x.startswith("Нэгийг дарвал") for x in r["replies"]), r["replies"])
+    check("сул цагуудыг санал болгоно", r["state"] == "slot" and any(x.startswith("Нэгдүгээрт") for x in r["replies"]), r["replies"])
     say(c, sid, dtmf="2")
     r = say(c, sid, dtmf="1")
     new_time = people.appointment(t.dir, ppl["Болд"]["id"])

@@ -34,10 +34,15 @@ def pair_word(pair: str) -> str:
 # Эдгээр FAQ хариултын дараа нэр асуух алхам эхэлнэ (хариулт нь өөрөө нэр асуудаг)
 START_FAQ = {"register": "lead", "human_request": "handoff"}
 
-YES = {"тийм", "за", "зөв", "мөн", "тиймээ", "болно", "болох", "тэгье", "тэгнэ", "зүгээр", "тиймэ"}
-NO = {"үгүй", "биш", "буруу", "болохгүй", "хэрэггүй", "үгүйээ"}
+# Товчлуургүйгээр яриагаар тийм/үгүй (товчлуур зөвхөн утасны дугаар, 4 оронтой кодод)
+YES = {"тийм", "за", "зөв", "мөн", "тиймээ", "болно", "болох", "тэгье", "тэгнэ", "зүгээр", "тиймэ",
+       "очно", "очъё", "очье", "ирнэ", "ирье", "ирэх", "очих", "мэдээж", "тэгээрэй", "тэгэх", "зөвшөөрнө",
+       "бүртгүүлнэ", "бүртгээрэй", "бүртгэ", "хүсэж", "хүснэ", "аваарай", "тэгээч", "ок", "okay", "yes"}
+NO = {"үгүй", "биш", "буруу", "болохгүй", "хэрэггүй", "үгүйээ", "битгий", "боль", "больё", "болъё",
+      "амжихгүй", "чадахгүй", "очихгүй", "ирэхгүй", "хүсэхгүй", "дараа", "no"}
+UNSURE = {"мэдэхгүй", "ойлгохгүй", "ойлгосонгүй", "сонсогдохгүй", "сонсогдсонгүй", "санахгүй", "мэдэхгүйээ"}
 # Зөвхөн дугаар баталгаажуулах үед: "зөв" -> STT "төв", "зөвөө" (бодит дуудлагаас)
-CONFIRM_YES = re.compile(r"\b(зөв\w*|төв)\b")
+CONFIRM_YES = re.compile(r"\b(зөв\w*|төв|дөв|зөвөө|төвөө)\b")
 
 UNITS = {"тэг": 0, "нэг": 1, "хоёр": 2, "гурав": 3, "гурван": 3, "дөрөв": 4, "дөрвөн": 4,
          "тав": 5, "таван": 5, "зургаа": 6, "зургаан": 6, "долоо": 7, "долоон": 7,
@@ -48,6 +53,7 @@ TENS = {"арав": 10, "арван": 10, "хорь": 20, "хорин": 20, "г�
 HUNDRED = {"зуу", "зуун"}
 # STT-ийн түгээмэл алдаа (бодит дуудлагаас): "наян" -> "ноён", "ноян", "оройн"
 TENS.update({"ноён": 80, "ноян": 80, "оройн": 80, "наянн": 80})
+UNITS.update({"дургай": 6, "дургаа": 6, "зургай": 6, "зурга": 6})      # 10-15: "хорин дургай" (= 26)
 # Аравтын араас ирсэн эдгээрийг нэгж гэж үзнэ: "наян тавь" (80, 50 биш) -> 85; "наян ер" -> 89
 UNIT_AFTER_TENS = {"тавь": 5, "ер": 9}
 
@@ -56,8 +62,15 @@ UNIT_AFTER_TENS = {"тавь": 5, "ер": 9}
 # "Хакатонд бүртгүүлмээр байна" (эвент) ба "Бүртгүүлмээр байна" (хөтөлбөр) өөр. Эвентийн үг эсвэл эвентийн нэр +
 # оролцох үйл үг -> эвент. "Хакатоны талаар" (мэдээлэл) FAQ-д үлдэнэ, "эвентийн бүртгэлээ цуцлах" бүртгэл биш.
 # STT "эвент"-ийг "эвээнт", "ивэнт", "эвэнд" гэж бичдэг (бодит туршилт)
-EVENT_RE = re.compile(r"[эи]в[эеи]*н[тд]|event|арга хэмжээ|х[аэ]кк?[аэ]тон|hackathon|уралдаан|семинар")
-JOIN_WORDS = ("бүртг", "бүтгүү", "бүрдүүл", "оролц", "очмоор", "очъё", "явмаар", "суумаар", "ирмээр", "хамрагд")
+# 10-15 туршилт: "эвээн түртгэлдсэн", "ивээн тэтгэвэрт гүйлмээр байна" (= эвентэд бүртгүүлмээр байна)
+EVENT_RE = re.compile(r"[эи]в[эеи]*н(?:[тд]|\b)|юм[эе]н[дт]|event|арга хэмжээ|х[аэ]кк?[аэ]тон|hackathon|уралдаан|семинар")
+JOIN_WORDS = ("бүртг", "бүтгүү", "бүрдүүл", "оролц", "очмоор", "очъё", "явмаар", "суумаар", "ирмээр", "хамрагд",
+              "түртг", "гүйлмээр", "тэтгэв")   # 10-15: "эвээн тэтгэвэл/тэтгэвэрт" = эвентэд бүртгүүл
+# Эвентийн үгтэй хамт "-маар/-мээр байна" (STT үйл үгийг эвдсэн ч хүсэлт хэвээр) -> бүртгүүлэх.
+# Мэдээлэл асуух үйл үг ("мэдмээр", "сонсмоор", "асуумаар", "авмаар") бол бүртгэл биш.
+DESIRE = re.compile(r"([а-яөүё]+)(?:мээр|маар|моор|мөөр)\b")
+INFO_VERBS = ("мэд", "сонс", "асуу", "ав", "үз", "ойлго")
+PROGRAM_WORDS = ("хөтөлбөр", "сургалт", "bootcamp", "буткэмп", "хичээл", "курс", "элс")
 NOT_JOIN = ("цуца", "цуцл", "болих", "больё", "болъё", "гармаар", "хасуул", "чадахгүй", "өөрчл", "солих", "солимоор",
             "шалга", "хэзээ", "хаана")
 EVENT_GENERIC = {"эвен", "ивен", "арга", "хэмж", "хэмжээ"}
@@ -97,9 +110,17 @@ def match_event(text: str, events: list[dict]) -> dict | None:
     return best if score >= 0.33 else None     # 3 үгтэй нэрийн 1 нь ("демо") хангалттай
 
 
+def wants_register(text: str) -> bool:
+    """Юунд гэдгийг хэлээгүй ерөнхий "бүртгүүлмээр байна" (эвент ч, хөтөлбөр ч биш)."""
+    t = text.lower()
+    return (any(w in t for w in JOIN_WORDS) and not any(w in t for w in NOT_JOIN)
+            and not EVENT_RE.search(t) and not any(w in t for w in PROGRAM_WORDS))
+
+
 def wants_event(text: str, events: list[dict]) -> bool:
     t = text.lower()
-    if any(w in t for w in NOT_JOIN) or not any(w in t for w in JOIN_WORDS):
+    desire = any(not m.group(1).startswith(INFO_VERBS) for m in DESIRE.finditer(t))
+    if any(w in t for w in NOT_JOIN) or not (any(w in t for w in JOIN_WORDS) or desire):
         return False
     return bool(EVENT_RE.search(t)) or match_event(text, events) is not None
 
@@ -157,8 +178,11 @@ def yes_no(text: str) -> bool | None:
         return True
     if digits == "2":
         return False
-    words = set(re.findall(r"[а-яөүё]+", text.lower()))
-    if words & NO:
+    words = set(re.findall(r"[а-яөүёa-z]+", text.lower()))
+    if words & UNSURE or QUESTION.search(text.lower()):
+        return None                   # "мэдэхгүй", "хэдэн цагт болох вэ" — хариулт биш, дахин асууна
+    # "очихгүй", "амжихгүй", "бүртгүүлэхгүй" — -хгүй нөхцөлтэй үйл үг бүгд үгүй
+    if words & NO or any(w.endswith("хгүй") for w in words):
         return False
     if words & YES:
         return True
@@ -231,6 +255,20 @@ class LeadFlow:
     def handle(self, text: str) -> list[str]:
         """Буцаах: тоглуулах prompt түлхүүрүүд ("digits:72700800" = дугаарыг уншина,
         "ev:<нэр>" = эвентийн нэр, "date:2026-10-18T10:00" = гараг сар өдөр цаг)."""
+        if self.state == "which_start":
+            self.state = "which"
+            return ["which_ask"]
+        if self.state == "which":         # "Хөтөлбөрт үү, арга хэмжээнд үү?"
+            t = text.lower()
+            if EVENT_RE.search(t) or match_event(text, self.events) or "хоёрд" in t or "сүүлийн" in t:
+                self.reason, self.state, self.book = "event", "event_start", False
+                return self.handle(text)
+            if any(w in t for w in PROGRAM_WORDS) or "эхн" in t or "нэгд" in t or self.pick_tries >= 1:
+                self.state = "name"
+                return ["ask_name_again"]
+            self.pick_tries += 1
+            return ["which_ask"]
+
         if self.state == "event_start":
             if not self.events:
                 self.result = "declined"
@@ -324,8 +362,11 @@ class LeadFlow:
                 self.result = "saved"
                 return ["event_done" if self.event else "done"]
             # "зөв"-ийг STT "төв дүү", "гэсэн" гэж сонсдог -> ойлгоогүй бол дугаарыг хаяхгүй, дахин асууна
-            if ans is None and self.confirm_tries < 1:
+            # Ойлгомжгүй бол 2 удаа дахин асууна (2 дахь нь яаж хариулахыг тайлбарлана), 3 дахь нь л дугаарыг дахин асууна
+            if ans is None and self.confirm_tries < 2:
                 self.confirm_tries += 1
+                if self.confirm_tries == 2:
+                    return ["confirm_hint", "readback", f"digits:{self.phone}", "confirm"]
                 return ["readback", f"digits:{self.phone}", "confirm"]
             self.phone, self.confirm_tries = None, 0
             self.phone_tries += 1

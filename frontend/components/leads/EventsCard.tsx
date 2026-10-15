@@ -15,6 +15,7 @@ export function EventsCard({ initial }: { initial: EventItem[] }) {
   const [events, setEvents] = useState(initial);
   const [name, setName] = useState("");
   const [at, setAt] = useState("");
+  const [daily, setDaily] = useState(false);
   const { pending, error, message, run } = useAction();
 
   const [scheduled, setScheduled] = useState(0);
@@ -35,7 +36,7 @@ export function EventsCard({ initial }: { initial: EventItem[] }) {
         <ul className="mb-3 space-y-1.5 text-sm">
           {events.map((e) => (
             <li key={`${e.name}-${e.at}`} className="flex items-center justify-between gap-3 rounded-lg bg-bg px-3 py-2">
-              <span><b>{e.name}</b> <span className="font-mono text-muted">· {short(e.at)}</span></span>
+              <span><b>{e.name}</b> <span className="font-mono text-muted">· {e.repeat === "daily" ? `өдөр бүр ${e.at.slice(11, 16)}` : short(e.at)}</span></span>
               <button type="button" disabled={pending} onClick={() => save(events.filter((x) => x !== e), "Устгалаа")}
                 className="cursor-pointer text-[13px] text-muted hover:text-danger">Устгах</button>
             </li>
@@ -46,9 +47,13 @@ export function EventsCard({ initial }: { initial: EventItem[] }) {
         <input aria-label="Эвентийн нэр" placeholder="Эвентийн нэр (бүртгэлийн нэртэй ижил)" value={name}
           onChange={(e) => setName(e.target.value)} className={`${INPUT} min-w-[240px] flex-1`} />
         <input aria-label="Огноо, цаг" type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} className={INPUT} />
+        <label className="flex items-center gap-1.5 text-sm text-muted">
+          <input type="checkbox" checked={daily} onChange={(e) => setDaily(e.target.checked)} /> Өдөр бүр
+        </label>
         <Button
           disabled={pending || name.trim().length < 2 || !at}
-          onClick={() => save([...events, { name: name.trim(), at }], "Нэмлээ").then((ok) => ok && (setName(""), setAt("")))}
+          onClick={() => save([...events, { name: name.trim(), at, ...(daily ? { repeat: "daily" as const } : {}) }], "Нэмлээ")
+            .then((ok) => ok && (setName(""), setAt(""), setDaily(false)))}
         >
           + Эвент
         </Button>

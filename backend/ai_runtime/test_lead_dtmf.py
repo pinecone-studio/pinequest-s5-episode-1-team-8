@@ -149,6 +149,7 @@ class LeadDtmfTest(unittest.IsolatedAsyncioTestCase):
         flow = LeadFlow("lead", "confirm", None)
         flow.phone = "88008432"
         flow.handle("гэсэн")
+        self.assertEqual(flow.handle("гэсэн")[0], "confirm_hint")      # 2 дахь удаа: яаж хариулахыг тайлбарлана
         self.assertEqual(flow.handle("гэсэн"), ["phone_retry"])
         self.assertIsNone(flow.phone)
         self.assertEqual(flow.handle("88008432"), ["readback", "digits:88008432", "confirm"])
@@ -158,6 +159,50 @@ class LeadDtmfTest(unittest.IsolatedAsyncioTestCase):
         self.assertIs(yes_no("1"), True)
         self.assertIs(yes_no("2"), False)
         self.assertIsNone(yes_no("99112233"))
+
+
+class VoiceYesNoTest(unittest.TestCase):
+    def test_spoken_answers(self):
+        for t in ("тийм ээ", "за очно", "ирнэ ээ", "мэдээж бүртгүүлнэ", "тэгээрэй"):
+            self.assertIs(yes_no(t), True, t)
+        for t in ("үгүй", "амжихгүй нээ", "очихгүй", "чадахгүй байх", "бүртгүүлэхгүй", "дараа"):
+            self.assertIs(yes_no(t), False, t)
+        for t in ("мэдэхгүй", "хэдэн цагт болох вэ", "хаана болох вэ", "ойлгосонгүй"):
+            self.assertIsNone(yes_no(t), t)
+
+
+class SpokenEventFlowTest(unittest.TestCase):
+    """Утасны туршилтаас (10-15): товчлуургүй, зөвхөн яриагаар эвентэд бүртгүүлэх бүтэн урсгал."""
+    EV = [{"name": "AI Hackathon", "at": "2026-10-18T10:00"}]
+
+    def talk(self, lines, events=None):
+        f = LeadFlow("event", "event_start", None, events=events or self.EV)
+        return f, [f.handle(t) for t in lines]
+
+    def test_register_by_voice_only(self):
+        f, out = self.talk(["эвэнтэд бүртгүүлмээр байна", "за очно", "номин",
+                            "наян тав хорин хоёр хорин зургаа гучин дөрөв", "зөв"])
+        self.assertEqual(out[3], ["readback", "digits:85222634", "confirm"])
+        self.assertEqual((out[-1], f.result), (["event_done"], "saved"))
+
+    def test_cannot_attend(self):
+        f, out = self.talk(["эвентэд бүртгүүлье", "амжихгүй нээ"])
+        self.assertEqual((out[-1], f.result), (["declined"], "declined"))
+
+    def test_question_is_not_yes(self):
+        f, out = self.talk(["эвент", "хэдэн цагт болох вэ"])
+        self.assertEqual((out[-1], f.result), ([], "declined"))   # энгийн горимд асуултад хариулна
+
+    def test_unclear_confirm_gets_hint_then_retry(self):
+        f, out = self.talk(["эвент", "тийм", "сараа", "88112233", "аан", "мм"])
+        self.assertEqual(out[4], ["readback", "digits:88112233", "confirm"])
+        self.assertEqual(out[5][0], "confirm_hint")
+        self.assertEqual(f.handle("тийм"), ["event_done"])
+
+    def test_wrong_number_then_retry(self):
+        f, out = self.talk(["эвент", "тийм", "сараа", "88112233", "үгүй буруу", "88112244", "зөв байна"])
+        self.assertEqual(out[4], ["phone_retry"])
+        self.assertEqual((f.phone, f.result), ("88112244", "saved"))
 
 
 class InterruptTest(unittest.IsolatedAsyncioTestCase):

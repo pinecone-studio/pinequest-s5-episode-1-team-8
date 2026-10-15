@@ -33,11 +33,11 @@ RETRY = {"no_answer", "busy", "hung_up", "failed"}
 # Эвентийн өмнөх өдөр (people.sync_event_reminders автоматаар товлоно)
 # Эвентийн нэрийн араас нөхцөл залгахгүй (монгол нөхцөл нэрээс хамаарч өөрчлөгддөг)
 EVENT_TEMPLATE = ("Сайн байна уу, {name}. Энэ бол {org}. Таны бүртгүүлсэн {event} {date} {time} цагт болно. "
-                  "Та ирэх хэвээрээ юу? Ирэх бол нэг, ирэхгүй бол хоёрыг дарна уу.")
+                  "Та ирэх хэвээрээ юу?")
 DEFAULT_TEMPLATE = ("Сайн байна уу, {name}. Энэ бол {org}. Таны бүртгэл баталгаажлаа. {date} {time} цагт ирээрэй. "
-                    "Баталгаажуулах бол нэг, цуцлах бол хоёрыг дарна уу.")
+                    "Ирэх үү?")
 PHRASES = {
-    "repeat": "Баталгаажуулах бол нэг, цуцлах бол хоёрыг дарна уу.",
+    "repeat": "Уучлаарай, ойлгосонгүй. Ирэх бол «тийм», ирэхгүй бол «үгүй» гэж хэлнэ үү.",
     "confirmed": "Баярлалаа, баталгаажууллаа. Таныг хүлээж байна.",
     "declined": "Ойлголоо, цуцаллаа. Манай ажилтан тантай холбогдоно. Баярлалаа.",
     "no_input": "Хариу ирсэнгүй. Манай ажилтан тантай холбогдоно. Баярлалаа.",
@@ -51,7 +51,8 @@ _lock = threading.Lock()          # нэг удаад нэг дуудлага (g
 # Уулзалт/эвент эхлэхээс SMS_BEFORE_HOURS цагийн өмнө SMS сануулга. Залгах gateway-гүй үед ч ажиллана.
 # Байгууллагын settings.json "sms_reminders": true үед л (тест, шинэ байгууллагад санамсаргүй SMS явахгүй).
 SMS_BEFORE = timedelta(hours=float(os.getenv("SMS_BEFORE_HOURS", "2")))
-SMS_TEMPLATE = "{org}: Сануулга - {what} {day} {time} цагт. Ирэх боломжгүй бол {phone} руу залгаарай."
+SMS_TEMPLATE = "{org}: Сануулга - {what} {day} {time} цагт."
+SMS_MAX = 70
 data_lock = threading.RLock()     # reminders.json уншиж-бичих (вэб ба залгагч зэрэг)
 _wake = threading.Event()
 
@@ -272,9 +273,14 @@ def sms_text(t: Tenant, item: dict, now: datetime) -> str:
     at = parse_local(item["appointment"])
     cfg = t.config()
     day = {0: "өнөөдөр", 1: "маргааш"}.get((at.date() - now.date()).days, at.strftime("%m/%d"))
-    text = SMS_TEMPLATE.format(org=cfg.get("name", t.slug)[:30], what=item.get("event") or "таны уулзалт",
-                               day=day, time=at.strftime("%H:%M"), phone=cfg.get("phone") or "бидэн")
-    return text.replace(" бидэн руу залгаарай", " бидэнтэй холбогдоорой")
+    text = SMS_TEMPLATE.format(org=cfg.get("name", t.slug)[:20], what=(item.get("event") or "таны уулзалт")[:30],
+                               day=day, time=at.strftime("%H:%M"))
+    phone = cfg.get("phone")
+    for extra in ([f" Ирэх боломжгүй бол {phone} руу залгаарай.", f" Ирэхгүй бол {phone} руу залгаарай."]
+                  if phone else [" Ирэхгүй бол бидэнтэй холбогдоорой."]):
+        if len(text + extra) <= SMS_MAX:            # SendSMS.mn: Монгол үсэгтэй SMS <= 70 тэмдэгт
+            return text + extra
+    return text
 
 
 def sms_due(now: datetime | None = None, send=None) -> list[tuple[str, int, bool]]:
