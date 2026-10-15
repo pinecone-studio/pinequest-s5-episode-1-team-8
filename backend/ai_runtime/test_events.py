@@ -133,6 +133,28 @@ class WhichRegistrationTest(unittest.TestCase):
     """10-15: "юмэнд бүртгүүлмээр" -> хөтөлбөр гэж ойлгоод уулзалтын цаг санал болгосон."""
     EV = [{"name": "AI Hackathon", "at": "2026-10-18T10:00"}]
 
+    def test_unclear_answers_do_not_choose_a_program(self):
+        f = LeadFlow("lead", "which_start", None, events=self.EV, book=True)
+        self.assertEqual(f.handle("бүртгүүлмээр байна"), ["which_ask"])
+        self.assertEqual(f.handle("ойлгосонгүй"), ["which_ask"])
+        self.assertEqual(f.handle("ойлгосонгүй"), [])
+        self.assertTrue(f.finished)
+        self.assertEqual(f.result, "declined")
+        self.assertNotEqual(f.state, "name")
+        self.assertFalse(f.saved)
+        self.assertFalse(f.save_pending)
+
+    def test_explicit_choice_after_retry_is_still_respected(self):
+        for answer, reason, state in [("хөтөлбөрт", "lead", "name"),
+                                      ("арга хэмжээнд", "event", "event_offer")]:
+            with self.subTest(answer=answer):
+                f = LeadFlow("lead", "which_start", None, events=self.EV, book=True)
+                f.handle("бүртгүүлмээр байна")
+                f.handle("ойлгосонгүй")
+                f.handle(answer)
+                self.assertEqual((f.reason, f.state), (reason, state))
+                self.assertFalse(f.finished)
+
     def test_stt_variant_is_event(self):
         from lead import wants_event
         self.assertTrue(wants_event("юмэнд бүртгүүлмээр байна аа", []))
