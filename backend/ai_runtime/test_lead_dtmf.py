@@ -166,6 +166,8 @@ class VoiceYesNoTest(unittest.TestCase):
             self.assertIs(yes_no(t), True, t)
         for t in ("үгүй", "амжихгүй нээ", "очихгүй", "чадахгүй байх", "бүртгүүлэхгүй", "дараа"):
             self.assertIs(yes_no(t), False, t)
+        for t in ("мэдэхгүй", "хэдэн цагт болох вэ", "хаана болох вэ", "ойлгосонгүй"):
+            self.assertIsNone(yes_no(t), t)
 
 
 class InterruptTest(unittest.IsolatedAsyncioTestCase):
