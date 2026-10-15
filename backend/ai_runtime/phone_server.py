@@ -40,7 +40,7 @@ import people
 import tenant as tenants
 from lead import START_FAQ, LeadFlow, wants_event, wants_register
 import names
-from stt import NAME_DECODES, BilingualSTT, WhisperSTT, create_mn_stt
+from stt import NAME_DECODES, BilingualSTT, ChimegeSTT, WhisperSTT, create_mn_stt
 
 AI_PORT = int(os.getenv("AI_PORT", "9092"))
 
@@ -79,6 +79,7 @@ KEEPALIVE = float(os.getenv("KEEPALIVE", "90"))
 BYE_WORDS = re.compile(r"баяртай|баярлалаа|байхгүй|үгүй|болоо|алга|дараа ярья")
 REPROMPT_AFTER = float(os.getenv("REPROMPT_AFTER", "6"))   # бүртгэлийн асуултын дараах чимээгүй (сек)
 # Нэг товчлуураар хариулдаг алхмууд: баталгаажуулах 1/2, эвент сонгох 1-3, эвентэд бүртгүүлэх эсэх 1/2
+PRECISE_STATES = ("name", "phone")   # хосолсон STT: эдгээр алхамд Чимэгэ (Whisper нэр, дугаарыг хамгийн их алддаг)
 ONE_KEY = {"confirm": "12", "event_pick": "123", "event_offer": "12", "book_offer": "12"}
 DTMF_GAP = 5.0      # сек: товчлуур хооронд үүнээс удаан завсарлавал дугаарыг шинээр эхлүүлнэ
 REVIEW_PORT = int(os.getenv("REVIEW_PORT", "9093"))   # вэбийн "Хариулж чадаагүй" хуудсанд (зөвхөн 127.0.0.1)
@@ -110,7 +111,13 @@ class Models:
         self.embedder = router.embedder             # бүх байгууллага нэг embedding загвар
         self.account_search = acct.Search(self.embedder.query)   # хувийн RAG (бүртгэлээ шалгах/өөрчлөх)
         self.routers = {default.slug: router}
-        self.stt = create_mn_stt()
+        # Хосолсон STT (STT_MODE=hybrid, Чимэгэ token байвал анхдагч): ердийн ярианд хурдан локал Whisper (~1с),
+        # нэр/дугаар хэлэх алхамд нарийвчлалтай Чимэгэ (4-8с). STT_MODE=chimege бол бүгд Чимэгэ, whisper бол бүгд Whisper.
+        token = os.getenv("CHIMEGE_API_TOKEN", "").strip()
+        mode = os.getenv("STT_MODE", "hybrid" if token else "whisper")
+        self.stt = create_mn_stt() if mode == "chimege" else WhisperSTT()
+        self.precise = ChimegeSTT(token) if token and mode == "hybrid" else None
+        print(f"STT горим: {mode}" + (" (нэр, дугаар -> Чимэгэ)" if self.precise else ""))
         self.stt.warmup()
         self.bilingual: BilingualSTT | None = None      # англи горимтой байгууллага байвал л (~0.5GB)
         self.en_routers: dict[str, english.EnglishRouter] = {}
@@ -380,6 +387,11 @@ class Call:
     def transcribe(self, audio: np.ndarray) -> tuple[str, str]:
         """-> (бичвэр, хэл). Англи горимгүй байгууллагад хэл танихгүй (хурд, санах ой)."""
         if not self.en:
+            if self.m.precise and self.lead and self.lead.state in PRECISE_STATES:
+                try:
+                    return self.m.precise.transcribe(audio, SR), "mn"
+                except Exception as e:           # Чимэгэ тасарвал хурдан Whisper-ээр үргэлжилнэ
+                    print(f"  [Чимэгэ алдаа -> Whisper] {e}")
             return self.m.stt.transcribe(audio, SR), "mn"
         if self.lead and self.lead.state in ("name", "phone", "confirm"):
             # нэр, дугаар, тийм/үгүй богино -> хэл буруу танигдана: бүртгэлийн хэлээр шууд
