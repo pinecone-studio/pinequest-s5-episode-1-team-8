@@ -53,7 +53,7 @@ function NavLink({ item, active, count }: { item: NavItem; active: boolean; coun
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
-      className={`mb-0.5 flex items-center gap-3 rounded-[10px] border-[1.5px] px-3.5 py-2.5 text-base whitespace-nowrap ${
+      className={`mb-0.5 flex w-full min-w-0 items-center gap-3 rounded-[10px] border-[1.5px] px-3.5 py-2.5 text-base focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
         active ? "border-brand font-bold" : "border-transparent hover:bg-panel-2"
       }`}
     >
@@ -61,8 +61,8 @@ function NavLink({ item, active, count }: { item: NavItem; active: boolean; coun
         strokeLinejoin="round" className={`size-[19px] shrink-0 ${active ? "text-fg" : "text-muted"}`} aria-hidden>
         {item.icon}
       </svg>
-      {item.label}
-      <span className="ml-auto flex items-center gap-2">
+      <span className="min-w-0 flex-1 break-words">{item.label}</span>
+      <span className="ml-auto flex shrink-0 items-center gap-2">
         {count > 0 && (
           <b className="rounded-[10px] bg-warn px-[7px] font-mono text-[11px] leading-[18px] font-semibold text-[#1b1408]" aria-label={`${count} шинэ`}>
             {count}
