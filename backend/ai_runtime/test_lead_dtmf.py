@@ -170,6 +170,34 @@ class VoiceYesNoTest(unittest.TestCase):
             self.assertIsNone(yes_no(t), t)
 
 
+class SpokenEventFlowTest(unittest.TestCase):
+    """Утасны туршилтаас (10-15): товчлуургүй, зөвхөн яриагаар эвентэд бүртгүүлэх бүтэн урсгал."""
+    EV = [{"name": "AI Hackathon", "at": "2026-10-18T10:00"}]
+
+    def talk(self, lines, events=None):
+        f = LeadFlow("event", "event_start", None, events=events or self.EV)
+        return f, [f.handle(t) for t in lines]
+
+    def test_register_by_voice_only(self):
+        f, out = self.talk(["эвэнтэд бүртгүүлмээр байна", "за очно", "номин",
+                            "наян тав хорин хоёр хорин зургаа гучин дөрөв", "зөв"])
+        self.assertEqual(out[3], ["readback", "digits:85222634", "confirm"])
+        self.assertEqual((out[-1], f.result), (["event_done"], "saved"))
+
+    def test_cannot_attend(self):
+        f, out = self.talk(["эвентэд бүртгүүлье", "амжихгүй нээ"])
+        self.assertEqual((out[-1], f.result), (["declined"], "declined"))
+
+    def test_question_is_not_yes(self):
+        f, out = self.talk(["эвент", "хэдэн цагт болох вэ"])
+        self.assertEqual((out[-1], f.result), ([], "declined"))   # энгийн горимд асуултад хариулна
+
+    def test_wrong_number_then_retry(self):
+        f, out = self.talk(["эвент", "тийм", "сараа", "88112233", "үгүй буруу", "88112244", "зөв байна"])
+        self.assertEqual(out[4], ["phone_retry"])
+        self.assertEqual((f.phone, f.result), ("88112244", "saved"))
+
+
 class InterruptTest(unittest.IsolatedAsyncioTestCase):
     async def test_keypress_cuts_current_speech(self):
         speaking = asyncio.create_task(asyncio.sleep(10))   # эвентийн огноог уншиж байна
