@@ -317,8 +317,17 @@ def test_reminders():
           and str(bold) not in owner.get("/api/reminders").json()["items"])
 
 
+
+def test_spoken():
+    """Сануулгын дуудлагад товчлуургүй, яриагаар хариулах."""
+    for t, want in (("тийм ирнэ", "1"), ("за очно оо", "1"), ("амжихгүй нээ", "2"), ("ирэхгүй", "2"),
+                    ("цуцлаарай", "2"), ("мэдэхгүй", None), ("", None), ("байна уу", None)):
+        check(f"яриа {t!r} -> {want}", session.spoken_answer(t) == want, session.spoken_answer(t))
+
+
 if __name__ == "__main__":
     test_dtmf()
+    test_spoken()
     test_sip()
     test_reminders()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")

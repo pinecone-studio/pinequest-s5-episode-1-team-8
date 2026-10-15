@@ -25,7 +25,7 @@ def overview(t: Tenant = Depends(current_tenant)):
     with reminders.data_lock:
         people.sync_event_reminders(t.dir)
     return {"codes": {str(k): v for k, v in codes.items()}, "changes": people.changes(t.dir),
-            "booking": people.booking(t.dir), "staff_pin": people.staff_pin(t.dir), "events": people.events(t.dir)}
+            "booking": people.booking(t.dir), "staff_pin": people.staff_pin(t.dir), "events": people.event_defs(t.dir)}
 
 
 class EventsBody(BaseModel):
@@ -37,7 +37,8 @@ def put_events(body: EventsBody, t: Tenant = Depends(current_tenant)):
     if len(body.events) > 50:
         raise HTTPException(400, "Хамгийн ихдээ 50 эвент")
     try:
-        items = [{"name": str(e.get("name", "")).strip(), "at": str(e.get("at", ""))} for e in body.events]
+        items = [{"name": str(e.get("name", "")).strip(), "at": str(e.get("at", "")), "repeat": e.get("repeat")}
+                 for e in body.events]
         if any(len(e["name"]) < 2 for e in items):
             raise ValueError
         people.set_events(t.dir, items)
@@ -45,7 +46,7 @@ def put_events(body: EventsBody, t: Tenant = Depends(current_tenant)):
         raise HTTPException(400, "Эвент бүр нэр, огноо цагтай (жишээ: 2026-10-18T10:00)") from None
     with reminders.data_lock:
         added = people.sync_event_reminders(t.dir)
-    return {"events": people.events(t.dir), "scheduled": added}
+    return {"events": people.event_defs(t.dir), "scheduled": added}
 
 
 @router.post("/staff-pin")

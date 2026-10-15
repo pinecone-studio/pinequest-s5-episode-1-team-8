@@ -14,6 +14,7 @@ AI Receptionist - AudioSocket утасны сервер (олон байгуул
   .venv/bin/python phone_server.py
 """
 import asyncio
+import base64
 import copy
 import faulthandler
 import json
@@ -37,9 +38,9 @@ import english
 import notify
 import people
 import tenant as tenants
-from lead import START_FAQ, LeadFlow, wants_event
+from lead import START_FAQ, LeadFlow, wants_event, wants_register
 import names
-from stt import NAME_DECODES, BilingualSTT, WhisperSTT, create_mn_stt
+from stt import NAME_DECODES, BilingualSTT, ChimegeSTT, WhisperSTT, create_mn_stt
 
 AI_PORT = int(os.getenv("AI_PORT", "9092"))
 
@@ -78,6 +79,7 @@ KEEPALIVE = float(os.getenv("KEEPALIVE", "90"))
 BYE_WORDS = re.compile(r"баяртай|баярлалаа|байхгүй|үгүй|болоо|алга|дараа ярья")
 REPROMPT_AFTER = float(os.getenv("REPROMPT_AFTER", "6"))   # бүртгэлийн асуултын дараах чимээгүй (сек)
 # Нэг товчлуураар хариулдаг алхмууд: баталгаажуулах 1/2, эвент сонгох 1-3, эвентэд бүртгүүлэх эсэх 1/2
+PRECISE_STATES = ("name", "phone")   # хосолсон STT: эдгээр алхамд Чимэгэ (Whisper нэр, дугаарыг хамгийн их алддаг)
 ONE_KEY = {"confirm": "12", "event_pick": "123", "event_offer": "12", "book_offer": "12"}
 DTMF_GAP = 5.0      # сек: товчлуур хооронд үүнээс удаан завсарлавал дугаарыг шинээр эхлүүлнэ
 REVIEW_PORT = int(os.getenv("REVIEW_PORT", "9093"))   # вэбийн "Хариулж чадаагүй" хуудсанд (зөвхөн 127.0.0.1)
@@ -109,7 +111,13 @@ class Models:
         self.embedder = router.embedder             # бүх байгууллага нэг embedding загвар
         self.account_search = acct.Search(self.embedder.query)   # хувийн RAG (бүртгэлээ шалгах/өөрчлөх)
         self.routers = {default.slug: router}
-        self.stt = create_mn_stt()
+        # Хосолсон STT (STT_MODE=hybrid, Чимэгэ token байвал анхдагч): ердийн ярианд хурдан локал Whisper (~1с),
+        # нэр/дугаар хэлэх алхамд нарийвчлалтай Чимэгэ (4-8с). STT_MODE=chimege бол бүгд Чимэгэ, whisper бол бүгд Whisper.
+        token = os.getenv("CHIMEGE_API_TOKEN", "").strip()
+        mode = os.getenv("STT_MODE", "hybrid" if token else "whisper")
+        self.stt = create_mn_stt() if mode == "chimege" else WhisperSTT()
+        self.precise = ChimegeSTT(token) if token and mode == "hybrid" else None
+        print(f"STT горим: {mode}" + (" (нэр, дугаар -> Чимэгэ)" if self.precise else ""))
         self.stt.warmup()
         self.bilingual: BilingualSTT | None = None      # англи горимтой байгууллага байвал л (~0.5GB)
         self.en_routers: dict[str, english.EnglishRouter] = {}
@@ -326,10 +334,21 @@ class Call:
         if self.account and lang != "en" and await self.account_turn(text=text):
             return
         if (lang != "en" and not self.lead and not self.account and "lead" in self.router.meta
-                and wants_event(text, self.upcoming_events())):
+                and (wants_event(text, self.upcoming_events())
+                     or wants_event(self.router.fix_stt(text), self.upcoming_events()))):
             caller = db.caller_of(self.uuid, path=self.tenant.db_path) if self.uuid else None
             self.lead = LeadFlow("event", "event_start", caller, events=self.upcoming_events())
             print("  [эвент] бүртгүүлэх хүсэлт")
+            if await self.lead_turn(text):
+                return
+        elif (lang != "en" and not self.lead and not self.account and "which_ask" in self.router.meta.get("lead", {})
+                and self.upcoming_events() and wants_register(self.router.fix_stt(text))):
+            # "Бүртгүүлмээр байна" (юунд гэдгийг хэлээгүй, эвент байгаа) -> хөтөлбөр үү, эвент үү гэж асууна
+            caller = db.caller_of(self.uuid, path=self.tenant.db_path) if self.uuid else None
+            book = "account" in self.router.meta and bool(people.free_slots(self.tenant.dir))
+            self.lead = LeadFlow("lead", "which_start", caller, events=self.upcoming_events(), book=book)
+            print("  [бүртгэл] хөтөлбөр үү, эвент үү?")
+            self.lead_question = None
             if await self.lead_turn(text):
                 return
         if lang == "en":
@@ -368,6 +387,11 @@ class Call:
     def transcribe(self, audio: np.ndarray) -> tuple[str, str]:
         """-> (бичвэр, хэл). Англи горимгүй байгууллагад хэл танихгүй (хурд, санах ой)."""
         if not self.en:
+            if self.m.precise and self.lead and self.lead.state in PRECISE_STATES:
+                try:
+                    return self.m.precise.transcribe(audio, SR), "mn"
+                except Exception as e:           # Чимэгэ тасарвал хурдан Whisper-ээр үргэлжилнэ
+                    print(f"  [Чимэгэ алдаа -> Whisper] {e}")
             return self.m.stt.transcribe(audio, SR), "mn"
         if self.lead and self.lead.state in ("name", "phone", "confirm"):
             # нэр, дугаар, тийм/үгүй богино -> хэл буруу танигдана: бүртгэлийн хэлээр шууд
@@ -496,7 +520,7 @@ class Call:
     def save_lead(self, flow: LeadFlow) -> str | None:
         """Бүртгэлийг хадгалж, хувийн RAG-д холбоно (код + баримтууд) -> бүртгэлийн код."""
         try:
-            course = flow.event["name"] if flow.event else self.tenant.config().get("lead_label")
+            course = people.event_course(flow.event) if flow.event else self.tenant.config().get("lead_label")
             existing = (db.active_lead(flow.phone, path=self.tenant.db_path)
                         if flow.reason in ("lead", "event") and flow.phone else None)
             if existing:
@@ -523,14 +547,24 @@ class Call:
         except Exception as e:
             print(f"  [хувийн RAG алдаа] {e}")
             return None
-        if flow.phone:
-            try:
-                asyncio.get_running_loop().run_in_executor(
-                    None, notify.send_registration_code, flow.phone, code,
-                    self.tenant.config().get("name") or "")
-            except Exception as e:
-                print(f"  [SMS эхлүүлэх алдаа] {type(e).__name__}")
+        self.send_code_sms(flow, code)
         return code
+
+    def send_code_sms(self, flow: LeadFlow, code: str):
+        """Бүртгэлийн код SMS. Эвентэд бүртгүүлсэн бөгөөд settings.json "sms_on_register": true бол
+        кодын оронд эвентийн нэр, огноо, кодтой сануулга шууд явна (демо: бүртгүүлмэгц утсанд ирнэ)."""
+        if not flow.phone:
+            return
+        company = self.tenant.config().get("name") or ""
+        try:
+            if flow.event and notify.load_settings(self.tenant.settings_path).get("sms_on_register"):
+                args = (notify.send_event_sms, flow.phone, company, flow.event["name"], flow.event.get("at", ""), code)
+                print(f"  [SMS] эвентийн сануулга шууд: {flow.event['name']}")
+            else:
+                args = (notify.send_registration_code, flow.phone, code, company)
+            asyncio.get_running_loop().run_in_executor(None, *args)
+        except Exception as e:
+            print(f"  [SMS эхлүүлэх алдаа] {type(e).__name__}")
 
     def fix_names(self, jobs):
         """Дуудлагын дараа: нэрийн бичлэгийг нэрсийн санууллагатай дахин таниулж, монгол нэрсийн
@@ -639,6 +673,14 @@ class Call:
                f"{what} {ev['old'] or '—'} → {new} ({who})")
         print(f"  [өөрчлөлт] {msg}")
         asyncio.get_running_loop().run_in_executor(None, notify.send, msg, self.tenant.settings_path)
+        phone = lead.get("phone") or lead.get("caller")
+        if ev["field"] == "appointment" and ev["new"] and phone and not ev.get("staff"):
+            try:
+                if notify.load_settings(self.tenant.settings_path).get("sms_on_register"):
+                    text = notify.event_sms_text(self.tenant.config().get("name") or "", "уулзалт", ev["new"], None)
+                    asyncio.get_running_loop().run_in_executor(None, notify.send_sms, phone, text)
+            except Exception as e:
+                print(f"  [SMS эхлүүлэх алдаа] {type(e).__name__}")
 
     def on_dtmf(self, key: str):
         """Утасны товчлуур: бүртгэлийн дугаар асуух үед 8 цифр (эсвэл # хүртэл) цуглуулна.
@@ -1005,10 +1047,18 @@ async def review_http(models: Models, reader, writer):
         head = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 10)
         length = int(re.search(rb"content-length: *(\d+)", head, re.I).group(1))
         body = json.loads(await reader.readexactly(length))
+        if head.startswith(b"POST /stt"):      # вэбийн сануулгын дуудлага (outbound/session.py): яриа -> бичвэр
+            pcm = np.frombuffer(base64.b64decode(body["audio"]), "<i2").astype(np.float32) / 32768
+            text = await asyncio.get_running_loop().run_in_executor(
+                models.stt_pool, models.stt.transcribe, pcm, int(body.get("sr", SR)))
+            data = json.dumps({"text": text}, ensure_ascii=False).encode()
+            raise StopAsyncIteration
         t = tenants.Tenant(body["tenant"])
         router = await asyncio.to_thread(models.router_for, t)
         out = [await review_one(router, q) for q in body.get("questions", [])[:60]]
         data = json.dumps(out, ensure_ascii=False).encode()
+    except StopAsyncIteration:
+        pass
     except Exception as e:
         code, data = "400 Bad Request", json.dumps({"error": str(e)}, ensure_ascii=False).encode()
     writer.write(f"HTTP/1.1 {code}\r\nContent-Type: application/json\r\nContent-Length: {len(data)}\r\n"

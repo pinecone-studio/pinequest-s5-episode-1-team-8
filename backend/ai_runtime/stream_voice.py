@@ -755,10 +755,25 @@ class FAQRouter:
     def _config_path(self) -> str:
         return os.path.join(os.path.dirname(os.path.abspath(self.index_dir)), "config.json")
 
+    # Бүх байгууллагад нийтлэг STT алдаа (бодит дуудлагын логоос, 10-15). Байгууллагын өөрийн stt_fixes араас нь.
+    COMMON_STT_FIXES = [
+        {"heard": r"юм[эе]н[дт]\w*", "fix": "эвентэд"},                       # "юмэнд бүртгүүлмээр"
+        {"heard": r"[эие]в[эе]{1,2}н(?=т)", "fix": "эвен"},                    # "эвээнтэд" -> "эвентэд"
+        {"heard": r"[эи]вээн(?![а-яөүё])", "fix": "эвент"},                   # "ивээн тэтгэвэрт"
+        {"heard": r"тэтгэв\w*( гүйл\w*| мэр| төсөө)?|т[үу]ртгэл\w*", "fix": "бүртгүүлмээр"},
+        {"heard": r"бүтгүү[дл]\w*|бүртгүүлэл", "fix": "бүртгүүлмээр"},
+        {"heard": r"цуцаг(?![а-яөүё])", "fix": "цуцлах"},
+        {"heard": r"мэдээ ?[жл] авъя", "fix": "мэдээлэл авъя"},
+        {"heard": r"мэдээллэнэ|мэдээллээ(?= ?$)", "fix": "мэдээлэл"},
+        {"heard": r"ө?х[өо]д[өо]лб[өэ]р", "fix": "хөтөлбөр"},
+        {"heard": r"колынг", "fix": "кодоо"},
+    ]
+
     def _load_stt_fixes(self):
         """Яриа таних байнгын алдааны засвар (байгууллагын config.json "stt_fixes": [{"heard": regex, "fix": "..."}]).
         Бодит дуудлага 10-06: "зээл"->"дээл", "Bootcamp хөтөлбөр"->"бүдгээ бүтэлбэр", "Pinecone"->"понь кон"."""
-        self.stt_fixes = []
+        self.stt_fixes = [(re.compile(r"(?<![а-яөүёa-z])(?:" + x["heard"] + ")", re.I), x["fix"])
+                          for x in self.COMMON_STT_FIXES]
         try:
             with open(self._config_path(), encoding="utf-8") as f:
                 items = json.load(f).get("stt_fixes", [])
@@ -919,8 +934,9 @@ class FAQRouter:
     def error(self):
         return self.meta["error"]
 
-    def repeat(self):
-        return self.meta.get("repeat")
+    def repeat(self, checked: bool = False):
+        """checked: filler ("Нэг шалгачихъя") тоглосны дараа -> "Шалгаж үзлээ, гэхдээ..." (зөрчилгүй)."""
+        return (checked and self.meta.get("repeat_checked")) or self.meta.get("repeat")
 
     def clarify(self):
         return self.meta.get("clarify")
@@ -1344,7 +1360,9 @@ async def respond(user_text, history, router: FAQRouter, engine: OronTTS,
                 seen.add(fact["text"])
                 merged.append((fact, sc))
         cands = merged[:FACT_CANDIDATES]
+    bridged = False                       # filler/bridge тоглосон эсэх (дараагийн өгүүлбэрийг тааруулна)
     if not picks and cands and SELECT_LLM:
+        bridged = True
         # filler тоглуулж байх зуур LLM аль нь хариулт болохыг дугаараар сонгоно
         task = asyncio.create_task(select_facts(router.expand_query(user_text, prev_user), cands))
         bridge = item if kind == "topic" else router.filler()
@@ -1361,10 +1379,11 @@ async def respond(user_text, history, router: FAQRouter, engine: OronTTS,
 
     # Ойлгосонгүй: эхний удаа дахин асууна (STT алдах нь элбэг), дараалан 2 дахь бол ажилтан
     last_ai = next((m["content"] for m in reversed(history) if m["role"] == "assistant"), None)
-    if router.repeat() and last_ai != repeat_text:
+    rep = router.repeat(checked=bridged) if hasattr(router, "repeat") else None
+    if rep and last_ai not in (repeat_text, rep["text"]):
         note("repeat", top)
-        await play_now(router.repeat())
-        return repeat_text
+        await play_now(rep)
+        return rep["text"]
 
     if not LLM_GENERATE or engine is None:
         note("handoff", top)

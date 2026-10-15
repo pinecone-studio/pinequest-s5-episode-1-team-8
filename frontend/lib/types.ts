@@ -344,7 +344,7 @@ export type PeopleData = {
   staff_pin: string;
   events: EventItem[];
 };
-export type EventItem = { name: string; at: string }; // "2026-10-18T10:00" (Улаанбаатар)
+export type EventItem = { name: string; at: string; repeat?: "daily" }; // "2026-10-18T10:00" (Улаанбаатар); daily = өдөр бүр тэр цагт
 
 // backend/routes/assistant.py — AI туслах (хувийн RAG)
 export type PersonDoc = { field: string; text: string; vector: boolean };
