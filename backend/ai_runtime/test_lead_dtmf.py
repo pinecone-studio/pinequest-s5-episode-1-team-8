@@ -160,6 +160,14 @@ class LeadDtmfTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(yes_no("99112233"))
 
 
+class VoiceYesNoTest(unittest.TestCase):
+    def test_spoken_answers(self):
+        for t in ("тийм ээ", "за очно", "ирнэ ээ", "мэдээж бүртгүүлнэ", "тэгээрэй"):
+            self.assertIs(yes_no(t), True, t)
+        for t in ("үгүй", "амжихгүй нээ", "очихгүй", "чадахгүй байх", "бүртгүүлэхгүй", "дараа"):
+            self.assertIs(yes_no(t), False, t)
+
+
 class InterruptTest(unittest.IsolatedAsyncioTestCase):
     async def test_keypress_cuts_current_speech(self):
         speaking = asyncio.create_task(asyncio.sleep(10))   # эвентийн огноог уншиж байна
