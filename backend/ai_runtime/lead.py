@@ -263,9 +263,12 @@ class LeadFlow:
             if EVENT_RE.search(t) or match_event(text, self.events) or "хоёрд" in t or "сүүлийн" in t:
                 self.reason, self.state, self.book = "event", "event_start", False
                 return self.handle(text)
-            if any(w in t for w in PROGRAM_WORDS) or "эхн" in t or "нэгд" in t or self.pick_tries >= 1:
+            if any(w in t for w in PROGRAM_WORDS) or "эхн" in t or "нэгд" in t:
                 self.state = "name"
                 return ["ask_name_again"]
+            if self.pick_tries >= 1:
+                self.result = "declined"
+                return []
             self.pick_tries += 1
             return ["which_ask"]
 
