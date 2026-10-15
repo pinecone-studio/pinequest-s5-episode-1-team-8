@@ -95,6 +95,7 @@ def main():
     holds = [clip(x) for x in phrases["holds"]]
     error = clip(phrases["error"])
     repeat = clip(phrases["repeat"])
+    repeat_checked = clip(phrases["repeat_checked"]) if phrases.get("repeat_checked") else None
     clarify = clip(phrases["clarify"])
 
     print("\nБүртгэл (lead) / цифр:")
@@ -154,6 +155,7 @@ def main():
         "holds": holds,
         "error": error,
         "repeat": repeat,
+        "repeat_checked": repeat_checked,
         "clarify": clarify,
         "clarify_options": clarify_options,
         "generic_stems": sorted(t.generic_stems()),

@@ -117,5 +117,16 @@ class DuplicateEventTest(unittest.TestCase):
             self.assertIsNone(db.active_lead("85222634", "AI Hackathon", path=path))   # цуцалсан -> дахин бүртгэнэ
 
 
+
+class NoisyEventSttTest(unittest.TestCase):
+    """10-15 бодит дуудлага: STT "эвентэд бүртгүүлмээр байна"-г эвдэж бичсэн."""
+    def test_misheard_requests(self):
+        from lead import wants_event
+        for t in ("эвээн түртгэлдсэн", "ивээн тэтгэвэрт гүйлмээр байна", "эвентэд бүртгүүлмээр байна", "ивэнтэд оролцмоор байна"):
+            self.assertTrue(wants_event(t, []), t)
+        for t in ("эвентийн талаар мэдмээр байна", "эвентийн мэдээлэл авмаар байна", "эвентийн бүртгэлээ цуцлах"):
+            self.assertFalse(wants_event(t, []), t)
+
+
 if __name__ == "__main__":
     unittest.main()

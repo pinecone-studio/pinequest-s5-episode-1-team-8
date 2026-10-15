@@ -919,8 +919,9 @@ class FAQRouter:
     def error(self):
         return self.meta["error"]
 
-    def repeat(self):
-        return self.meta.get("repeat")
+    def repeat(self, checked: bool = False):
+        """checked: filler ("Нэг шалгачихъя") тоглосны дараа -> "Шалгаж үзлээ, гэхдээ..." (зөрчилгүй)."""
+        return (checked and self.meta.get("repeat_checked")) or self.meta.get("repeat")
 
     def clarify(self):
         return self.meta.get("clarify")
@@ -1344,7 +1345,9 @@ async def respond(user_text, history, router: FAQRouter, engine: OronTTS,
                 seen.add(fact["text"])
                 merged.append((fact, sc))
         cands = merged[:FACT_CANDIDATES]
+    bridged = False                       # filler/bridge тоглосон эсэх (дараагийн өгүүлбэрийг тааруулна)
     if not picks and cands and SELECT_LLM:
+        bridged = True
         # filler тоглуулж байх зуур LLM аль нь хариулт болохыг дугаараар сонгоно
         task = asyncio.create_task(select_facts(router.expand_query(user_text, prev_user), cands))
         bridge = item if kind == "topic" else router.filler()
@@ -1361,10 +1364,11 @@ async def respond(user_text, history, router: FAQRouter, engine: OronTTS,
 
     # Ойлгосонгүй: эхний удаа дахин асууна (STT алдах нь элбэг), дараалан 2 дахь бол ажилтан
     last_ai = next((m["content"] for m in reversed(history) if m["role"] == "assistant"), None)
-    if router.repeat() and last_ai != repeat_text:
+    rep = router.repeat(checked=bridged) if hasattr(router, "repeat") else None
+    if rep and last_ai not in (repeat_text, rep["text"]):
         note("repeat", top)
-        await play_now(router.repeat())
-        return repeat_text
+        await play_now(rep)
+        return rep["text"]
 
     if not LLM_GENERATE or engine is None:
         note("handoff", top)
