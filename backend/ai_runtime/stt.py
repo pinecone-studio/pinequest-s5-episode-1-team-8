@@ -8,10 +8,13 @@
 """
 import offline  # noqa: F401  (хамгийн эхэнд: HF загварыг зөвхөн локалаас)
 import os
+import io
 import re
 import threading
 import time
+import wave
 
+import httpx
 import numpy as np
 from scipy.signal import resample_poly
 
@@ -148,11 +151,76 @@ class WhisperSTT:
         self.transcribe(np.zeros(16000, dtype=np.float32), 16000)
 
 
+class ChimegeSTT:
+    """Монгол STT: float32 mono -> 16kHz PCM WAV -> Чимэгэ API."""
+
+    def __init__(self, token: str):
+        self.token = token
+
+    def transcribe(self, audio: np.ndarray, sr: int) -> str:
+        if audio.ndim != 1 or sr <= 0 or not np.isfinite(audio).all():
+            raise ValueError("STT requires finite mono audio and a positive sample rate")
+        # Warmup, keepalive-ийн чимээгүй аудиог төлбөртэй API руу явуулахгүй.
+        if not audio.size or not np.any(audio):
+            return ""
+        if sr != 16000:
+            audio = resample_poly(audio, 16000, sr)
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(16000)
+            wav.writeframes((np.clip(audio, -1, 1) * 32767).astype("<i2").tobytes())
+        try:
+            response = httpx.post(
+                "https://api.chimege.com/v1.2/stt-long", content=buffer.getvalue(),
+                headers={"Content-Type": "audio/wav", "Token": self.token}, timeout=15)
+            response.raise_for_status()
+            job = response.json()
+            if not isinstance(job, dict) or not isinstance(job.get("uuid"), str) or not job["uuid"]:
+                raise ValueError("Missing transcription UUID")
+            deadline = time.monotonic() + 30
+            while True:
+                remaining = deadline - time.monotonic() - 1
+                if remaining <= 0:
+                    raise RuntimeError("Chimege STT transcription timed out")
+                # Үйлчилгээний заавар: үр дүнг хамгийн багадаа 1 секундийн зайтай шалгана.
+                time.sleep(1)
+                response = httpx.get(
+                    "https://api.chimege.com/v1.2/stt-long-transcript",
+                    headers={"Token": self.token, "UUID": job["uuid"]}, timeout=min(15, remaining))
+                response.raise_for_status()
+                result = response.json()
+                if isinstance(result, list) and len(result) == 1:
+                    result = result[0]
+                if not isinstance(result, dict) or not isinstance(result.get("done"), bool):
+                    raise ValueError("Invalid transcription status")
+                if result["done"]:
+                    if not isinstance(result.get("transcription"), str):
+                        raise ValueError("Missing transcription text")
+                    return result["transcription"].strip()
+        except httpx.HTTPStatusError as exc:
+            raise RuntimeError(f"Chimege STT HTTP {exc.response.status_code}") from None
+        except httpx.RequestError:
+            raise RuntimeError("Chimege STT connection failed or timed out") from None
+        except ValueError:
+            raise RuntimeError("Chimege STT returned an invalid response") from None
+
+    def warmup(self):
+        pass
+
+
+def create_mn_stt() -> "ChimegeSTT | WhisperSTT":
+    token = os.getenv("CHIMEGE_API_TOKEN", "").strip()
+    print(f"Монгол STT: {'Chimege' if token else 'Whisper'}")
+    return ChimegeSTT(token) if token else WhisperSTT()
+
+
 class BilingualSTT:
     """Монгол/англи: олон хэлтэй загвар хэлийг тодорхойлно. Англи -> олон хэлтэй загвар таниулна,
     монгол -> монгол fine-tune (англи үгтэй монгол яриа ч монгол гэж танигдана)."""
 
-    def __init__(self, mn: WhisperSTT, multi: str = MLX_MULTI):
+    def __init__(self, mn: WhisperSTT | ChimegeSTT, multi: str = MLX_MULTI):
         self.mn = mn
         self.multi = WhisperSTT(multi)
 
