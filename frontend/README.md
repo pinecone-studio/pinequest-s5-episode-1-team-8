@@ -12,6 +12,10 @@ bun install
 bun dev              # http://localhost:3000
 ```
 
+Dev болон production build хоёул Webpack ашиглана. Turbopack dev горимд
+`frontend/frontend/.next` гэсэн давхар generated хавтас үүсч байсан тул dev командыг
+`next dev --webpack` болгосон. Өмнөх dev серверээ `Ctrl+C`-ээр зогсоогоод дахин асаана.
+
 `/api/*` хүсэлтүүд backend руу дамжина (`next.config.ts` → `API_URL`, анхдагч `http://127.0.0.1:8100`).
 
 ```bash
