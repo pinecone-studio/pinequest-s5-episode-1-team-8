@@ -108,7 +108,7 @@ def main():
     dates = {x: clip(x) for x in people.all_date_texts(people.booking(t.dir))}
     # Эвентийн нэр ("Эвентэд бүртгүүлмээр байна" -> "<нэр> <огноо> болно"). Тохиргоо -> Эвент-ээс
     # + хөтөлбөрийн нэр (lead_label): цуцлахын өмнө "Pinecone Bootcamp. Энэ бүртгэлээ цуцлах уу?"
-    names = [e["name"] for e in people.events(t.dir)] + ([cfg["lead_label"]] if cfg.get("lead_label") else [])
+    names = [e["name"] for e in people.event_defs(t.dir)] + ([cfg["lead_label"]] if cfg.get("lead_label") else [])
     events = {n: clip(n) for n in dict.fromkeys(names)}
 
     print("\nСэдвийн bridge:")

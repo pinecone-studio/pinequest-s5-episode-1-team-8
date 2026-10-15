@@ -508,7 +508,7 @@ class Call:
     def save_lead(self, flow: LeadFlow) -> str | None:
         """Бүртгэлийг хадгалж, хувийн RAG-д холбоно (код + баримтууд) -> бүртгэлийн код."""
         try:
-            course = flow.event["name"] if flow.event else self.tenant.config().get("lead_label")
+            course = people.event_course(flow.event) if flow.event else self.tenant.config().get("lead_label")
             existing = (db.active_lead(flow.phone, path=self.tenant.db_path)
                         if flow.reason in ("lead", "event") and flow.phone else None)
             if existing:

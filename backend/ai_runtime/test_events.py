@@ -1,4 +1,5 @@
 """Эвентийн бүртгэл утсаар (lead.py): "Эвентэд бүртгүүлмээр байна" ба энгийн бүртгэлийг ялгах, эвент сонгох."""
+import os
 import unittest
 
 from lead import LeadFlow, match_event, wants_event
@@ -148,6 +149,23 @@ class WhichRegistrationTest(unittest.TestCase):
         g.handle("бүртгүүлмээр байна")
         self.assertEqual(g.handle("хөтөлбөрт"), ["ask_name_again"])
         self.assertEqual((g.reason, g.book), ("lead", True))
+
+
+
+class DailyEventTest(unittest.TestCase):
+    def test_daily_expands_and_courses_are_per_day(self):
+        import tempfile, people
+        from datetime import datetime
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "data"))
+            people.set_events(d, [{"name": "Нээлттэй өдөрлөг", "at": "2026-10-15T18:00", "repeat": "daily"}])
+            now = datetime(2026, 10, 20, 19, 0, tzinfo=people.TZ)        # 18:00 өнгөрсөн -> маргаашаас
+            evs = people.events(d, now)
+            self.assertEqual(len(evs), people.REPEAT_DAYS)
+            self.assertEqual(evs[0]["at"], "2026-10-21T18:00")
+            course = people.event_course(evs[1])
+            self.assertEqual(course, "Нээлттэй өдөрлөг 2026-10-22")
+            self.assertEqual(people.event_defs(d)[0]["repeat"], "daily")
 
 
 if __name__ == "__main__":

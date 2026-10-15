@@ -430,21 +430,58 @@ def cancel_registration(tdir: str, lead_id: int, source: str = "ai", call_uuid: 
     return row["status"]
 
 
-def events(tdir: str) -> list[dict]:
-    """Байгууллагын эвентүүд: [{"name": "AI Hackathon эвент", "at": "2026-10-18T10:00"}]."""
+REPEAT_DAYS = 7          # давтагдах эвентийн ойрын хэдэн өдрийг гаргах
+
+
+def event_defs(tdir: str) -> list[dict]:
+    """Хадгалсан эвентүүд (вэбийн засварт): [{"name", "at", "repeat"?: "daily"}]. "daily" бол "at" нь эхлэх өдөр, цаг."""
     return [e for e in _read_json(settings_path(tdir)).get("events", []) if e.get("name") and e.get("at")]
+
+
+def events(tdir: str, now: datetime | None = None) -> list[dict]:
+    """Тохиолдлууд: [{"name": "AI Hackathon", "at": "2026-10-18T10:00"}]. Өдөр бүрийн эвентээс ойрын REPEAT_DAYS
+    өдрийг гаргана (өнөөдрийнх цаг нь өнгөрөөгүй бол багтана) — сар бүр гараар нэмэх шаардлагагүй."""
+    now = now or datetime.now(TZ)
+    out = []
+    for e in event_defs(tdir):
+        if e.get("repeat") != "daily":
+            out.append({"name": e["name"], "at": e["at"]})
+            continue
+        first = parse_local(e["at"])
+        day = max(first, now.replace(hour=first.hour, minute=first.minute, second=0, microsecond=0))
+        if day < now:
+            day += timedelta(days=1)
+        out += [{"name": e["name"], "at": fmt(day + timedelta(days=i)), "repeat": "daily"} for i in range(REPEAT_DAYS)]
+    return sorted(out, key=lambda x: x["at"])
 
 
 def set_events(tdir: str, items: list[dict]):
     st = _read_json(settings_path(tdir))
-    st["events"] = [{"name": " ".join(e["name"].split())[:120], "at": fmt(parse_local(e["at"]))} for e in items]
+    st["events"] = [{"name": " ".join(e["name"].split())[:120], "at": fmt(parse_local(e["at"])),
+                     **({"repeat": "daily"} if e.get("repeat") == "daily" else {})} for e in items]
     _write_json(settings_path(tdir), st)
 
 
+def event_course(ev: dict) -> str:
+    """Бүртгэлийн нэр: давтагдах эвентэд огноотой ("Нээлттэй өдөрлөг 2026-10-16") — өдөр бүрт тусдаа бүртгэл."""
+    return f"{ev['name']} {ev['at'][:10]}" if ev.get("repeat") == "daily" else ev["name"]
+
+
 def event_of(tdir: str, course: str | None) -> dict | None:
-    """Бүртгэлийн хөтөлбөр/эвентийн нэр -> эвент (нэр нь агуулагдсан бол)."""
+    """Бүртгэлийн хөтөлбөр/эвентийн нэр -> эвент (нэр нь агуулагдсан бол). Огноотой бол тэр өдрийнхийг."""
     c = (course or "").lower()
-    return next((e for e in events(tdir) if e["name"].lower() in c or (c and c in e["name"].lower())), None)
+    m = re.search(r"\d{4}-\d{2}-\d{2}", c)
+    evs = events(tdir)
+    if m:
+        hit = next((e for e in evs if e["at"].startswith(m.group(0)) and e["name"].lower() in c), None)
+        if hit:
+            return hit
+        # өнгөрсөн өдрийн давтагдах эвент (events() зөвхөн ирээдүйнхийг гаргадаг)
+        for d in event_defs(tdir):
+            if d.get("repeat") == "daily" and d["name"].lower() in c:
+                t = parse_local(d["at"])
+                return {"name": d["name"], "at": f"{m.group(0)}T{t.strftime('%H:%M')}", "repeat": "daily"}
+    return next((e for e in evs if e["name"].lower() in c or (c and c in e["name"].lower())), None)
 
 
 def sync_event_reminders(tdir: str, now: datetime | None = None) -> int:
