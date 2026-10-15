@@ -86,10 +86,22 @@ class LeadDtmfTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(flow.handle("Билэгсайхан"), ["ask_phone"])
         self.assertEqual(flow.name, "Билэгсайхан")
 
-    def test_filler_name_accepted_after_one_retry(self):
+    def test_filler_name_is_never_saved(self):
         flow = LeadFlow("lead", "name", None)
-        flow.handle("юу")
-        self.assertEqual(flow.handle("юу"), ["ask_phone"])
+        for text in ("юу", "юу", "99112233", "Миний нэр", "..."):
+            self.assertEqual(flow.handle(text), ["ask_name_again"])
+            self.assertEqual(flow.state, "name")
+            self.assertIsNone(flow.name)
+
+    def test_spoken_name_is_cleaned(self):
+        for text, expected in (("За, намайг Батболд гэдэг юм аа", "Батболд"),
+                               ("Сайн байна уу. Миний нэр Номин-Эрдэнэ", "Номин-Эрдэнэ"),
+                               ("Би Доржийн Энхтүвшин байна", "Доржийн Энхтүвшин"),
+                               ("  оюун-эрдэнэ  ", "Оюун-Эрдэнэ")):
+            with self.subTest(text=text):
+                flow = LeadFlow("lead", "name", None)
+                self.assertEqual(flow.handle(text), ["ask_phone"])
+                self.assertEqual(flow.name, expected)
 
     async def test_silent_caller_gets_question_again(self):
         # AI ярьж байхад "зөв" гэвэл алга болдог -> чимээгүй бол асуултаа давтана, товчлуур дарвал үгүй

@@ -71,10 +71,17 @@ def parse_phone(text: str) -> str:
 
 def clean_name(text: str) -> str:
     """"Миний нэр Батболд", "Намайг Батболд гэдэг" -> "Батболд"."""
-    t = re.sub(r"[^\w\s-]", " ", text).strip()
-    t = re.sub(r"^(миний\s+нэр(ийг)?|намайг|нэр\s+минь|би)\s+", "", t, flags=re.I)
-    t = re.sub(r"\s+(гэдэг|гэнэ|гэж\s+хэлдэг|байна|байгаа)$", "", t, flags=re.I)
-    return " ".join(w.capitalize() for w in t.split()) or text.strip()
+    t = " ".join(re.sub(r"[^а-яөүёa-z\s-]", " ", text, flags=re.I).split())
+    t = re.sub(r"^(?:(?:сайн байна уу|за|аа|ээ|өө|тийм ээ)\s+)+", "", t, flags=re.I)
+    t = re.sub(r"^(?:миний\s+нэр(?:ийг)?|намайг|нэр\s+минь|би)\s+", "", t, flags=re.I)
+    t = re.sub(r"\s+(?:гэдэг|гэнэ|гэж\s+(?:хэлдэг|байгаа)|байна|байгаа)(?:\s+(?:юм|шүү|даа|аа|ээ|оо|өө))*$", "", t, flags=re.I)
+    t = re.sub(r"\s+(?:аа|ээ|оо|өө)$", "", t, flags=re.I)
+    words = re.findall(r"[а-яөүёa-z]+", t.lower())
+    if not words or set(words) <= {"юу", "юм", "уу", "үү", "вэ", "байна", "а", "аа", "ээ", "өө", "оо",
+                                    "за", "тийм", "үгүй", "одоо", "тэр", "энэ", "хэн", "нэр", "нэрээ",
+                                    "миний", "би", "намайг", "гэдэг", "гэнэ", "гэсэн", "дээ"}:
+        return ""
+    return " ".join(w.title() for w in t.split())
 
 
 def yes_no(text: str) -> bool | None:
