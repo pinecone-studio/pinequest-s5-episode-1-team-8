@@ -535,14 +535,24 @@ class Call:
         except Exception as e:
             print(f"  [хувийн RAG алдаа] {e}")
             return None
-        if flow.phone:
-            try:
-                asyncio.get_running_loop().run_in_executor(
-                    None, notify.send_registration_code, flow.phone, code,
-                    self.tenant.config().get("name") or "")
-            except Exception as e:
-                print(f"  [SMS эхлүүлэх алдаа] {type(e).__name__}")
+        self.send_code_sms(flow, code)
         return code
+
+    def send_code_sms(self, flow: LeadFlow, code: str):
+        """Бүртгэлийн код SMS. Эвентэд бүртгүүлсэн бөгөөд settings.json "sms_on_register": true бол
+        кодын оронд эвентийн нэр, огноо, кодтой сануулга шууд явна (демо: бүртгүүлмэгц утсанд ирнэ)."""
+        if not flow.phone:
+            return
+        company = self.tenant.config().get("name") or ""
+        try:
+            if flow.event and notify.load_settings(self.tenant.settings_path).get("sms_on_register"):
+                args = (notify.send_event_sms, flow.phone, company, flow.event["name"], flow.event.get("at", ""), code)
+                print(f"  [SMS] эвентийн сануулга шууд: {flow.event['name']}")
+            else:
+                args = (notify.send_registration_code, flow.phone, code, company)
+            asyncio.get_running_loop().run_in_executor(None, *args)
+        except Exception as e:
+            print(f"  [SMS эхлүүлэх алдаа] {type(e).__name__}")
 
     def fix_names(self, jobs):
         """Дуудлагын дараа: нэрийн бичлэгийг нэрсийн санууллагатай дахин таниулж, монгол нэрсийн

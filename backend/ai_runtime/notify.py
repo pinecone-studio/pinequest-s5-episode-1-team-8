@@ -23,6 +23,22 @@ def send_registration_code(phone: str | None, code: str, company: str = "") -> b
     return send_sms(phone, f"{label}Бүртгэлийн код: {code}. Бусдад бүү хэл.")
 
 
+def event_sms_text(company: str, event: str, at: str, code: str | None) -> str:
+    """Эвентэд бүртгүүлэхэд шууд очих сануулга: "Pinecone Academy: AI Hackathon 10/18 10:00 цагт. Код: 4052"."""
+    from datetime import datetime
+    try:
+        when = datetime.strptime(at[:16], "%Y-%m-%dT%H:%M").strftime("%m/%d %H:%M")
+    except (TypeError, ValueError):
+        when = ""
+    label = f"{company.strip()[:20]}: " if company and company.strip() else ""
+    text = f"{label}Сануулга - {event[:40]} {when} цагт. Таныг бүртгэлээ."
+    return text + (f" Код: {code}" if code and re.fullmatch(r"\d{4}", code) else "")
+
+
+def send_event_sms(phone: str | None, company: str, event: str, at: str, code: str | None) -> bool:
+    return send_sms(phone, event_sms_text(company, event, at, code))
+
+
 def send_sms(phone: str | None, message: str) -> bool:
     """SMS (бүртгэлийн код, уулзалт/эвентийн сануулга). SMS_API_KEY+SMS_API_TOKEN (SendSMS.mn) эсвэл
     SMS_API_URL+SMS_API_TOKEN (Bearer gateway). SMS_DRY_RUN=1 бол илгээхгүй (туршилт)."""

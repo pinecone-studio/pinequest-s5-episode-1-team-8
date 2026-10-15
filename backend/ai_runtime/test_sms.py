@@ -60,5 +60,13 @@ class RegistrationSmsTest(unittest.TestCase):
         self.assertLessEqual(len(post.call_args.kwargs["json"]["message"]), 69)
 
 
+class EventSmsTextTest(unittest.TestCase):
+    def test_event_reminder_text(self):
+        import notify
+        t = notify.event_sms_text("Pinecone Academy", "AI Hackathon", "2026-10-18T10:00", "4052")
+        self.assertEqual(t, "Pinecone Academy: Сануулга - AI Hackathon 10/18 10:00 цагт. Таныг бүртгэлээ. Код: 4052")
+        self.assertNotIn("Код", notify.event_sms_text("", "Demo Day", "bad", None))
+
+
 if __name__ == "__main__":
     unittest.main()
