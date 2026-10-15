@@ -326,6 +326,15 @@ class Call:
             return
         self.log("user", text, stt_sec=stt_sec)
         t1 = time.perf_counter()
+        if STILL_THERE.search(text.lower()) and self.history and self.last_reply:
+            # "Байна уу?" (AI чимээгүй болсон гэж бодсон) -> мэндчилгээг эхнээс нь биш, сүүлийн хэлснээ давтана
+            for wav, sr in self.last_reply:
+                await self.play(wav, sr)
+            print(f"  AI (давтав): {self.last_reply_text}")
+            self.log("assistant", self.last_reply_text, route="repeat_last")
+            if self.lead:
+                self.arm_reprompt(list(self.last_reply))
+            return
         name_flow = self.lead if self.lead and self.lead.state == "name" else None
         if self.lead and await self.lead_turn(text):
             if name_flow and name_flow.state != "name":    # нэрээ хэлсэн бичлэг
@@ -468,6 +477,8 @@ class Call:
             if flow.duplicate:
                 flow.saved, flow.result, flow.state = False, "duplicate", "duplicate"
                 keys = ["already_registered"]
+                if flow.event and "already_registered" not in router.meta.get("lead", {}):
+                    keys = ["event_already"]          # аудиогүй бол чимээгүй болохгүй (эвентийнх бэлэн)
             if code and not en and "account" in router.meta:
                 code_keys = ["your_code", f"digits:{code}", "code_remember"]
         if code_keys and keys:
@@ -1008,6 +1019,7 @@ def selector_state(router) -> str:
     return f"{'идэвхтэй' if sel.enabled else 'идэвхгүй'}, {len(router.sel_answers)} хариулт"
 
 
+STILL_THERE = re.compile(r"^\W*(байна уу|алл?о+|сонс(ож|огдож) байна уу)\W*$")
 REPEAT_ASK = re.compile(r"\b(ахиад|дахиад|дахин)\s+(хэл|нэг\s+хэл)|давтаж\s+хэл|сонсогдсонгүй")
 GENERIC_FAQ = ("smalltalk_", "phone_", "repeat_last", "register", "human_request", "contact_phone")
 

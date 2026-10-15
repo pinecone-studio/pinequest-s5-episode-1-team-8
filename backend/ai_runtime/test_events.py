@@ -207,6 +207,11 @@ class RealCallsOct15Test(unittest.TestCase):
         for text in ["ахиад хэл дээ", "дахиад хэлээч", "сонсогдсонгүй"]:
             self.assertTrue(REPEAT_ASK.search(text), text)
         self.assertFalse(REPEAT_ASK.search("дахин бүртгүүлье"))
+        from phone_server import STILL_THERE
+        for text in ["байна уу", "алло", "сонсож байна уу?"]:
+            self.assertTrue(STILL_THERE.search(text), text)
+        self.assertFalse(STILL_THERE.search("сайн байна уу"))
+        self.assertFalse(STILL_THERE.search("эвент байна уу"))
 
 
 if __name__ == "__main__":
