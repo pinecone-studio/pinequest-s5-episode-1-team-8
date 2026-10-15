@@ -44,6 +44,8 @@ DEFAULT_PHRASES_EN = {
         "declined": "Alright. Is there anything else I can help you with?",
         "ask_name_again": "Sure. May I have your name, please?",
         "already_registered": "You are already registered.",
+        "already": "You are already registered. Is there anything else I can help you with?",
+        "already_book": "You are already registered. Would you like to book an appointment?",
     },
 }
 # Бүх байгууллагад автоматаар үүсдэг FAQ (tenant.standard_faq)-ийн англи хувилбар. Хаяг, цагийн хуваарь
