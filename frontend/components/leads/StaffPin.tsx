@@ -19,7 +19,7 @@ export function StaffPin({ initial }: { initial: string }) {
     }, "Шинэ код үүслээ — хуучин нь хүчингүй");
 
   return (
-    <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-6">
       <div>
         <div className="text-[13px] uppercase tracking-wider text-muted">Ажилтны код</div>
         <button type="button" onClick={() => setShown(!shown)} className="font-mono text-2xl tracking-[0.3em]" title="Харах/нуух">
