@@ -34,6 +34,8 @@ import numpy as np
 import sounddevice as sd
 import soundfile as sf
 
+import mn_lexicon
+import names
 from selector import Selector, normalize
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
@@ -771,7 +773,26 @@ class FAQRouter:
     def fix_stt(self, text: str) -> str:
         for pattern, fix in self.stt_fixes:
             text = pattern.sub(fix, text)
+        corrector = getattr(self, "corrector", None)
+        if corrector:                     # монгол толь + байгууллагын үг (mn_lexicon), < 1мс
+            text, changes = corrector.fix(text)
+            if changes:
+                print(f"  [толь засвар] {', '.join(f'{a}->{b}' for a, b in changes)}")
         return text
+
+    def _build_corrector(self):
+        """Байгууллагын бичвэр (FAQ асуулт/хариулт, мэдээлэл, stt_fixes) -> зөв үгсийн толь."""
+        texts = list(self.meta.get("questions", [])) + [f.get("answer", "") for f in self.meta.get("faq", [])]
+        texts += [f.get("text", "") for f in self.facts] + [c.get("text", "") if isinstance(c, dict) else str(c)
+                                                            for c in self.kb_chunks]
+        fixes = [fix for _, fix in self.stt_fixes]
+        tenant_names = os.path.join(os.path.dirname(os.path.abspath(self.index_dir)), "names.txt")
+        try:
+            self.corrector = mn_lexicon.Corrector(texts, extra_words=fixes,
+                                                  known=list(names.lexicon(tenant_names).values()))
+        except Exception as e:            # толь эвдэрсэн ч дуудлага үргэлжилнэ
+            print(f"  [анхаар] толь ачаалж чадсангүй: {e}")
+            self.corrector = None
 
     def _load(self):
         index_dir, kb_dir = self.index_dir, self.kb_dir
@@ -828,6 +849,7 @@ class FAQRouter:
             self.audio[fact["audio"]] = sf.read(fact["audio"], dtype="float32")
         self.tone = hold_tone()
         self._last_hold = getattr(self, "_last_hold", None)
+        self._build_corrector()
         # Байгууллагын тодруулах сэдэв, ерөнхий үгс (build_faq_audio.py config-оос). Хуучин индекст алга.
         opts = self.meta.get("clarify_options")
         self.clarify_options = ([(set(o["keys"]), o["question"]) for o in opts] if opts is not None
