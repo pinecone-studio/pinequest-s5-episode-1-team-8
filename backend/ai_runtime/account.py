@@ -112,10 +112,10 @@ def time_intent(text: str) -> str | None:
     """ "Цагаа цөлөөлөх гэсэн", "цагаа төлөө" (STT эвдсэн "солъё") -> цаг солих; "цаг хэзээ" -> асуух."""
     if not any(x.startswith("цаг") for x in stems(text)):
         return None
-    return "ask_time" if re.search(r"\b(хэзээ|хэдэн|хэд|вэ|бэ)\b", text.lower()) else "change_time"
+    return "ask_time" if re.search(r"\b(хэзээ|хэдэн|хэд|вэ|бэ|уу|үү|юу)\b", text.lower()) else "change_time"
 
 
-CHANGE_STEMS = ("шилж", "соли", "солъ", "соль", "өөрч", "хойш", "урагш")
+CHANGE_STEMS = ("шилж", "соли", "солъ", "соль", "сөлү", "сөли", "өөрч", "хойш", "урагш")   # 10-16 STT: "сөлүүлээ"
 CANT_GO = ("чадах", "больс", "явах", "суух", "оролц", "ирэхг", "очихг")
 
 

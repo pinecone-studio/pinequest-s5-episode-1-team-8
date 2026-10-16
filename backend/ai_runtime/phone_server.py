@@ -645,7 +645,9 @@ class Call:
         андуурахгүй, шууд кодоо асууж (my_account) тэр хүсэлтээр нь үргэлжлүүлнэ."""
         if "account" not in self.router.meta:
             return False
-        intent = acct.keyword_intent(self.router.fix_stt(text))
+        fixed = self.router.fix_stt(text)
+        # "цагаас илүү мэрээ", "цагийг сөлүүлээ" (STT эвдсэн "солиулмаар") -> "цаг" + асуулт биш = цаг солих
+        intent = acct.keyword_intent(fixed) or (acct.time_intent(fixed) if OWN_TIME.search(fixed.lower()) else None)
         faq = next((f for f in self.router.meta["faq"] if f["id"] == "my_account"), None)
         if intent not in ("change_time", "change_phone", "cancel", "cancel_registration") or not faq:
             return False
@@ -1085,6 +1087,7 @@ def selector_state(router) -> str:
     return f"{'идэвхтэй' if sel.enabled else 'идэвхгүй'}, {len(router.sel_answers)} хариулт"
 
 
+OWN_TIME = re.compile(r"\bцаг(аа|ийг|аас)\w*")      # "цагаа/цагийг ..." (хичээлийн "цагийн хуваарь" биш)
 STILL_THERE = re.compile(r"^\W*(байна уу|алл?о+|сонс(ож|огдож) байна уу)\W*$")
 REPEAT_ASK = re.compile(r"\b(ахиад|дахиад|дахин)\s+(хэл|нэг\s+хэл)|давтаж\s+хэл|сонсогдсонгүй")
 GENERIC_FAQ = ("smalltalk_", "phone_", "repeat_last", "register", "human_request", "contact_phone")

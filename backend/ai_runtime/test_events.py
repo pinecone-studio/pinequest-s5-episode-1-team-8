@@ -319,5 +319,20 @@ class RealCallsOct16Test(unittest.TestCase):
         self.assertTrue(f.finished)
 
 
+    def test_garbled_change_time_requests(self):
+        # 10-16 дахин: STT "солиулмаар"-ыг эвдсэн; ажилтны саналын үед "үгүй, цагийг соль"
+        import account
+        for text in ["нээлттэй удирдлагын цагаас илүү мэрээ", "нээлттэй өдөр л би хүн цагийг сөлүүлээ",
+                     "үгүй ээ энэ өдөрлөгийнхөө цагийг соль хэлье"]:
+            self.assertEqual(account.keyword_intent(text) or account.time_intent(text), "change_time", text)
+        for text in ["нээлттэй өдөрлөг хэдэн цагт болох вэ", "24 цаг ажилладаг уу"]:
+            self.assertNotEqual(account.keyword_intent(text) or account.time_intent(text), "change_time", text)
+        from phone_server import OWN_TIME
+        self.assertTrue(OWN_TIME.search("цагийг сөлүүлээ") and OWN_TIME.search("цагаас илүү мэрээ"))
+        self.assertFalse(OWN_TIME.search("хичээлийн цагийн хуваарь"))
+        f = LeadFlow("handoff", "offer", None)
+        self.assertEqual(f.handle("үгүй ээ энэ өдөрлөгийнхөө цагийг соль хэлье"), [])
+
+
 if __name__ == "__main__":
     unittest.main()
