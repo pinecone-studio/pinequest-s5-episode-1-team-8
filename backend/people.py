@@ -430,6 +430,30 @@ def cancel_registration(tdir: str, lead_id: int, source: str = "ai", call_uuid: 
     return row["status"]
 
 
+def set_event(tdir: str, lead_id: int, ev: dict, source: str = "ai", call_uuid: str | None = None,
+              now: datetime | None = None) -> str | None:
+    """Эвентийн бүртгэлийг өөр өдрийнх рүү шилжүүлнэ (өдөр бүрийн эвент: "Баасан биш Бямба гарагт очъё")
+    -> хуучин бүртгэлийн нэр. Сануулгын дуудлага, SMS шинэ өдрөөр дахин товлогдоно."""
+    now = now or datetime.now(TZ)
+    course = event_course(ev)
+    with connect(tdir) as con:
+        row = con.execute("SELECT course FROM leads WHERE id=?", (lead_id,)).fetchone()
+        if not row:
+            raise KeyError(lead_id)
+        con.execute("UPDATE leads SET course=? WHERE id=?", (course, lead_id))
+        log_change(con, lead_id, "course", row["course"], course, source, call_uuid)
+    at = parse_local(ev["at"])
+    path = reminders_path(tdir)
+    data = _read_json(path)
+    item = data.get("items", {}).get(str(lead_id))
+    if item and item.get("event"):
+        item.update(appointment=fmt(at), call_at=max((at - timedelta(days=1)).replace(hour=11, minute=0), now).timestamp(),
+                    status="scheduled", attempts=0, sms_at=None, sms_tries=0, event=ev["name"])
+        _write_json(path, data)
+    docs(tdir, lead_id)
+    return row["course"]
+
+
 REPEAT_DAYS = 7          # давтагдах эвентийн ойрын хэдэн өдрийг гаргах
 
 

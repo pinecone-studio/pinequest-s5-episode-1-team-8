@@ -64,7 +64,7 @@ STAFF_INTENTS = {
 DOC_INTENT = {"phone": "ask_phone", "appointment": "ask_time", "status": "ask_status", "attendance": "ask_attendance"}
 MENU_KEYS = {"1": "change_phone", "2": "change_time", "3": "cancel", "4": "cancel_registration"}
 ORDINALS = {"нэг": 0, "эхн": 0, "нэгд": 0, "хоёр": 1, "хоёрд": 1, "гура": 2, "гурв": 2, "сүүл": 2}
-WEEKDAY_STEMS = {"дава": 0, "мягм": 1, "лхаг": 2, "пүрэ": 3, "пүрв": 3, "баас": 4, "бямб": 5, "ням": 6}
+WEEKDAY_STEMS = {"дава": 0, "мягм": 1, "лхаг": 2, "пүрэ": 3, "пүрв": 3, "баас": 4, "баат": 4, "бямб": 5, "ням": 6}
 
 
 def stems(text: str) -> set[str]:
@@ -105,7 +105,14 @@ def detect_intent(search: Search, text: str) -> str | None:
     if ranked and ranked[0][1] >= MATCH:
         return ranked[0][0]
     # STT "эвээн тийм бүртгэлээ цуцаг" -> утгаар босгоос доош -> түлхүүр үгээр (код асуусны дараа цэс уншихгүй)
-    return keyword_intent(text)
+    return keyword_intent(text) or time_intent(text)
+
+
+def time_intent(text: str) -> str | None:
+    """ "Цагаа цөлөөлөх гэсэн", "цагаа төлөө" (STT эвдсэн "солъё") -> цаг солих; "цаг хэзээ" -> асуух."""
+    if not any(x.startswith("цаг") for x in stems(text)):
+        return None
+    return "ask_time" if re.search(r"\b(хэзээ|хэдэн|хэд|вэ|бэ)\b", text.lower()) else "change_time"
 
 
 CHANGE_STEMS = ("шилж", "соли", "солъ", "соль", "өөрч", "хойш", "урагш")
@@ -151,6 +158,8 @@ class AccountFlow:
         self.new_phone = None
         self.offered: list[datetime] = []
         self.chosen: datetime | None = None
+        self.offered_events: list[dict] = []   # эвентийн бүртгэл: өөр өдрийн эвентүүд (цаг солих)
+        self.menu_tries = 0
         self.finished = False
         self.events: list[dict] = []  # өөрчлөлтүүд -> phone_server ажилтанд мэдэгдэнэ
 
@@ -229,7 +238,13 @@ class AccountFlow:
             self.state = "target"
             return self.handle(text)
         intent = self._retrieve(text)
-        return self._do(intent, text) if intent else None
+        if intent:
+            self.menu_tries = 0
+            return self._do(intent, text)
+        if self.menu_tries < 1:               # "цагаа төлөө" (STT) -> цэснээс гарч код дахин асуухгүй
+            self.menu_tries += 1
+            return ["menu"]
+        return None
 
     # ---------- ажилтан ----------
 
@@ -293,9 +308,17 @@ class AccountFlow:
             return keys + self._do(self.intent)
         return keys + self._appointment_keys() + ["menu"]
 
+    def _event(self) -> dict | None:
+        """Энэ бүртгэл эвентийнх бол тэр өдрийн эвент ("Нээлттэй өдөрлөг 2026-10-16")."""
+        lead = people.lead(self.tdir, self.lead["id"]) or self.lead
+        return people.event_of(self.tdir, lead.get("course"))
+
     def _appointment_keys(self) -> list[str]:
         when = people.appointment(self.tdir, self.lead["id"])
-        return ["appt_is", f"date:{people.fmt(when)}"] if when else ["no_appt"]
+        if when:
+            return ["appt_is", f"date:{people.fmt(when)}"]
+        ev = self._event()                    # эвентийн бүртгэл: "Нээлттэй өдөрлөг Баасан ... 18 цагт"
+        return [f"ev:{ev['name']}", f"date:{ev['at']}"] if ev else ["no_appt"]
 
     def _retrieve(self, text: str) -> str | None:
         """Зөвхөн энэ хүний баримтууд (person_docs) + хүсэлтүүдээс хайна."""
@@ -307,6 +330,7 @@ class AccountFlow:
         docs += [(k, q) for k, qs in INTENTS.items() for q in qs]
         ranked = self.search.rank(text, docs)
         kw = keyword_intent(text)
+        kw = kw or time_intent(text)          # цэсэнд "цагаа төлөө" (= солъё, STT)
         if ranked and ranked[0][1] >= MATCH:
             top = ranked[0][0]
             return kw if kw in ("cancel", "cancel_registration") and top in ("cancel", "cancel_registration") else top
@@ -330,7 +354,7 @@ class AccountFlow:
             self.state = "new_phone"
             return ["ask_new_phone"]
         if intent == "change_time":
-            return self._offer(text)
+            return self._offer_event(text) if self._event() else self._offer(text)
         if intent == "cancel":
             if not people.appointment(self.tdir, lead_id):
                 return ["no_appt", self._end()]
@@ -368,6 +392,26 @@ class AccountFlow:
             keys += [f"press_{i + 1}", f"date:{people.fmt(at)}"]
         return keys
 
+    def _offer_event(self, text: str) -> list[str]:
+        """Эвентийн бүртгэл: ижил эвентийн өөр өдрүүд (өдөр бүрийн эвент). Гараг хэлсэн бол тэр өдрийг."""
+        cur = self._event()
+        others = [e for e in people.events(self.tdir, self.now)
+                  if e["name"] == cur["name"] and e["at"] != cur["at"] and people.parse_local(e["at"]) > self.now]
+        if not others:
+            self.state = "menu"
+            return ["no_slots", self._end()]
+        wanted = {d for st, d in WEEKDAY_STEMS.items() if st in stems(text)}
+        picks = [e for e in others if people.parse_local(e["at"]).weekday() in wanted] or others
+        self.offered_events = picks[:OFFER]
+        self.offered = [people.parse_local(e["at"]) for e in self.offered_events]
+        self.state = "slot"
+        if len(self.offered) == 1 and wanted:
+            return self._pick(0)
+        keys = ["slots_intro"]
+        for i, at in enumerate(self.offered):
+            keys += [f"press_{i + 1}", f"date:{people.fmt(at)}"]
+        return keys
+
     def _match_slots(self, text: str, free: list[datetime]) -> list[datetime]:
         """Сул цаг бүр нэг баримт: "маргааш Баасан гараг аравдугаар сарын арван долооны арван цагт"."""
         q = stems(text)
@@ -400,6 +444,15 @@ class AccountFlow:
             old = people.set_phone(self.tdir, lead_id, self.new_phone, self.source, self.call_uuid)
             self.events.append({"field": "phone", "old": old, "new": self.new_phone, "lead": self.lead, "staff": self.staff})
             return ["phone_done", self._end()]
+        if state == "slot_confirm" and self.offered_events:      # эвентийн өдрийг солих
+            if not ans:
+                return self._offer_event("")
+            ev = self.offered_events[self.offered.index(self.chosen)]
+            old = people.set_event(self.tdir, lead_id, ev, self.source, self.call_uuid, now=self.now)
+            self.events.append({"field": "appointment", "old": old, "new": people.event_course(ev),
+                                "lead": self.lead, "staff": self.staff})
+            self.offered_events = []
+            return ["appt_done", f"date:{ev['at']}", self._end()]
         if state == "slot_confirm":
             if not ans:
                 return self._offer("")

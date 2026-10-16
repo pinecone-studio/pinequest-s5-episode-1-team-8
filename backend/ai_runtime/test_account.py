@@ -263,6 +263,47 @@ def web_parity(embed):
           people.lead(tdir, a)["phone"] == "80405060" and people.lead(tdir, b)["phone"] == "80405060")
 
 
+def daily_event_change(embed):
+    """[12] 10-16 бодит дуудлага: эвентэд бүртгэлтэй хүн кодоо оруулахад «товлосон цаг алга» гэж, «цагаа төлөө»
+    (= солъё) гэхэд кодыг дахин асууж гацсан. -> эвентийн өдрийг хэлж, өөр өдөр рүү шилжүүлнэ."""
+    import json as _json
+    print("\n[12] Өдөр бүрийн эвентийн өдрийг утсаар солих")
+    now = datetime(2026, 10, 16, 9, 0, tzinfo=people.TZ)        # Баасан 09:00
+    tdir = make_tenant()
+    st = _json.load(open(os.path.join(tdir, "data", "settings.json")))
+    st["events"] = [{"name": "Нээлттэй өдөрлөг", "at": "2026-10-15T18:00", "repeat": "daily"}]
+    _json.dump(st, open(os.path.join(tdir, "data", "settings.json"), "w"))
+    ev = next(e for e in people.events(tdir, now) if e["at"] == "2026-10-16T18:00")
+    lead = db.add_lead("c1", "Билэг", "85222634", None, None, "event", path=people.db_path(tdir),
+                       course=people.event_course(ev))
+    people.sync_event_reminders(tdir, now)
+    flow = acct.AccountFlow(tdir, acct.Search(embed), None, "call-e", now=now)
+    keys = flow.handle_dtmf(people.ensure_code(tdir, lead))
+    check("кодын дараа эвентийн өдрийг хэлнэ («цаг алга» биш)",
+          "ev:Нээлттэй өдөрлөг" in keys and "date:2026-10-16T18:00" in keys and "no_appt" not in keys, keys)
+    keys = flow.handle("цагаа төлөө")
+    check("«цагаа төлөө» (STT) -> өөр өдрүүдийг санал болгоно", flow.state == "slot" and keys[0] == "slots_intro"
+          and "date:2026-10-17T18:00" in keys, keys)
+    flow.handle("хоёрдугаарыг")
+    keys = flow.handle("тийм")
+    check("эвентийн өдөр солигдлоо", keys[0] == "appt_done" and people.lead(tdir, lead)["course"] == "Нээлттэй өдөрлөг 2026-10-18",
+          (keys, people.lead(tdir, lead)["course"]))
+    item = _json.load(open(people.reminders_path(tdir)))["items"][str(lead)]
+    check("сануулга шинэ өдрөөр дахин товлогдсон", item["appointment"] == "2026-10-18T18:00" and not item.get("sms_at"), item)
+    intent = acct.detect_intent(acct.Search(embed), "цагаа цөлөөлөх гэсэн")
+    flow = acct.AccountFlow(tdir, acct.Search(embed), intent, "call-g", now=now)
+    keys = flow.handle_dtmf(people.ensure_code(tdir, lead))
+    check("«цагаа цөлөөлөх гэсэн» -> код НЭГ удаа, дараа нь шууд өдрүүд", intent == "change_time"
+          and keys[0] == "verified" and "slots_intro" in keys and flow.state == "slot", (intent, keys))
+    flow = acct.AccountFlow(tdir, acct.Search(embed), None, "call-f", now=now)
+    flow.handle_dtmf(people.ensure_code(tdir, lead))
+    keys = flow.handle("бямба гарагт шилжүүлье")
+    check("«Бямба гарагт» -> шууд тэр өдрийг асууна", flow.state == "slot_confirm" and "date:2026-10-17T18:00" in keys, keys)
+    flow.handle("тийм")
+    check("ойлгомжгүй үед цэсээ давтана (код дахин асуухгүй)",
+          flow.state == "menu" and flow.handle("пф хм") == ["menu"] and flow.handle("пф хм") is None)
+
+
 def runtime_symlink():
     """[11] knowledge_jobs.runtime_root() кодыг symlink-ээр харуулдаг -> shim backend/people.py-г олох ёстой."""
     import subprocess
@@ -289,6 +330,7 @@ if __name__ == "__main__":
     else:
         main(fake_embed)
         web_parity(fake_embed)
+        daily_event_change(fake_embed)
     runtime_symlink()
     print(f"\n{'ТЭНЦЛЭЭ ✓' if not failures else f'ТЭНЦЭЭГҮЙ: {len(failures)} шалгалт'}")
     sys.exit(1 if failures else 0)
