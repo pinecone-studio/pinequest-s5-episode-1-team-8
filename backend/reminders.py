@@ -293,6 +293,11 @@ def sms_due(now: datetime | None = None, send=None) -> list[tuple[str, int, bool
     for t in all_tenants():
         if not settings(t).get("sms_reminders"):
             continue
+        # settings.json "sms_before_hours": 24 -> эвентээс 24 цагийн дотор бол бүртгүүлмэгц шууд (анхдагч 2 цаг)
+        try:
+            before = timedelta(hours=float(settings(t).get("sms_before_hours") or 0)) or SMS_BEFORE
+        except (TypeError, ValueError):
+            before = SMS_BEFORE
         with data_lock:
             data = load(t)
             changed = False
@@ -301,7 +306,7 @@ def sms_due(now: datetime | None = None, send=None) -> list[tuple[str, int, bool
                         or v.get("attendance") is False):
                     continue
                 at = parse_local(v["appointment"])
-                if not (at - SMS_BEFORE <= now < at):
+                if not (at - before <= now < at):
                     continue
                 lead = lead_of(t, int(k))
                 if not lead or lead.get("status") == "canceled":
