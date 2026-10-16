@@ -60,13 +60,27 @@ class DuplicatePhoneTest(unittest.IsolatedAsyncioTestCase):
         self.code.assert_not_called()
         self.assertEqual(self.call.name_jobs, [])
 
-    async def test_same_phone_in_another_event_is_also_duplicate(self):
-        self.seed(course="Old event", reason="event")
-        self.flow(event={"name": "New event"})
+    async def test_same_event_is_duplicate_but_another_event_is_not(self):
+        self.seed(course="Open day", reason="event")
+        flow = self.flow(event={"name": "Open day"})
         await self.call.lead_turn("тийм")
-        self.assertEqual(self.count(), 1)
+        self.assertEqual(self.count(), 1)                 # тэр эвентэд аль хэдийн бүртгэлтэй -> давхар
         self.call.hangup.assert_not_awaited()
         self.sms.assert_not_called()
+        self.assertTrue(flow.duplicate)
+        self.assertEqual(self.call.save_lead(self.flow(event={"name": "New event"})), "4720")
+        self.assertEqual(self.count(), 2)                 # өөр эвент -> бүртгэнэ
+
+    async def test_setting_allows_repeat_registration(self):
+        self.seed()
+        with patch("phone_server.notify.load_settings", return_value={"allow_repeat_registration": True}):
+            self.assertEqual(self.call.save_lead(self.flow()), "4720")
+        self.assertEqual(self.count(), 2)
+
+    async def test_program_student_can_join_event(self):
+        self.seed(course="Bootcamp")                       # хөтөлбөрт бүртгэлтэй хүн
+        self.assertEqual(self.call.save_lead(self.flow(event={"name": "Open day"})), "4720")
+        self.assertEqual(self.count(), 2)
 
     async def test_rejected_phone_is_not_checked_or_saved(self):
         self.seed()
