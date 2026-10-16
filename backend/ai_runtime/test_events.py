@@ -284,5 +284,27 @@ class RealCallsOct15Test(unittest.TestCase):
         self.assertFalse(STILL_THERE.search("эвент байна уу"))
 
 
+
+class RealCallsOct16Test(unittest.TestCase):
+    """10-16: «гүцэн», «наян цав» танихгүй; товчлуур дарж байхдаа «нэг асуулт» гэснийг алдаа гэж тоолоод
+    дугааргүй хадгалж дуусгасан; дугаарыг хоёр хувааж хэлэхэд ойлгоогүй."""
+
+    def test_spoken_number_variants(self):
+        from lead import parse_phone
+        self.assertEqual(parse_phone("наян тав хорин хоёр хорин дургайгаа гүцэн дөрөв"), "85222634")
+        self.assertEqual(parse_phone("наян цав хорин хоёр хорин дургай гучин дөрөв"), "85222634")
+
+    def test_non_number_speech_does_not_end_registration(self):
+        f = LeadFlow("event", "phone", None)
+        for text in ["нэг асуулт", "байна уу", "юу"]:
+            self.assertEqual(f.handle(text), ["phone_retry"])
+        self.assertFalse(f.finished)
+
+    def test_number_in_two_halves(self):
+        f = LeadFlow("event", "phone", None)
+        self.assertEqual(f.handle("наян тав хорин хоёр"), ["digits:8522"])
+        self.assertEqual(f.handle("хорин зургаа гучин дөрөв"), ["readback", "digits:85222634", "confirm"])
+
+
 if __name__ == "__main__":
     unittest.main()

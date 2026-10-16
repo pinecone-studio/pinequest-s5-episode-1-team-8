@@ -53,7 +53,9 @@ TENS = {"арав": 10, "арван": 10, "хорь": 20, "хорин": 20, "г�
 HUNDRED = {"зуу", "зуун"}
 # STT-ийн түгээмэл алдаа (бодит дуудлагаас): "наян" -> "ноён", "ноян", "оройн"
 TENS.update({"ноён": 80, "ноян": 80, "оройн": 80, "наянн": 80})
-UNITS.update({"дургай": 6, "дургаа": 6, "зургай": 6, "зурга": 6})      # 10-15: "хорин дургай" (= 26)
+UNITS.update({"дургай": 6, "дургаа": 6, "зургай": 6, "зурга": 6})
+TENS.update({"гүцэн": 30, "гүчин": 30, "гуцэн": 30, "гүч": 30})               # 10-16: "гүцэн дөрөв" (= 34)
+UNITS.update({"дургайгаа": 6, "зургаагаа": 6, "цав": 5})   # 10-15: "наян цав" (= 85)      # 10-15: "хорин дургай" (= 26)
 # Аравтын араас ирсэн эдгээрийг нэгж гэж үзнэ: "наян тавь" (80, 50 биш) -> 85; "наян ер" -> 89
 UNIT_AFTER_TENS = {"тавь": 5, "ер": 9}
 
@@ -223,6 +225,7 @@ class LeadFlow:
         self.phone = None
         self.phone_raw = []
         self.phone_tries = 0
+        self.phone_part = ""          # "наян тав хорин хоёр" ... (завсар) ... "хорин зургаа гучин дөрөв"
         self.confirm_tries = 0
         self.result = None            # "saved" | "saved_no_phone" | "declined"
 
@@ -383,6 +386,16 @@ class LeadFlow:
         if self.state == "phone":
             self.phone_raw.append(text)
             digits = self._phone(text)
+            if self.phone_part and len(self.phone_part + digits) == 8:
+                digits = self.phone_part + digits      # дугаарын хоёр дахь хагас
+            elif 4 <= len(digits) < 8 and not self.phone_part:
+                self.phone_part = digits               # эхний хагас -> "85 22" гэж давтаад үлдсэнийг хүлээнэ
+                return [f"digits:{digits}"]
+            self.phone_part = ""
+            if len(digits) < 4 and self.phone_tries < 3:
+                # Тоогүй яриа ("нэг асуулт", товчлуур дарж байхдаа ярьсан) -> алдаа гэж тооцохгүй, дахин асууна
+                self.phone_tries += 0.5
+                return ["phone_retry"]
             if len(digits) == 11 and digits.startswith("976"):
                 digits = digits[3:]
             if len(digits) == 8:
