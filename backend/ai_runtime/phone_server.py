@@ -645,7 +645,9 @@ class Call:
         андуурахгүй, шууд кодоо асууж (my_account) тэр хүсэлтээр нь үргэлжлүүлнэ."""
         if "account" not in self.router.meta:
             return False
-        intent = acct.keyword_intent(self.router.fix_stt(text))
+        fixed = self.router.fix_stt(text)
+        # "цагаас илүү мэрээ", "цагийг сөлүүлээ" (STT эвдсэн "солиулмаар") -> "цаг" + асуулт биш = цаг солих
+        intent = acct.keyword_intent(fixed) or (acct.time_intent(fixed) if OWN_TIME.search(fixed.lower()) else None)
         faq = next((f for f in self.router.meta["faq"] if f["id"] == "my_account"), None)
         if intent not in ("change_time", "change_phone", "cancel", "cancel_registration") or not faq:
             return False
@@ -764,6 +766,16 @@ class Call:
                     # эвентийн өдөр солисон бол "Нээлттэй өдөрлөг 10/17 18:00", уулзалт бол "уулзалт <цаг>"
                     text = notify.event_sms_text(self.tenant.config().get("name") or "", ev.get("event") or "уулзалт",
                                                  ev.get("at") or ev["new"], None)
+                    asyncio.get_running_loop().run_in_executor(None, notify.send_sms, phone, text)
+            except Exception as e:
+                print(f"  [SMS эхлүүлэх алдаа] {type(e).__name__}")
+        if ev["field"] == "status" and ev["new"] == "canceled" and phone and not ev.get("staff"):
+            try:                                      # "Таны бүртгэлийг цуцаллаа" -> утсанд нь SMS
+                if notify.load_settings(self.tenant.settings_path).get("sms_on_register"):
+                    course = lead.get("course")
+                    ev_def = people.event_of(self.tenant.dir, course)
+                    text = notify.cancel_sms_text(self.tenant.config().get("name") or "", course,
+                                                  ev_def and ev_def["at"])
                     asyncio.get_running_loop().run_in_executor(None, notify.send_sms, phone, text)
             except Exception as e:
                 print(f"  [SMS эхлүүлэх алдаа] {type(e).__name__}")
@@ -1085,6 +1097,7 @@ def selector_state(router) -> str:
     return f"{'идэвхтэй' if sel.enabled else 'идэвхгүй'}, {len(router.sel_answers)} хариулт"
 
 
+OWN_TIME = re.compile(r"\bцаг(аа|ийг|аас)\w*")      # "цагаа/цагийг ..." (хичээлийн "цагийн хуваарь" биш)
 STILL_THERE = re.compile(r"^\W*(байна уу|алл?о+|сонс(ож|огдож) байна уу)\W*$")
 REPEAT_ASK = re.compile(r"\b(ахиад|дахиад|дахин)\s+(хэл|нэг\s+хэл)|давтаж\s+хэл|сонсогдсонгүй")
 GENERIC_FAQ = ("smalltalk_", "phone_", "repeat_last", "register", "human_request", "contact_phone")
