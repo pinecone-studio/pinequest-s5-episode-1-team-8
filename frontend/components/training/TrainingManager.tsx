@@ -53,11 +53,22 @@ export function TrainingManager({ initial, answers }: { initial: TrainingStatus;
         description={`~1–3 минут. Сургасны дараа сургалтад ороогүй шалгалтын асуултуудаар хэмжиж, дүрмээс муу бол автоматаар идэвхгүй болгоно. Мэдээллээс автоматаар ${initial.auto} асуулт үүсгэсэн. AI сервер шинэ загварыг дараагийн дуудлага дээр ачаална.`} />
 
       <form onSubmit={submit} className="rounded-[14px] bg-panel px-[22px] py-5">
-        <h2 className="mb-4 font-semibold">Зөв хариулт заах</h2>
-        <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]"><input name="q" required placeholder="Залгагчийн бодит асуулт" className="rounded-[10px] border border-line-2 bg-bg px-3 py-2.5" />
-          <select name="answer" required defaultValue="" className="rounded-[10px] border border-line-2 bg-bg px-3 py-2.5"><option value="" disabled>— зөв хариулт —</option>{choices.map(([label, list]) => <optgroup key={label} label={label}>{list.map((choice) => <option key={choice.value} value={choice.value}>{choice.title}</option>)}</optgroup>)}</select>
-          <Button variant="primary" disabled={pending}>Нэмэх</Button></div>
-      </form>
+  <h2 className="mb-4 font-semibold">Зөв хариулт заах</h2>
+  <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+    <input name="q" required placeholder="Залгагчийн бодит асуулт"
+      className="w-full min-w-0 rounded-[10px] border border-line-2 bg-bg px-3 py-2.5" />
+    <select name="answer" required defaultValue=""
+      className="w-full min-w-0 truncate rounded-[10px] border border-line-2 bg-bg px-3 py-2.5">
+      <option value="" disabled>— зөв хариулт —</option>
+      {choices.map(([label, list]) => (
+        <optgroup key={label} label={label}>
+          {list.map((choice) => <option key={choice.value} value={choice.value}>{choice.title}</option>)}
+        </optgroup>
+      ))}
+    </select>
+    <Button variant="primary" disabled={pending}>Нэмэх</Button>
+  </div>
+</form>
 
       <section className="rounded-[14px] bg-panel px-[22px] py-5"><h2 className="mb-3 font-semibold">Бодит дуудлагаас заасан жишээ</h2>
         {rows.length ? <div className="divide-y divide-line">{rows.map((row) => <div key={row.i} className="grid items-center gap-3 py-3 md:grid-cols-[1fr_1fr_auto]">
