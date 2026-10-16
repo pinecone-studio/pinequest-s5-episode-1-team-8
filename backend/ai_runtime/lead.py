@@ -63,7 +63,8 @@ UNIT_AFTER_TENS = {"тавь": 5, "ер": 9}
 # оролцох үйл үг -> эвент. "Хакатоны талаар" (мэдээлэл) FAQ-д үлдэнэ, "эвентийн бүртгэлээ цуцлах" бүртгэл биш.
 # STT "эвент"-ийг "эвээнт", "ивэнт", "эвэнд" гэж бичдэг (бодит туршилт)
 # 10-15 туршилт: "эвээн түртгэлдсэн", "ивээн тэтгэвэрт гүйлмээр байна" (= эвентэд бүртгүүлмээр байна)
-EVENT_RE = re.compile(r"[эи]в[эеи]*н(?:[тд]|\b)|юм[эе]н[дт]|event|арга хэмжээ|х[аэ]кк?[аэ]тон|hackathon|уралдаан|семинар")
+# 10-15: "евинт", "евентет" (е-ээр эхэлсэн), "удахгүй болох арга хэмжээ"
+EVENT_RE = re.compile(r"[эеи]в[эеи]*н(?:[тд]|\b)|удахгүй болох|юм[эе]н[дт]|event|арга хэмжээ|х[аэ]кк?[аэ]тон|hackathon|уралдаан|семинар")
 JOIN_WORDS = ("бүртг", "бүтгүү", "бүрдүүл", "оролц", "очмоор", "очъё", "явмаар", "суумаар", "ирмээр", "хамрагд",
               "түртг", "гүйлмээр", "тэтгэв")   # 10-15: "эвээн тэтгэвэл/тэтгэвэрт" = эвентэд бүртгүүл
 # Эвентийн үгтэй хамт "-маар/-мээр байна" (STT үйл үгийг эвдсэн ч хүсэлт хэвээр) -> бүртгүүлэх.
@@ -76,6 +77,9 @@ NOT_JOIN = ("цуца", "цуцл", "болих", "больё", "болъё", "�
 EVENT_GENERIC = {"эвен", "ивен", "арга", "хэмж", "хэмжээ"}
 QUESTION = re.compile(r"\b(хаана|хэзээ|хэдэн|хэд|ямар|юу|вэ|бэ)\b")
 ORDINAL_WORDS = {"нэг": 0, "эхн": 0, "хоёр": 1, "гура": 2, "гурв": 2, "сүүл": -1}
+# "Баасан гарагийнх", "маргааш" -> тухайн өдрийн эвент (өдөр бүрийн эвентэд). STT "баатон" гэж бичдэг.
+WEEKDAYS = {"дав": 0, "мяг": 1, "лха": 2, "пүр": 3, "баа": 4, "бям": 5, "ням": 6}
+REL_DAYS = {"өнөөд": 0, "маргаа": 1, "нөгөөд": 2}
 _LAT = [("sh", "ш"), ("ch", "ч"), ("kh", "х"), ("ts", "ц"), ("ck", "к"), ("ph", "ф"), ("th", "т"), ("qu", "кв"),
         ("x", "кс")] + list(zip("abcdefghijklmnopqrstuvwyz", "абкдэфгхижклмнопкрстуввйз"))
 
@@ -205,7 +209,9 @@ class LeadFlow:
         self.lang = lang              # "mn" | "en" (english.py-ийн хэллэг, задлагч)
         self.reason = reason          # "lead" | "handoff" | "event"
         self.state = state            # event_start | event_pick | event_offer | offer | name | phone | confirm
-        self.events = (events or [])[:3]   # удахгүй болох эвентүүд (ойроос нь)
+        self.all_events = events or []     # гараг/өдрөөр сонгоход (өдөр бүрийн эвентийн 7 өдөр)
+        self.events = self.all_events[:3]  # уншиж санал болгох (ойроос нь)
+        self.offer_tries = 0
         self.event: dict | None = None
         self.pick_tries = 0
         self.book = book              # бүртгэлийн дараа "Уулзалтын цаг товлох уу?" (сул цаг байвал)
@@ -242,7 +248,30 @@ class LeadFlow:
         self.event, self.state = ev, "event_offer"
         return [f"ev:{ev['name']}", f"date:{ev['at']}", "event_ask"]
 
+    def _event_on_day(self, text: str) -> dict | None:
+        """ "Баасан гарагийнх", "маргааш" -> тэр өдрийн эвент."""
+        from datetime import date, datetime, timedelta
+        days = []
+        for w in re.findall(r"[а-яөүё]+", text.lower()):
+            if w[:3] in WEEKDAYS and (w[:3] != "баа" or w.startswith(("баас", "баат", "баад"))):
+                days.append(("wd", WEEKDAYS[w[:3]]))
+            for k, n in REL_DAYS.items():
+                if w.startswith(k):
+                    days.append(("d", date.today() + timedelta(days=n)))
+        for kind, v in days:
+            for e in self.all_events:
+                try:
+                    d = datetime.strptime(e["at"][:10], "%Y-%m-%d").date()
+                except (KeyError, ValueError):
+                    continue
+                if (kind == "wd" and d.weekday() == v) or (kind == "d" and d == v):
+                    return e
+        return None
+
     def _pick_event(self, text: str) -> dict | None:
+        day = self._event_on_day(text)
+        if day:
+            return day
         digits = re.sub(r"\D", "", text)
         if len(digits) == 1 and 1 <= int(digits) <= len(self.events):
             return self.events[int(digits) - 1]
@@ -260,7 +289,8 @@ class LeadFlow:
             return ["which_ask"]
         if self.state == "which":         # "Хөтөлбөрт үү, арга хэмжээнд үү?"
             t = text.lower()
-            if EVENT_RE.search(t) or match_event(text, self.events) or "хоёрд" in t or "сүүлийн" in t:
+            if (EVENT_RE.search(t) or match_event(text, self.events) or "хоёрд" in t or "сүүлийн" in t
+                    or "удахгүй" in t or self._event_on_day(text)):
                 self.reason, self.state, self.book = "event", "event_start", False
                 return self.handle(text)
             if any(w in t for w in PROGRAM_WORDS) or "эхн" in t or "нэгд" in t:
@@ -276,7 +306,10 @@ class LeadFlow:
             if not self.events:
                 self.result = "declined"
                 return ["event_none"]
-            ev = self.events[0] if len(self.events) == 1 else match_event(text, self.events)
+            # Өдөр бүрийн эвент (бүгд нэг нэртэй) -> жагсаалт уншихгүй, хамгийн ойрыг (эсвэл хэлсэн өдрийг) санал болгоно
+            same = len({e["name"] for e in self.events}) == 1
+            ev = (self._event_on_day(text) or (self.events[0] if len(self.events) == 1 or same
+                                                else match_event(text, self.events)))
             if ev:
                 return self._offer_event(ev)
             self.state = "event_pick"
@@ -289,7 +322,7 @@ class LeadFlow:
             ev = self._pick_event(text)
             if ev:
                 return self._offer_event(ev)
-            if self.pick_tries < 1:
+            if self.pick_tries < 2:
                 self.pick_tries += 1
                 return ["event_pick"]
             self.result = "declined"          # шинэ асуулт гэж үзээд энгийн горимд
@@ -314,6 +347,13 @@ class LeadFlow:
             if ans is True:
                 self.state = "name"
                 return ["ask_name_again"]
+            if ans is None and not QUESTION.search(text.lower()):
+                other = self._event_on_day(text)     # "Бямба гарагийнх" -> тэр өдрийнхийг санал болгоно
+                if other and other is not self.event:
+                    return self._offer_event(other)
+                if self.offer_tries < 1:              # ойлгомжгүй -> бүртгэлээс гарахгүй, саналаа давтана
+                    self.offer_tries += 1
+                    return self._offer_event(self.event)
             self.result = "declined"
             return ["declined"] if ans is False else []
         if self.state == "offer":
