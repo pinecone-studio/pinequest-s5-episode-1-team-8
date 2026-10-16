@@ -465,6 +465,9 @@ class Call:
     async def lead_turn(self, text: str) -> bool:
         """Бүртгэлийн нэг алхам. False = энэ нь хариулт биш шинэ асуулт -> энгийн горим."""
         router, flow = self.router, self.lead
+        if flow.state == "phone" and self.dtmf:      # дугаараа товчлуураар бичиж байна -> яриаг алгасна
+            print(f"  [алгасав] товчлуураар бичиж байх үеийн яриа: {text}")
+            return True
         if REPEAT_ASK.search(text.lower()) and self.last_reply:    # "ахиад хэлээч" -> асуултаа давтана
             for wav, sr in self.last_reply:
                 await self.play(wav, sr)
