@@ -214,6 +214,7 @@ class Call:
         self.dtmf_at = 0.0               # сүүлд товчлуур дарсан цаг (DTMF_GAP)
         self.caller_level = 0.0          # залгагчийн ярианы түвшин (хүлээж авсан өгүүлбэрүүдийн оргил)
         self.reprompt: asyncio.Task | None = None   # бүртгэлийн асуултыг давтах таймер
+        self.last_said = 0.0                         # залгагчийн сүүлийн жинхэнэ яриа (чимээ биш)
         self.hearing = False             # залгагч яг одоо ярьж байна (VAD)
         self.name_audio = None           # нэрийн бичлэг -> дуудлагын дараа нэрийг засна (fix_names)
         self.name_jobs: list = []        # [(lead_id, нэр, бичлэг)]
@@ -327,6 +328,7 @@ class Call:
         if not short_choice and len(re.sub(r"\W", "", text)) < (2 if self.lead or self.account else MIN_TEXT_CHARS):
             print("  [алгасав] хэт богино (чимээ/echo)")
             return
+        self.last_said = time.monotonic()
         self.log("user", text, stt_sec=stt_sec)
         if REPEAT_LAST.search(text.lower()) and self.last_reply:
             for wav, sr in self.last_reply:
@@ -748,6 +750,8 @@ class Call:
         self.history += [{"role": "user", "content": said}, {"role": "assistant", "content": reply}]
         if "@bye" in keys:
             await self.hangup()
+        elif keys and keys[-1] == "anything_else":   # "Өөр асуух зүйл байна уу?" -> чимээгүй бол баяртай
+            asyncio.create_task(self._bye_if_silent(time.monotonic()))
         self.history = self.history[-8:]
 
     def notify_change(self, lead: dict, ev: dict):
@@ -920,6 +924,24 @@ class Call:
         print("  [дахин асуув] залгагч чимээгүй")
         for wav, sr in clips:
             await self.play(wav, sr)
+
+    async def _bye_if_silent(self, since: float):
+        """ "Өөр асуух зүйл байна уу?"-гийн дараа REPROMPT_AFTER сек юу ч хэлээгүй (чимээ, "а" тооцохгүй)
+        -> "Манайхаар үйлчлүүлсэнд баярлалаа ... Баяртай" гээд салгана (10-16: хүлээгээд чимээгүй болсон)."""
+        await asyncio.sleep(REPROMPT_AFTER)
+        while self.hearing and not self.closed:     # ярьж эхэлсэн -> өгүүлбэр дуусахыг хүлээнэ
+            await asyncio.sleep(0.3)
+        await asyncio.sleep(0.5)
+        if self.closed or self.busy or self.last_said > since or self.lead or (self.turn and not self.turn.done()):
+            return
+        faq = next((f for f in self.router.meta["faq"] if f["id"] == "smalltalk_bye"), None)
+        if not faq:
+            return
+        print("  [баяртай] залгагч чимээгүй")
+        await self.play(*self.router.clip(faq))
+        self.log("assistant", faq["answer"], route="faq")
+        self.account = None
+        await self.hangup()
 
     def start_turn(self, audio: np.ndarray):
         self.cancel_reprompt()
