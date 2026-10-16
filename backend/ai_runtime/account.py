@@ -117,6 +117,8 @@ def time_intent(text: str) -> str | None:
 
 CHANGE_STEMS = ("шилж", "соли", "солъ", "соль", "сөлү", "сөли", "өөрч", "хойш", "урагш")   # 10-16 STT: "сөлүүлээ"
 CANT_GO = ("чадах", "больс", "явах", "суух", "оролц", "ирэхг", "очихг")
+# 10-16: "Нээлттэй өдөрлөгт очиж амжихааргүй боллоо", "ирж чадахгүй нь" -> бүртгэлээ цуцлах
+CANT_MAKE = re.compile(r"амж(их|ихгүй|ихааргүй|аагүй|ихгүйгээ)|(очи[жх]|ири[жх]|ирэх|очих)\s*(чадахгүй|боломжгүй|амжих)|очихгүй|ирэхгүй")
 
 
 def keyword_intent(text: str) -> str | None:
@@ -126,7 +128,9 @@ def keyword_intent(text: str) -> str | None:
     reg = any(x.startswith(("бүрт", "хөтө", "эвен", "сурга", "boot")) for x in st)
     if any(x.startswith(("цуца", "цуцл")) for x in st):
         return "cancel_registration" if reg or not any(x.startswith(("цаг", "уулз")) for x in st) else "cancel"
-    if any(c in low for c in CANT_GO) and any(x.startswith(("чада", "боло", "боль")) for x in st):
+    if any(c in low for c in CANT_GO) and any(x.startswith(("чада", "боло", "боль", "болл")) for x in st):
+        return "cancel_registration"
+    if CANT_MAKE.search(low):
         return "cancel_registration"
     if any(x.startswith(c) for x in st for c in CHANGE_STEMS):
         if any(x.startswith("дуга") or x.startswith("утас") or x.startswith("утсы") for x in st):
@@ -356,6 +360,9 @@ class AccountFlow:
                 return ["status_canceled", self._end()]
             self.state = "reg_cancel_confirm"
             course = (people.lead(self.tdir, lead_id) or {}).get("course")
+            ev = self._event()
+            if ev:                            # өдөр бүрийн эвент: "Нээлттэй өдөрлөг Бямба ... 18 цагт. Цуцлах уу?"
+                return [f"ev:{ev['name']}", f"date:{ev['at']}", "ask_cancel_reg"]
             # "AI Hackathon. Энэ бүртгэлээ цуцлах уу?" — Bootcamp ба эвентэд хоёуланд нь бүртгэлтэй байж болно
             return ([f"ev:{course}"] if course else []) + ["ask_cancel_reg"]
         if intent == "ask_attendance":

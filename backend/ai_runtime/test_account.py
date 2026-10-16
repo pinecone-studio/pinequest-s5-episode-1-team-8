@@ -243,8 +243,9 @@ def web_parity(embed):
     check("«Ирнэ гэж бүртгэгдсэн үү» -> attendance_yes", keys[0] == "attendance_yes", keys)
     keys = flow.handle_dtmf("4")
     course = people.lead(tdir, a)["course"]
-    check("цэс 4 -> «<эвент>. Энэ бүртгэлээ цуцлах уу»",
-          keys == ([f"ev:{course}"] if course else []) + ["ask_cancel_reg"] and flow.state == "reg_cancel_confirm", keys)
+    ev = people.event_of(tdir, course)
+    check("цэс 4 -> «<эвент> <өдөр>. Энэ бүртгэлээ цуцлах уу»",
+          keys == [f"ev:{ev['name']}", f"date:{ev['at']}", "ask_cancel_reg"] and flow.state == "reg_cancel_confirm", keys)
     keys = flow.handle_dtmf("1")
     check("утсаар бүртгэл цуцлагдлаа", keys[0] == "reg_cancel_done" and people.lead(tdir, a)["status"] == "canceled"
           and flow.events[-1]["field"] == "status", keys)
@@ -307,6 +308,14 @@ def daily_event_change(embed):
     flow.handle("тийм")
     check("ойлгомжгүй үед цэсээ давтана (код дахин асуухгүй)",
           flow.state == "menu" and flow.handle("пф хм") == ["menu"] and flow.handle("пф хм") is None)
+    flow2 = acct.AccountFlow(tdir, acct.Search(embed), acct.detect_intent(acct.Search(embed),
+                             "нээлттэй өдөрлөгт очиж амжихааргүй боллоо"), "call-h", now=now)
+    keys = flow2.handle_dtmf(people.ensure_code(tdir, lead))
+    check("«очиж амжихааргүй боллоо» -> код нэг удаа, эвентийн нэр+өдөр, цуцлах уу",
+          keys[:2] == ["verified", "ev:Нээлттэй өдөрлөг"] and keys[-1] == "ask_cancel_reg", keys)
+    keys = flow2.handle("тийм")
+    check("бүртгэл цуцлагдлаа (SMS phone_server-ээс)", keys[0] == "reg_cancel_done"
+          and people.lead(tdir, lead)["status"] == "canceled" and flow2.events[-1]["new"] == "canceled", keys)
 
 
 def runtime_symlink():

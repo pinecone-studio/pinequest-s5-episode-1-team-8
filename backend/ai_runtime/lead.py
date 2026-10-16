@@ -76,9 +76,11 @@ INFO_VERBS = ("мэд", "сонс", "асуу", "ав", "үз", "ойлго")
 PROGRAM_WORDS = ("хөтөлбөр", "сургалт", "bootcamp", "буткэмп", "хичээл", "курс", "элс")
 # 10-16: "нээлттэй өдөрлөгийн цагийг солиулмаар байна" -> бүртгэл биш, цаг солих (код асууна)
 NOT_JOIN = ("цуца", "цуцл", "болих", "больё", "болъё", "гармаар", "хасуул", "чадахгүй", "өөрчл", "соли", "солъ", "соль",
-            "сөлү", "шилж",
+            "сөлү", "шилж", "амжи",
             "хойшл",
             "шалга", "хэзээ", "хаана")
+# Санал ("Та бүртгүүлэх үү?") дээр "үгүй, цагаа солиулмаар" -> бүртгэлээс гарч тэр хүсэлт рүү ("амжихгүй" = үгүй)
+CHANGE_WORDS = ("соли", "солъ", "соль", "сөлү", "шилж", "хойшл", "цуца", "цуцл", "өөрчл")
 EVENT_GENERIC = {"эвен", "ивен", "арга", "хэмж", "хэмжээ"}
 QUESTION = re.compile(r"\b(хаана|хэзээ|хэдэн|хэд|ямар|юу|вэ|бэ)\b")
 ORDINAL_WORDS = {"нэг": 0, "эхн": 0, "хоёр": 1, "гура": 2, "гурв": 2, "сүүл": -1}
@@ -345,7 +347,7 @@ class LeadFlow:
             return ["declined"] if ans is False else []
 
         if self.state == "event_offer":
-            if any(w in text.lower() for w in NOT_JOIN):
+            if any(w in text.lower() for w in CHANGE_WORDS):
                 self.result = "declined"           # "Үгүй, цагаа солиулмаар байна" -> бүртгэл биш, шинэ хүсэлт
                 return []
             ans = self._yes_no(text)
@@ -366,7 +368,7 @@ class LeadFlow:
             self.result = "declined"
             return ["declined"] if ans is False else []
         if self.state == "offer":
-            if any(w in text.lower() for w in NOT_JOIN):
+            if any(w in text.lower() for w in CHANGE_WORDS):
                 self.result = "declined"           # "Үгүй ээ, өдөрлөгийнхөө цагийг соль" -> цаг солих хүсэлт рүү
                 return []
             ans = self._yes_no(text)

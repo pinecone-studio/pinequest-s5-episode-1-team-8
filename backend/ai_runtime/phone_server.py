@@ -769,6 +769,16 @@ class Call:
                     asyncio.get_running_loop().run_in_executor(None, notify.send_sms, phone, text)
             except Exception as e:
                 print(f"  [SMS эхлүүлэх алдаа] {type(e).__name__}")
+        if ev["field"] == "status" and ev["new"] == "canceled" and phone and not ev.get("staff"):
+            try:                                      # "Таны бүртгэлийг цуцаллаа" -> утсанд нь SMS
+                if notify.load_settings(self.tenant.settings_path).get("sms_on_register"):
+                    course = lead.get("course")
+                    ev_def = people.event_of(self.tenant.dir, course)
+                    text = notify.cancel_sms_text(self.tenant.config().get("name") or "", course,
+                                                  ev_def and ev_def["at"])
+                    asyncio.get_running_loop().run_in_executor(None, notify.send_sms, phone, text)
+            except Exception as e:
+                print(f"  [SMS эхлүүлэх алдаа] {type(e).__name__}")
 
     def on_dtmf(self, key: str):
         """Утасны товчлуур: бүртгэлийн дугаар асуух үед 8 цифр (эсвэл # хүртэл) цуглуулна.

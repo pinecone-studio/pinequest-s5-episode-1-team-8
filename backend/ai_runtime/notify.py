@@ -45,6 +45,22 @@ def event_sms_text(company: str, event: str, at: str, code: str | None) -> str:
     return head + (done if len(head + done + tail) <= SMS_MAX else ".") + tail
 
 
+def cancel_sms_text(company: str, course: str | None, at: str | None) -> str:
+    """Бүртгэл цуцлагдахад (<= 70): "Pinecone Academy: Нээлттэй өдөрлөг 10/17 18:00 бүртгэл цуцлагдлаа."."""
+    from datetime import datetime
+    try:
+        when = " " + datetime.strptime((at or "")[:16], "%Y-%m-%dT%H:%M").strftime("%m/%d %H:%M")
+    except ValueError:
+        when = ""
+    label = f"{company.strip()[:20]}: " if company and company.strip() else ""
+    name = re.sub(r"\s*\d{4}-\d{2}-\d{2}$", "", (course or "").strip()) or "Таны"
+    tail = " бүртгэл цуцлагдлаа."
+    room = SMS_MAX - len(label) - len(when) - len(tail)
+    if len(name) > room:
+        name = name[:max(4, room - 1)] + "…"
+    return f"{label}{name}{when}{tail}"
+
+
 def send_event_sms(phone: str | None, company: str, event: str, at: str, code: str | None) -> bool:
     return send_sms(phone, event_sms_text(company, event, at, code))
 

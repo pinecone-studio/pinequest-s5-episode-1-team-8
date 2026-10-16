@@ -334,5 +334,16 @@ class RealCallsOct16Test(unittest.TestCase):
         self.assertEqual(f.handle("үгүй ээ энэ өдөрлөгийнхөө цагийг соль хэлье"), [])
 
 
+    def test_cant_make_it_cancels_and_change_question(self):
+        import account, notify
+        for text in ["нээлттэй өдөрлөгт очиж амжихааргүй боллоо", "очиж чадахгүй нь ээ", "ирж амжихгүй нь"]:
+            self.assertEqual(account.keyword_intent(text), "cancel_registration", text)
+            self.assertFalse(wants_event(text, RealCallsOct15Test.DAILY), text)
+        self.assertEqual(account.keyword_intent("цагаа солиулж болох уу"), "change_time")
+        t = notify.cancel_sms_text("Pinecone Academy", "Нээлттэй өдөрлөг 2026-10-17", "2026-10-17T18:00")
+        self.assertEqual(t, "Pinecone Academy: Нээлттэй өдөрлөг 10/17 18:00 бүртгэл цуцлагдлаа.")
+        self.assertLessEqual(len(notify.cancel_sms_text("Pinecone Academy", "Маш урт нэртэй эвент " * 4, None)), 70)
+
+
 if __name__ == "__main__":
     unittest.main()
