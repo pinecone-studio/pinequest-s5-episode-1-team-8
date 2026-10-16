@@ -352,6 +352,8 @@ class Call:
             return
         if self.account and lang != "en" and await self.account_turn(text=text):
             return
+        if lang != "en" and not self.lead and not self.account and await self.start_account_direct(text):
+            return
         if (lang != "en" and not self.lead and not self.account and "lead" in self.router.meta
                 and (wants_event(text, self.upcoming_events())
                      or wants_event(self.router.fix_stt(text), self.upcoming_events()))):
@@ -637,6 +639,24 @@ class Call:
                 print(f"  [нэр засах алдаа] {type(e).__name__}: {e}")
 
     # ---------- Бүртгэлээ шалгах / өөрчлөх (хувийн RAG) ----------
+
+    async def start_account_direct(self, text: str) -> bool:
+        """ "Нээлттэй өдөрлөгийн цагийг солиулмаар байна", "бүртгэлээ цуцлах" -> FAQ/эвентийн бүртгэл рүү
+        андуурахгүй, шууд кодоо асууж (my_account) тэр хүсэлтээр нь үргэлжлүүлнэ."""
+        if "account" not in self.router.meta:
+            return False
+        intent = acct.keyword_intent(self.router.fix_stt(text))
+        faq = next((f for f in self.router.meta["faq"] if f["id"] == "my_account"), None)
+        if intent not in ("change_time", "change_phone", "cancel", "cancel_registration") or not faq:
+            return False
+        await self.play(*self.router.clip(faq))
+        self.last_reply, self.last_reply_text = [self.router.clip(faq)], faq["answer"]
+        print(f"  AI: {faq['answer']}")
+        self.log("assistant", faq["answer"], route="faq")
+        self.history += [{"role": "user", "content": text}, {"role": "assistant", "content": faq["answer"]}]
+        self.account = acct.AccountFlow(self.tenant.dir, self.m.account_search, intent, self.uuid)
+        print(f"  [бүртгэлээ шалгах] хүсэлт: {intent}")
+        return True
 
     def maybe_start_account(self, meta: dict, text: str):
         faq = meta.get("faq_id")
