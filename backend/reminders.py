@@ -53,6 +53,7 @@ _lock = threading.Lock()          # нэг удаад нэг дуудлага (g
 SMS_BEFORE = timedelta(hours=float(os.getenv("SMS_BEFORE_HOURS", "2")))
 SMS_TEMPLATE = "{org}: Сануулга - {what} {day} {time} цагт."
 SMS_MAX = 70
+SMS_TRIES = 3
 data_lock = threading.RLock()     # reminders.json уншиж-бичих (вэб ба залгагч зэрэг)
 _wake = threading.Event()
 
@@ -306,7 +307,11 @@ def sms_due(now: datetime | None = None, send=None) -> list[tuple[str, int, bool
                 if not lead or lead.get("status") == "canceled":
                     continue
                 ok = send(lead.get("phone") or lead.get("caller"), sms_text(t, v, now))
-                v.update(sms_at=now.timestamp(), sms_ok=bool(ok))
+                tries = v.get("sms_tries", 0) + 1
+                # Түр алдаа (сүлжээ гэх мэт) -> дараагийн шалгалтаар дахин; 3 удаа амжилтгүй бол больно
+                v.update(sms_tries=tries, sms_ok=bool(ok))
+                if ok or tries >= SMS_TRIES:
+                    v["sms_at"] = now.timestamp()
                 changed = True
                 done.append((t.slug, int(k), bool(ok)))
             if changed:
