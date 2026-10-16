@@ -14,26 +14,41 @@ const GROUPS = [
 ] as const;
 
 export function LeadsTable({ leads, reminders, people }: { leads: Lead[]; reminders: RemindersData; people: PeopleData }) {
-  const [reason, setReason] = useState<Lead["reason"]>("lead");
+  // Хамгийн сүүлийн бүртгэлийн төрлөөр нээнэ (эвентэд бүртгүүлсэн бол "Эвентийн бүртгэл")
+  const newest = leads.reduce<Lead | undefined>((a, b) => (!a || b.created_at > a.created_at ? b : a), undefined);
+  const [reason, setReason] = useState<Lead["reason"]>(newest?.reason ?? "lead");
   const group = GROUPS.find((item) => item.reason === reason)!;
   const rows = leads.filter((lead) => lead.reason === reason);
 
   return (
     <Card>
-      <label className="mb-5 flex flex-wrap items-center gap-3 text-sm font-medium">
-        Бүртгэлийн төрөл
-        <select
-          value={reason}
-          onChange={(event) => setReason(event.target.value as Lead["reason"])}
-          className="rounded-[10px] border-[1.5px] border-line-2 bg-bg px-3 py-2.5 text-fg focus:border-brand focus:outline-none"
-        >
-          {GROUPS.map((item) => (
-            <option key={item.reason} value={item.reason}>
-              {item.title} ({leads.filter((lead) => lead.reason === item.reason).length})
-            </option>
-          ))}
-        </select>
-      </label>
+      <div role="tablist" aria-label="Бүртгэлийн төрөл" className="mb-5 flex flex-wrap gap-2">
+        {GROUPS.map((item) => {
+          const all = leads.filter((lead) => lead.reason === item.reason);
+          const fresh = all.filter((lead) => lead.status === "new").length;   // sidebar-ын "шинэ" badge-тэй ижил
+          const active = item.reason === reason;
+          return (
+            <button
+              key={item.reason}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setReason(item.reason)}
+              className={`flex items-center gap-2 rounded-[10px] border-[1.5px] bg-bg px-3.5 py-2.5 text-sm focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+                active ? "border-brand font-semibold text-fg" : "border-line-2 text-muted hover:bg-panel-2"
+              }`}
+            >
+              {item.title} ({all.length})
+              {fresh > 0 && (
+                <b className="rounded-[10px] bg-warn px-[7px] font-mono text-[11px] leading-[18px] font-semibold text-[#1b1408]"
+                  aria-label={`${fresh} шинэ`}>
+                  {fresh}
+                </b>
+              )}
+            </button>
+          );
+        })}
+      </div>
       <h2 className="mb-4 text-xl font-semibold">{group.title} ({rows.length})</h2>
       {rows.length ? (
         <Table head={["Хэзээ", "Нэр", "Утас", "Хөтөлбөр / эвент", "Төлөв", "Тэмдэглэл", "AI сануулга"]}>
