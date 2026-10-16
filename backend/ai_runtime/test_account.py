@@ -284,11 +284,16 @@ def daily_event_change(embed):
     keys = flow.handle("цагаа төлөө")
     check("«цагаа төлөө» (STT) -> өөр өдрүүдийг санал болгоно", flow.state == "slot" and keys[0] == "slots_intro"
           and "date:2026-10-17T18:00" in keys, keys)
+    check("жагсаалтын дараа «Аль цагийг сонгох вэ?» гэж яриагаар асууна", keys[-1] == "slot_pick_again", keys)
     flow.handle("хоёрдугаарыг")
-    keys = flow.handle("тийм")
+    keys = flow.handle("төв дүү")                          # STT "зөв" -> "төв дүү" (10-16 бодит дуудлага)
     check("эвентийн өдөр солигдлоо", keys[0] == "appt_done" and people.lead(tdir, lead)["course"] == "Нээлттэй өдөрлөг 2026-10-18",
           (keys, people.lead(tdir, lead)["course"]))
     item = _json.load(open(people.reminders_path(tdir)))["items"][str(lead)]
+    check("«Өөр асуух зүйл байна уу» -> «байхгүй ээ» -> баяртай, дуусна",
+          flow.handle("байхгүй ээ") == ["@bye"] and flow.finished)
+    check("SMS-д эвентийн нэр, шинэ өдөр", flow.events[-1].get("event") == "Нээлттэй өдөрлөг"
+          and flow.events[-1].get("at") == "2026-10-18T18:00", flow.events[-1])
     check("сануулга шинэ өдрөөр дахин товлогдсон", item["appointment"] == "2026-10-18T18:00" and not item.get("sms_at"), item)
     intent = acct.detect_intent(acct.Search(embed), "цагаа цөлөөлөх гэсэн")
     flow = acct.AccountFlow(tdir, acct.Search(embed), intent, "call-g", now=now)

@@ -26,7 +26,7 @@ from datetime import datetime
 import numpy as np
 
 import people
-from lead import parse_phone, yes_no
+from lead import CONFIRM_YES, parse_phone, yes_no
 
 MAX_CODE_TRIES = 3
 MATCH = 0.85            # bge-m3 (+үгийн давхцал): хүсэлтүүд >= 0.90, ерөнхий асуулт <= 0.80 (test_account.py --real)
@@ -160,6 +160,7 @@ class AccountFlow:
         self.chosen: datetime | None = None
         self.offered_events: list[dict] = []   # эвентийн бүртгэл: өөр өдрийн эвентүүд (цаг солих)
         self.menu_tries = 0
+        self.asked_more = False       # "Өөр асуух зүйл байна уу?" гэж асуусан -> "байхгүй" бол баяртай
         self.finished = False
         self.events: list[dict] = []  # өөрчлөлтүүд -> phone_server ажилтанд мэдэгдэнэ
 
@@ -181,7 +182,13 @@ class AccountFlow:
         if self.staff:
             self.state, self.lead = "target", None
             return "staff_next"
+        self.asked_more = True
         return "anything_else"
+
+    def _yes_no(self, text: str) -> bool | None:
+        """ "Зөв үү?" -> "төв дүү", "дөв дөв" (STT "зөв"-ийг ингэж сонсдог, бодит дуудлага)."""
+        ans = yes_no(text)
+        return True if ans is None and CONFIRM_YES.search(text.lower()) else ans
 
     # ---------- оролт ----------
 
@@ -226,13 +233,18 @@ class AccountFlow:
             digits = parse_phone(text)
             return self._phone(digits) if digits else ["ask_new_phone"]
         if self.state in ("phone_confirm", "slot_confirm", "cancel_confirm", "reg_cancel_confirm"):
-            ans = yes_no(text)
+            ans = self._yes_no(text)
             return self._confirm(ans) if ans is not None else ["confirm"]
         if self.state == "slot":
             i = self._ordinal(text)
             if i is not None and i < len(self.offered):
                 return self._pick(i)
             return self._offer(text)          # "Баасан гаригт болох уу" -> шинэ сонголт
+        if self.asked_more and not self.staff:        # "Өөр асуух зүйл байна уу?" -> "байхгүй ээ"
+            self.asked_more = False
+            if yes_no(text) is False or re.search(r"\b(болоо|баярлалаа|болсон)\b", text.lower()):
+                self.finished = True
+                return ["@bye"]
         # menu: хувийн баримтууд + хүсэлтүүдээс хайна
         if self.staff and people.find_by_name(self.tdir, text):    # ажилтан өөр хүний нэр хэлсэн
             self.state = "target"
@@ -390,7 +402,7 @@ class AccountFlow:
         keys = ["slots_intro"]
         for i, at in enumerate(self.offered):
             keys += [f"press_{i + 1}", f"date:{people.fmt(at)}"]
-        return keys
+        return keys + ["slot_pick_again"]             # "Аль цагийг сонгох вэ? Нэгдүгээр, ..." (товчлуургүй)
 
     def _offer_event(self, text: str) -> list[str]:
         """Эвентийн бүртгэл: ижил эвентийн өөр өдрүүд (өдөр бүрийн эвент). Гараг хэлсэн бол тэр өдрийг."""
@@ -410,7 +422,7 @@ class AccountFlow:
         keys = ["slots_intro"]
         for i, at in enumerate(self.offered):
             keys += [f"press_{i + 1}", f"date:{people.fmt(at)}"]
-        return keys
+        return keys + ["slot_pick_again"]             # "Аль цагийг сонгох вэ? Нэгдүгээр, ..." (товчлуургүй)
 
     def _match_slots(self, text: str, free: list[datetime]) -> list[datetime]:
         """Сул цаг бүр нэг баримт: "маргааш Баасан гараг аравдугаар сарын арван долооны арван цагт"."""
@@ -450,7 +462,7 @@ class AccountFlow:
             ev = self.offered_events[self.offered.index(self.chosen)]
             old = people.set_event(self.tdir, lead_id, ev, self.source, self.call_uuid, now=self.now)
             self.events.append({"field": "appointment", "old": old, "new": people.event_course(ev),
-                                "lead": self.lead, "staff": self.staff})
+                                "lead": self.lead, "staff": self.staff, "event": ev["name"], "at": ev["at"]})
             self.offered_events = []
             return ["appt_done", f"date:{ev['at']}", self._end()]
         if state == "slot_confirm":

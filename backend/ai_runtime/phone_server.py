@@ -681,6 +681,12 @@ class Call:
             await self.play(wav, sr)
 
         for key in keys:
+            if key == "@bye":                         # "Өөр асуух зүйл байна уу?" -> "байхгүй" -> баяртай
+                faq = next((f for f in self.router.meta["faq"] if f["id"] == "smalltalk_bye"), None)
+                if faq:
+                    await say(*self.router.clip(faq))
+                    spoken.append(faq["answer"])
+                continue
             if key.startswith("ev:"):                 # бүртгэлийн нэр (эвент/хөтөлбөр) — цуцлахын өмнө
                 clip = self.router.meta.get("events", {}).get(key[3:])
                 if clip:
@@ -715,6 +721,8 @@ class Call:
         if flow.finished:
             self.account = None
         self.history += [{"role": "user", "content": said}, {"role": "assistant", "content": reply}]
+        if "@bye" in keys:
+            await self.hangup()
         self.history = self.history[-8:]
 
     def notify_change(self, lead: dict, ev: dict):
@@ -730,7 +738,9 @@ class Call:
         if ev["field"] == "appointment" and ev["new"] and phone and not ev.get("staff"):
             try:
                 if notify.load_settings(self.tenant.settings_path).get("sms_on_register"):
-                    text = notify.event_sms_text(self.tenant.config().get("name") or "", "уулзалт", ev["new"], None)
+                    # эвентийн өдөр солисон бол "Нээлттэй өдөрлөг 10/17 18:00", уулзалт бол "уулзалт <цаг>"
+                    text = notify.event_sms_text(self.tenant.config().get("name") or "", ev.get("event") or "уулзалт",
+                                                 ev.get("at") or ev["new"], None)
                     asyncio.get_running_loop().run_in_executor(None, notify.send_sms, phone, text)
             except Exception as e:
                 print(f"  [SMS эхлүүлэх алдаа] {type(e).__name__}")
