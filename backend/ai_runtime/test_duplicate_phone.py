@@ -71,6 +71,12 @@ class DuplicatePhoneTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.call.save_lead(self.flow(event={"name": "New event"})), "4720")
         self.assertEqual(self.count(), 2)                 # өөр эвент -> бүртгэнэ
 
+    async def test_setting_allows_repeat_registration(self):
+        self.seed()
+        with patch("phone_server.notify.load_settings", return_value={"allow_repeat_registration": True}):
+            self.assertEqual(self.call.save_lead(self.flow()), "4720")
+        self.assertEqual(self.count(), 2)
+
     async def test_program_student_can_join_event(self):
         self.seed(course="Bootcamp")                       # хөтөлбөрт бүртгэлтэй хүн
         self.assertEqual(self.call.save_lead(self.flow(event={"name": "Open day"})), "4720")

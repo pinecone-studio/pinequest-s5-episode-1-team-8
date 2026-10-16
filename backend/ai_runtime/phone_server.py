@@ -546,6 +546,8 @@ class Call:
             existing = (db.active_lead(flow.phone, course, path=self.tenant.db_path) if flow.event
                         else db.active_lead(flow.phone, path=self.tenant.db_path, reason="lead"))
             existing = existing if flow.reason in ("lead", "event") and flow.phone else None
+            if existing and notify.load_settings(self.tenant.settings_path).get("allow_repeat_registration"):
+                existing = None                       # settings.json: давхар бүртгэлийг зөвшөөрнө (демо, туршилт)
             if existing:
                 flow.duplicate, self.last_lead_id = True, existing
                 print(f"  [LEAD] өмнө бүртгэлтэй хэрэглэгч (#{existing})")
