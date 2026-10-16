@@ -124,7 +124,8 @@ export function LeadRow({ lead, reminder, code, changes = [] }: { lead: Lead; re
         {lead.caller && <div className="text-[13px] text-muted">Caller ID: {lead.caller}</div>}
       </Td>
       <Td>
-        {lead.reason === "handoff" ? <Tag tone="warn">Ажилтан</Tag> : <Tag>Бүртгүүлэх</Tag>}
+        {lead.reason === "handoff" ? <Tag tone="warn">Ажилтан</Tag> : <Tag>{lead.reason === "event" ? "Эвент" : "Хөтөлбөр"}</Tag>}
+        {lead.reason !== "handoff" && <div className="mt-1 text-sm font-medium">{lead.course || "Нэр оруулаагүй"}</div>}
         {lead.question && <div className="mt-1 text-[13px] text-muted">{lead.question}</div>}
       </Td>
       <Td className="min-w-[150px]">

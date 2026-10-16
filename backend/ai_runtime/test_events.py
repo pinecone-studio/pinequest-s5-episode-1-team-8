@@ -1,6 +1,7 @@
 """Эвентийн бүртгэл утсаар (lead.py): "Эвентэд бүртгүүлмээр байна" ба энгийн бүртгэлийг ялгах, эвент сонгох."""
 import os
 import unittest
+from unittest.mock import AsyncMock, Mock
 
 from lead import LeadFlow, match_event, wants_event
 
@@ -118,6 +119,53 @@ class DuplicateEventTest(unittest.TestCase):
             self.assertIsNone(db.active_lead("85222634", "AI Hackathon", path=path))   # цуцалсан -> дахин бүртгэнэ
 
 
+class SpokenEventChoiceTest(unittest.IsolatedAsyncioTestCase):
+    async def test_stt_number_reaches_event_selection(self):
+        import numpy as np
+        from phone_server import Call
+
+        for text, index in [("1", 0), ("2", 1), ("3", 2), ("1.", 0),
+                            ("нэг", 0), ("хоёр", 1), ("гурав", 2), ("эхнийх", 0)]:
+            with self.subTest(text=text):
+                call = Call.__new__(Call)
+                call.lead = LeadFlow("event", "event_start", None, events=EVENTS)
+                call.lead.handle("эвентэд бүртгүүлмээр байна")
+                call.account, call.en = None, None
+                call.m = Mock(stt_pool=None)
+                call.transcribe = Mock(return_value=(text, "mn"))
+                call.hold_while = AsyncMock()
+                call.log = Mock()
+
+                async def lead_turn(answer):
+                    call.lead.handle(answer)
+                    return True
+
+                call.lead_turn = AsyncMock(side_effect=lead_turn)
+                await call.handle_utterance(np.zeros(800, dtype=np.float32))
+                call.lead_turn.assert_awaited_once_with(text)
+                self.assertEqual(call.lead.event, EVENTS[index])
+                self.assertEqual(call.lead.state, "event_offer")
+                self.assertFalse(call.lead.finished)
+
+    def test_event_selection_uses_registration_language(self):
+        from phone_server import Call, SR
+
+        call = Call.__new__(Call)
+        call.en, call.m = Mock(), Mock()
+        call.lang = "en"
+        call.lead = LeadFlow("event", "event_pick", None, events=EVENTS)
+        call.m.bilingual.transcribe_as.return_value = "1"
+        audio = object()
+        self.assertEqual(call.transcribe(audio), ("1", "mn"))
+        call.m.bilingual.transcribe_as.assert_called_once_with(audio, SR, "mn")
+        call.m.bilingual.transcribe.assert_not_called()
+
+    def test_unavailable_number_is_not_selected(self):
+        flow = LeadFlow("event", "event_start", None, events=EVENTS[:2])
+        flow.handle("эвентэд бүртгүүлмээр байна")
+        for text in ("3", "0"):
+            with self.subTest(text=text):
+                self.assertIsNone(flow._pick_event(text))
 
 class NoisyEventSttTest(unittest.TestCase):
     """10-15 бодит дуудлага: STT "эвентэд бүртгүүлмээр байна"-г эвдэж бичсэн."""
@@ -132,6 +180,28 @@ class NoisyEventSttTest(unittest.TestCase):
 class WhichRegistrationTest(unittest.TestCase):
     """10-15: "юмэнд бүртгүүлмээр" -> хөтөлбөр гэж ойлгоод уулзалтын цаг санал болгосон."""
     EV = [{"name": "AI Hackathon", "at": "2026-10-18T10:00"}]
+
+    def test_unclear_answers_do_not_choose_a_program(self):
+        f = LeadFlow("lead", "which_start", None, events=self.EV, book=True)
+        self.assertEqual(f.handle("бүртгүүлмээр байна"), ["which_ask"])
+        self.assertEqual(f.handle("ойлгосонгүй"), ["which_ask"])
+        self.assertEqual(f.handle("ойлгосонгүй"), [])
+        self.assertTrue(f.finished)
+        self.assertEqual(f.result, "declined")
+        self.assertNotEqual(f.state, "name")
+        self.assertFalse(f.saved)
+        self.assertFalse(f.save_pending)
+
+    def test_explicit_choice_after_retry_is_still_respected(self):
+        for answer, reason, state in [("хөтөлбөрт", "lead", "name"),
+                                      ("арга хэмжээнд", "event", "event_offer")]:
+            with self.subTest(answer=answer):
+                f = LeadFlow("lead", "which_start", None, events=self.EV, book=True)
+                f.handle("бүртгүүлмээр байна")
+                f.handle("ойлгосонгүй")
+                f.handle(answer)
+                self.assertEqual((f.reason, f.state), (reason, state))
+                self.assertFalse(f.finished)
 
     def test_stt_variant_is_event(self):
         from lead import wants_event
