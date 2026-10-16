@@ -214,6 +214,7 @@ class Call:
         self.dtmf_at = 0.0               # сүүлд товчлуур дарсан цаг (DTMF_GAP)
         self.caller_level = 0.0          # залгагчийн ярианы түвшин (хүлээж авсан өгүүлбэрүүдийн оргил)
         self.reprompt: asyncio.Task | None = None   # бүртгэлийн асуултыг давтах таймер
+        self.last_said = 0.0                         # залгагчийн сүүлийн жинхэнэ яриа (чимээ биш)
         self.hearing = False             # залгагч яг одоо ярьж байна (VAD)
         self.name_audio = None           # нэрийн бичлэг -> дуудлагын дараа нэрийг засна (fix_names)
         self.name_jobs: list = []        # [(lead_id, нэр, бичлэг)]
@@ -327,6 +328,7 @@ class Call:
         if not short_choice and len(re.sub(r"\W", "", text)) < (2 if self.lead or self.account else MIN_TEXT_CHARS):
             print("  [алгасав] хэт богино (чимээ/echo)")
             return
+        self.last_said = time.monotonic()
         self.log("user", text, stt_sec=stt_sec)
         if REPEAT_LAST.search(text.lower()) and self.last_reply:
             for wav, sr in self.last_reply:
@@ -336,12 +338,23 @@ class Call:
                 self.arm_reprompt(self.last_reply)
             return
         t1 = time.perf_counter()
+        if STILL_THERE.search(text.lower()) and self.history and self.last_reply:
+            # "Байна уу?" (AI чимээгүй болсон гэж бодсон) -> мэндчилгээг эхнээс нь биш, сүүлийн хэлснээ давтана
+            for wav, sr in self.last_reply:
+                await self.play(wav, sr)
+            print(f"  AI (давтав): {self.last_reply_text}")
+            self.log("assistant", self.last_reply_text, route="repeat_last")
+            if self.lead:
+                self.arm_reprompt(list(self.last_reply))
+            return
         name_flow = self.lead if self.lead and self.lead.state == "name" else None
         if self.lead and await self.lead_turn(text):
             if name_flow and name_flow.state != "name":    # нэрээ хэлсэн бичлэг
                 self.name_audio = audio
             return
         if self.account and lang != "en" and await self.account_turn(text=text):
+            return
+        if lang != "en" and not self.lead and not self.account and await self.start_account_direct(text):
             return
         if (lang != "en" and not self.lead and not self.account and "lead" in self.router.meta
                 and (wants_event(text, self.upcoming_events())
@@ -446,7 +459,7 @@ class Call:
         """Удахгүй болох эвентүүд (Тохиргоо -> Эвент), ойроос нь. "Эвентэд бүртгүүлмээр байна" -> эдгээрээс."""
         now = datetime.now(people.TZ)
         evs = [e for e in people.events(self.tenant.dir) if people.parse_local(e["at"]) > now]
-        return sorted(evs, key=lambda e: e["at"])[:3]
+        return sorted(evs, key=lambda e: e["at"])[:7]     # LeadFlow эхний 3-ыг уншина, бусдыг гарагаар сонгоно
 
     def last_question(self, fallback: str) -> str:
         """Ажилтанд шилжүүлэх үеийн жинхэнэ асуулт ("дахин хэлнэ үү"-гийн өмнөх)."""
@@ -456,6 +469,16 @@ class Call:
     async def lead_turn(self, text: str) -> bool:
         """Бүртгэлийн нэг алхам. False = энэ нь хариулт биш шинэ асуулт -> энгийн горим."""
         router, flow = self.router, self.lead
+        if flow.state == "phone" and self.dtmf:      # дугаараа товчлуураар бичиж байна -> яриаг алгасна
+            print(f"  [алгасав] товчлуураар бичиж байх үеийн яриа: {text}")
+            return True
+        if REPEAT_ASK.search(text.lower()) and self.last_reply:    # "ахиад хэлээч" -> асуултаа давтана
+            for wav, sr in self.last_reply:
+                await self.play(wav, sr)
+            print(f"  AI [бүртгэл:{flow.state}] (давтав): {self.last_reply_text}")
+            self.log("assistant", self.last_reply_text, route="repeat_last")
+            self.arm_reprompt(list(self.last_reply))
+            return True
         keys = flow.handle(text)
         if not keys:
             self.lead = None
@@ -548,8 +571,13 @@ class Call:
         """Бүртгэлийг хадгалж, хувийн RAG-д холбоно (код + баримтууд) -> бүртгэлийн код."""
         try:
             course = people.event_course(flow.event) if flow.event else self.tenant.config().get("lead_label")
-            existing = (db.active_lead(flow.phone, path=self.tenant.db_path)
-                        if flow.reason in ("lead", "event") and flow.phone else None)
+            # Хөтөлбөрт: дугаар хөтөлбөрт бүртгэлтэй бол давхар (#180). Эвентэд: зөвхөн тэр өдрийн тэр эвентэд
+            # бүртгэлтэй бол давхар — Bootcamp-ийн сурагч Нээлттэй өдөрлөгт бүртгүүлж болно.
+            existing = (db.active_lead(flow.phone, course, path=self.tenant.db_path) if flow.event
+                        else db.active_lead(flow.phone, path=self.tenant.db_path, reason="lead"))
+            existing = existing if flow.reason in ("lead", "event") and flow.phone else None
+            if existing and notify.load_settings(self.tenant.settings_path).get("allow_repeat_registration"):
+                existing = None                       # settings.json: давхар бүртгэлийг зөвшөөрнө (демо, туршилт)
             if existing:
                 flow.duplicate, self.last_lead_id = True, existing
                 print(f"  [LEAD] өмнө бүртгэлтэй хэрэглэгч (#{existing})")
@@ -618,6 +646,26 @@ class Call:
 
     # ---------- Бүртгэлээ шалгах / өөрчлөх (хувийн RAG) ----------
 
+    async def start_account_direct(self, text: str) -> bool:
+        """ "Нээлттэй өдөрлөгийн цагийг солиулмаар байна", "бүртгэлээ цуцлах" -> FAQ/эвентийн бүртгэл рүү
+        андуурахгүй, шууд кодоо асууж (my_account) тэр хүсэлтээр нь үргэлжлүүлнэ."""
+        if "account" not in self.router.meta:
+            return False
+        fixed = self.router.fix_stt(text)
+        # "цагаас илүү мэрээ", "цагийг сөлүүлээ" (STT эвдсэн "солиулмаар") -> "цаг" + асуулт биш = цаг солих
+        intent = acct.keyword_intent(fixed) or (acct.time_intent(fixed) if OWN_TIME.search(fixed.lower()) else None)
+        faq = next((f for f in self.router.meta["faq"] if f["id"] == "my_account"), None)
+        if intent not in ("change_time", "change_phone", "cancel", "cancel_registration") or not faq:
+            return False
+        await self.play(*self.router.clip(faq))
+        self.last_reply, self.last_reply_text = [self.router.clip(faq)], faq["answer"]
+        print(f"  AI: {faq['answer']}")
+        self.log("assistant", faq["answer"], route="faq")
+        self.history += [{"role": "user", "content": text}, {"role": "assistant", "content": faq["answer"]}]
+        self.account = acct.AccountFlow(self.tenant.dir, self.m.account_search, intent, self.uuid)
+        print(f"  [бүртгэлээ шалгах] хүсэлт: {intent}")
+        return True
+
     def maybe_start_account(self, meta: dict, text: str):
         faq = meta.get("faq_id")
         if faq not in ("my_account", "staff_mode") or "account" not in self.router.meta or self.lead:
@@ -664,6 +712,12 @@ class Call:
             await self.play(wav, sr)
 
         for key in keys:
+            if key == "@bye":                         # "Өөр асуух зүйл байна уу?" -> "байхгүй" -> баяртай
+                faq = next((f for f in self.router.meta["faq"] if f["id"] == "smalltalk_bye"), None)
+                if faq:
+                    await say(*self.router.clip(faq))
+                    spoken.append(faq["answer"])
+                continue
             if key.startswith("ev:"):                 # бүртгэлийн нэр (эвент/хөтөлбөр) — цуцлахын өмнө
                 clip = self.router.meta.get("events", {}).get(key[3:])
                 if clip:
@@ -698,6 +752,10 @@ class Call:
         if flow.finished:
             self.account = None
         self.history += [{"role": "user", "content": said}, {"role": "assistant", "content": reply}]
+        if "@bye" in keys:
+            await self.hangup()
+        elif keys and keys[-1] == "anything_else":   # "Өөр асуух зүйл байна уу?" -> чимээгүй бол баяртай
+            asyncio.create_task(self._bye_if_silent(time.monotonic()))
         self.history = self.history[-8:]
 
     def notify_change(self, lead: dict, ev: dict):
@@ -713,7 +771,19 @@ class Call:
         if ev["field"] == "appointment" and ev["new"] and phone and not ev.get("staff"):
             try:
                 if notify.load_settings(self.tenant.settings_path).get("sms_on_register"):
-                    text = notify.event_sms_text(self.tenant.config().get("name") or "", "уулзалт", ev["new"], None)
+                    # эвентийн өдөр солисон бол "Нээлттэй өдөрлөг 10/17 18:00", уулзалт бол "уулзалт <цаг>"
+                    text = notify.event_sms_text(self.tenant.config().get("name") or "", ev.get("event") or "уулзалт",
+                                                 ev.get("at") or ev["new"], None)
+                    asyncio.get_running_loop().run_in_executor(None, notify.send_sms, phone, text)
+            except Exception as e:
+                print(f"  [SMS эхлүүлэх алдаа] {type(e).__name__}")
+        if ev["field"] == "status" and ev["new"] == "canceled" and phone and not ev.get("staff"):
+            try:                                      # "Таны бүртгэлийг цуцаллаа" -> утсанд нь SMS
+                if notify.load_settings(self.tenant.settings_path).get("sms_on_register"):
+                    course = lead.get("course")
+                    ev_def = people.event_of(self.tenant.dir, course)
+                    text = notify.cancel_sms_text(self.tenant.config().get("name") or "", course,
+                                                  ev_def and ev_def["at"])
                     asyncio.get_running_loop().run_in_executor(None, notify.send_sms, phone, text)
             except Exception as e:
                 print(f"  [SMS эхлүүлэх алдаа] {type(e).__name__}")
@@ -858,6 +928,24 @@ class Call:
         print("  [дахин асуув] залгагч чимээгүй")
         for wav, sr in clips:
             await self.play(wav, sr)
+
+    async def _bye_if_silent(self, since: float):
+        """ "Өөр асуух зүйл байна уу?"-гийн дараа REPROMPT_AFTER сек юу ч хэлээгүй (чимээ, "а" тооцохгүй)
+        -> "Манайхаар үйлчлүүлсэнд баярлалаа ... Баяртай" гээд салгана (10-16: хүлээгээд чимээгүй болсон)."""
+        await asyncio.sleep(REPROMPT_AFTER)
+        while self.hearing and not self.closed:     # ярьж эхэлсэн -> өгүүлбэр дуусахыг хүлээнэ
+            await asyncio.sleep(0.3)
+        await asyncio.sleep(0.5)
+        if self.closed or self.busy or self.last_said > since or self.lead or (self.turn and not self.turn.done()):
+            return
+        faq = next((f for f in self.router.meta["faq"] if f["id"] == "smalltalk_bye"), None)
+        if not faq:
+            return
+        print("  [баяртай] залгагч чимээгүй")
+        await self.play(*self.router.clip(faq))
+        self.log("assistant", faq["answer"], route="faq")
+        self.account = None
+        await self.hangup()
 
     def start_turn(self, audio: np.ndarray):
         self.cancel_reprompt()
@@ -1035,6 +1123,9 @@ def selector_state(router) -> str:
     return f"{'идэвхтэй' if sel.enabled else 'идэвхгүй'}, {len(router.sel_answers)} хариулт"
 
 
+OWN_TIME = re.compile(r"\bцаг(аа|ийг|аас)\w*")      # "цагаа/цагийг ..." (хичээлийн "цагийн хуваарь" биш)
+STILL_THERE = re.compile(r"^\W*(байна уу|алл?о+|сонс(ож|огдож) байна уу)\W*$")
+REPEAT_ASK = re.compile(r"\b(ахиад|дахиад|дахин)\s+(хэл|нэг\s+хэл)|давтаж\s+хэл|сонсогдсонгүй")
 GENERIC_FAQ = ("smalltalk_", "phone_", "repeat_last", "register", "human_request", "contact_phone")
 
 

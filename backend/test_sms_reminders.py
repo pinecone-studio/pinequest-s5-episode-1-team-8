@@ -41,6 +41,29 @@ class SmsReminderTest(unittest.TestCase):
         _, sent, _ = self.run_due(items, datetime(2026, 10, 18, 9, 0, tzinfo=TZ))
         self.assertEqual(sent, [])                                      # нэг л удаа
 
+    def test_sms_before_hours_setting_sends_right_away(self):
+        items = {"7": {"appointment": "2026-10-18T18:00", "event": "Нээлттэй өдөрлөг", "status": "scheduled"}}
+        sent, data = [], {"items": items}
+        with patch.object(reminders, "all_tenants", return_value=[FakeTenant()]), \
+                patch.object(reminders, "settings", return_value={"sms_reminders": True, "sms_before_hours": 24}), \
+                patch.object(reminders, "load", return_value=data), patch.object(reminders, "save"), \
+                patch.object(reminders, "lead_of", return_value={"phone": "85222634"}):
+            reminders.sms_due(datetime(2026, 10, 18, 9, 5, tzinfo=TZ), send=lambda p, t: sent.append(t) or True)
+        self.assertEqual(len(sent), 1)                                  # 9 цагийн өмнө -> шууд
+
+    def test_failed_sms_is_retried_then_given_up(self):
+        items = {"7": {"appointment": "2026-10-18T10:00", "event": "AI Hackathon", "status": "scheduled"}}
+        now = datetime(2026, 10, 18, 8, 30, tzinfo=TZ)
+        data = {"items": items}
+        for i in range(1, 4):
+            with patch.object(reminders, "all_tenants", return_value=[FakeTenant()]), \
+                    patch.object(reminders, "settings", return_value={"sms_reminders": True}), \
+                    patch.object(reminders, "load", return_value=data), patch.object(reminders, "save"), \
+                    patch.object(reminders, "lead_of", return_value={"phone": "85222634"}):
+                reminders.sms_due(now, send=lambda phone, text: False)          # ConnectError гэх мэт
+            self.assertEqual(items["7"]["sms_tries"], i)
+            self.assertEqual(bool(items["7"].get("sms_at")), i == 3)         # 3 дахь удаад л больно
+
     def test_skips_canceled_declined_and_disabled(self):
         now = datetime(2026, 10, 16, 13, 0, tzinfo=TZ)
         items = {"1": {"appointment": "2026-10-16T14:00", "status": "canceled"},

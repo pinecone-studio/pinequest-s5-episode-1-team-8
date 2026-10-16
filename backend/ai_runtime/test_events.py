@@ -238,5 +238,112 @@ class DailyEventTest(unittest.TestCase):
             self.assertEqual(people.event_defs(d)[0]["repeat"], "daily")
 
 
+class RealCallsOct15Test(unittest.TestCase):
+    """10-15 оройн бодит дуудлагууд: өдөр бүрийн эвентийн 3 өдрийг уншаад гацсан, «Баасан гараг» ойлгоогүй,
+    ойлгомжгүй хариултад бүртгэлээс гарсан, «евинт», «удахгүй болох...»-ыг эвент гэж таниагүй."""
+    DAILY = [{"name": "Нээлттэй өдөрлөг", "at": f"2026-10-{d}T18:00"} for d in range(16, 23)]   # Баасан..Пүрэв
+
+    def test_daily_event_is_offered_directly(self):
+        f = LeadFlow("event", "event_start", None, events=self.DAILY)
+        keys = f.handle("евентет бүртгүүлье ээ")
+        self.assertEqual((f.state, f.event["at"]), ("event_offer", "2026-10-16T18:00"))
+        self.assertNotIn("event_list", keys)
+
+    def test_weekday_picks_that_day(self):
+        f = LeadFlow("event", "event_start", None, events=self.DAILY)
+        f.handle("бямба гарагийнх руу бүртгүүлье")
+        self.assertEqual(f.event["at"], "2026-10-17T18:00")
+        f.handle("баатон гарагийн нээлттэй өдөрлөг")         # саналын үед өөр өдөр хэлбэл солино
+        self.assertEqual((f.state, f.event["at"]), ("event_offer", "2026-10-16T18:00"))
+
+    def test_unclear_answer_reoffers_instead_of_leaving(self):
+        f = LeadFlow("event", "event_start", None, events=self.DAILY)
+        f.handle("эвентэд бүртгүүлье")
+        keys = f.handle("тэр хүрэх банд ирсэн")
+        self.assertEqual(f.state, "event_offer")
+        self.assertIn("event_ask", keys)
+        self.assertFalse(f.finished)
+        self.assertEqual(f.handle("тийм"), ["ask_name_again"])
+
+    def test_stt_variants_and_soon_mean_event(self):
+        self.assertTrue(wants_event("евинт бүртгүүлсэн", EVENTS))
+        f = LeadFlow("lead", "which", None, events=self.DAILY)
+        f.handle("удахгүй бол гаргах юм гэж энэ бүртгүүлээ")
+        self.assertEqual(f.reason, "event")
+        self.assertEqual(f.state, "event_offer")
+
+    def test_repeat_request_detected(self):
+        from phone_server import REPEAT_ASK
+        for text in ["ахиад хэл дээ", "дахиад хэлээч", "сонсогдсонгүй"]:
+            self.assertTrue(REPEAT_ASK.search(text), text)
+        self.assertFalse(REPEAT_ASK.search("дахин бүртгүүлье"))
+        from phone_server import STILL_THERE
+        for text in ["байна уу", "алло", "сонсож байна уу?"]:
+            self.assertTrue(STILL_THERE.search(text), text)
+        self.assertFalse(STILL_THERE.search("сайн байна уу"))
+        self.assertFalse(STILL_THERE.search("эвент байна уу"))
+
+
+
+class RealCallsOct16Test(unittest.TestCase):
+    """10-16: «гүцэн», «наян цав» танихгүй; товчлуур дарж байхдаа «нэг асуулт» гэснийг алдаа гэж тоолоод
+    дугааргүй хадгалж дуусгасан; дугаарыг хоёр хувааж хэлэхэд ойлгоогүй."""
+
+    def test_spoken_number_variants(self):
+        from lead import parse_phone
+        self.assertEqual(parse_phone("наян тав хорин хоёр хорин дургайгаа гүцэн дөрөв"), "85222634")
+        self.assertEqual(parse_phone("наян цав хорин хоёр хорин дургай гучин дөрөв"), "85222634")
+
+    def test_non_number_speech_does_not_end_registration(self):
+        f = LeadFlow("event", "phone", None)
+        for text in ["нэг асуулт", "байна уу", "юу"]:
+            self.assertEqual(f.handle(text), ["phone_retry"])
+        self.assertFalse(f.finished)
+
+    def test_number_in_two_halves(self):
+        f = LeadFlow("event", "phone", None)
+        self.assertEqual(f.handle("наян тав хорин хоёр"), ["digits:8522"])
+        self.assertEqual(f.handle("хорин зургаа гучин дөрөв"), ["readback", "digits:85222634", "confirm"])
+
+
+    def test_change_time_is_not_registration(self):
+        # 10-16: "цагийг солиулмаар" -> бүртгэлийн санал биш, код асууж цаг солих урсгал
+        import account
+        daily = RealCallsOct15Test.DAILY
+        text = "нээлттэй өдөрлөгийн цагийг солиулмаар байна аа"
+        self.assertFalse(wants_event(text, daily))
+        self.assertEqual(account.keyword_intent(text), "change_time")
+        f = LeadFlow("event", "event_start", None, events=daily)
+        f.handle("эвентэд бүртгүүлье")
+        self.assertEqual(f.handle("үгүй ээ үгүй цагаа солиулмаар байна"), [])   # бүртгэлээс гарч шинэ хүсэлт
+        self.assertTrue(f.finished)
+
+
+    def test_garbled_change_time_requests(self):
+        # 10-16 дахин: STT "солиулмаар"-ыг эвдсэн; ажилтны саналын үед "үгүй, цагийг соль"
+        import account
+        for text in ["нээлттэй удирдлагын цагаас илүү мэрээ", "нээлттэй өдөр л би хүн цагийг сөлүүлээ",
+                     "үгүй ээ энэ өдөрлөгийнхөө цагийг соль хэлье"]:
+            self.assertEqual(account.keyword_intent(text) or account.time_intent(text), "change_time", text)
+        for text in ["нээлттэй өдөрлөг хэдэн цагт болох вэ", "24 цаг ажилладаг уу"]:
+            self.assertNotEqual(account.keyword_intent(text) or account.time_intent(text), "change_time", text)
+        from phone_server import OWN_TIME
+        self.assertTrue(OWN_TIME.search("цагийг сөлүүлээ") and OWN_TIME.search("цагаас илүү мэрээ"))
+        self.assertFalse(OWN_TIME.search("хичээлийн цагийн хуваарь"))
+        f = LeadFlow("handoff", "offer", None)
+        self.assertEqual(f.handle("үгүй ээ энэ өдөрлөгийнхөө цагийг соль хэлье"), [])
+
+
+    def test_cant_make_it_cancels_and_change_question(self):
+        import account, notify
+        for text in ["нээлттэй өдөрлөгт очиж амжихааргүй боллоо", "очиж чадахгүй нь ээ", "ирж амжихгүй нь"]:
+            self.assertEqual(account.keyword_intent(text), "cancel_registration", text)
+            self.assertFalse(wants_event(text, RealCallsOct15Test.DAILY), text)
+        self.assertEqual(account.keyword_intent("цагаа солиулж болох уу"), "change_time")
+        t = notify.cancel_sms_text("Pinecone Academy", "Нээлттэй өдөрлөг 2026-10-17", "2026-10-17T18:00")
+        self.assertEqual(t, "Pinecone Academy: Нээлттэй өдөрлөг 10/17 18:00 бүртгэл цуцлагдлаа.")
+        self.assertLessEqual(len(notify.cancel_sms_text("Pinecone Academy", "Маш урт нэртэй эвент " * 4, None)), 70)
+
+
 if __name__ == "__main__":
     unittest.main()
