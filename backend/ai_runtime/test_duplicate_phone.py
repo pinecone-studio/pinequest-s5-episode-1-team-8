@@ -129,6 +129,47 @@ class DuplicatePhoneTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(self.call.log.call_args.kwargs["route"], "lead_save_failed")
         self.sms.assert_not_called()
 
+    async def test_code_is_announced_as_sms_without_reading_digits(self):
+        from tenant import DEFAULT_PHRASES
+
+        for book in (False, True):
+            with self.subTest(book=book):
+                self.call.router.meta["lead"] = {key: {"text": text} for key, text in DEFAULT_PHRASES["lead"].items()}
+                self.call.router.clip.side_effect = lambda clip: (clip["text"], 8000)
+                self.call.digits_audio = Mock(side_effect=AssertionError("registration code must not be spoken"))
+                self.call.play.reset_mock()
+                self.sms.return_value = True
+                flow = self.flow(phone="99112233" if not book else "88776655", book=book)
+                await self.call.lead_turn("зөв")
+                reply = self.call.log.call_args.args[1]
+                self.assertIn(DEFAULT_PHRASES["lead"]["done_sms"], reply)
+                self.assertNotIn("4720", reply)
+                self.assertNotIn("47 20", reply)
+                self.assertEqual(flow.state, "book_offer" if book else "confirm")
+                self.assertEqual("Уулзалтын цаг товлох уу?" in reply, book)
+                self.call.digits_audio.assert_not_called()
+
+    async def test_failed_sms_does_not_claim_it_was_sent(self):
+        from tenant import DEFAULT_PHRASES
+
+        self.call.router.meta["lead"] = {key: {"text": text} for key, text in DEFAULT_PHRASES["lead"].items()}
+        self.sms.return_value = False
+        flow = self.flow()
+        await self.call.lead_turn("зөв")
+        self.assertEqual(self.call.log.call_args.args[1], DEFAULT_PHRASES["lead"]["code_sms_failed"])
+        self.assertTrue(flow.saved)
+        self.assertEqual(self.count(), 1)
+
+    async def test_event_registration_uses_sms_confirmation(self):
+        from tenant import DEFAULT_PHRASES
+
+        self.call.router.meta["lead"] = {key: {"text": text} for key, text in DEFAULT_PHRASES["lead"].items()}
+        self.sms.return_value = True
+        self.flow(event={"name": "Demo", "at": "2026-10-20T10:00"})
+        await self.call.lead_turn("зөв")
+        self.assertEqual(self.call.log.call_args.args[1], DEFAULT_PHRASES["lead"]["done_sms"])
+        self.call.hangup.assert_awaited_once()
+
     async def test_canceled_or_handoff_is_not_an_active_registration(self):
         original = self.seed()
         with db.connect(self.path) as con:

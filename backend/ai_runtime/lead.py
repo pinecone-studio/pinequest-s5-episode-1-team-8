@@ -224,6 +224,7 @@ class LeadFlow:
         self.book = book              # бүртгэлийн дараа "Уулзалтын цаг товлох уу?" (сул цаг байвал)
         self.save_pending = False     # дугаар баталгаажсан -> phone_server одоо хадгална (урсгал үргэлжилнэ)
         self.saved = False            # phone_server хадгалсан (давхар хадгалахгүй)
+        self.sms_future = None        # SMS үйлчилгээ хүсэлтийг хүлээн авсан эсэх
         self.duplicate = False        # энэ хөтөлбөр/эвентэд аль хэдийн бүртгэлтэй (phone_server тогтооно)
         self.caller = caller
         self.name = None

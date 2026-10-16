@@ -490,7 +490,6 @@ class Call:
             replay.append((wav, sr))
             await self.play(wav, sr)
         en = self.en if flow.lang == "en" and self.en else None
-        code_keys = []
         if (flow.save_pending or (flow.finished and flow.result not in ("declined", "book"))) and not flow.saved:
             flow.save_pending = False
             code = self.save_lead(flow)
@@ -505,19 +504,24 @@ class Call:
                 self.last_reply, self.last_reply_text = [audio], clip["text"]
                 self.log("assistant", clip["text"], route="lead_save_failed")
                 return True
-            if code and not en and "account" in router.meta:
-                code_keys = ["your_code", f"digits:{code}", "code_remember"]
-        if code_keys and keys:
-            keys = keys[:-1] + code_keys + keys[-1:]
+            if code and not flow.duplicate and flow.sms_future is not None:
+                try:
+                    sent = bool(await flow.sms_future)
+                except Exception as exc:
+                    print(f"  [SMS алдаа] {type(exc).__name__}")
+                    sent = False
+                if not en:
+                    sms_key = "done_sms" if sent else "code_sms_failed"
+                    replacement = [sms_key] + (["book_after_sms"] if flow.state == "book_offer" else [])
+                    if all(router.meta["lead"].get(key) for key in replacement):
+                        keys = keys[:-1] + replacement
+                    else:
+                        print("  [анхаар] SMS хариуны аудиог «Аудио бэлдэх»-ээр шинэчилнэ үү")
         if keys == ["@book"]:                         # "Уулзалтын цаг товлох уу?" -> тийм
             self.lead = None
             return await self.start_booking(text)
         for key in keys:
-            if key in code_keys and not key.startswith("digits:"):
-                clip = router.meta["account"][key]
-                await say(*router.clip(clip))
-                spoken.append(clip["text"])
-            elif key.startswith("digits:"):
+            if key.startswith("digits:"):
                 digits = key.split(":", 1)[1]
                 await say(*self.digits_audio(digits, en))
                 spoken.append(" ".join(digits[i:i + 2] for i in range(0, len(digits), 2)))
@@ -599,7 +603,7 @@ class Call:
         except Exception as e:
             print(f"  [хувийн RAG алдаа] {e}")
             return None
-        self.send_code_sms(flow, code)
+        flow.sms_future = self.send_code_sms(flow, code)
         return code
 
     def send_code_sms(self, flow: LeadFlow, code: str):
@@ -614,7 +618,7 @@ class Call:
                 print(f"  [SMS] эвентийн сануулга шууд: {flow.event['name']}")
             else:
                 args = (notify.send_registration_code, flow.phone, code, company)
-            asyncio.get_running_loop().run_in_executor(None, *args)
+            return asyncio.get_running_loop().run_in_executor(None, *args)
         except Exception as e:
             print(f"  [SMS эхлүүлэх алдаа] {type(e).__name__}")
 
