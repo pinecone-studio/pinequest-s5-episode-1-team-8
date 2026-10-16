@@ -306,5 +306,18 @@ class RealCallsOct16Test(unittest.TestCase):
         self.assertEqual(f.handle("хорин зургаа гучин дөрөв"), ["readback", "digits:85222634", "confirm"])
 
 
+    def test_change_time_is_not_registration(self):
+        # 10-16: "цагийг солиулмаар" -> бүртгэлийн санал биш, код асууж цаг солих урсгал
+        import account
+        daily = RealCallsOct15Test.DAILY
+        text = "нээлттэй өдөрлөгийн цагийг солиулмаар байна аа"
+        self.assertFalse(wants_event(text, daily))
+        self.assertEqual(account.keyword_intent(text), "change_time")
+        f = LeadFlow("event", "event_start", None, events=daily)
+        f.handle("эвентэд бүртгүүлье")
+        self.assertEqual(f.handle("үгүй ээ үгүй цагаа солиулмаар байна"), [])   # бүртгэлээс гарч шинэ хүсэлт
+        self.assertTrue(f.finished)
+
+
 if __name__ == "__main__":
     unittest.main()
