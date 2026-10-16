@@ -14,7 +14,9 @@ const GROUPS = [
 ] as const;
 
 export function LeadsTable({ leads, reminders, people }: { leads: Lead[]; reminders: RemindersData; people: PeopleData }) {
-  const [reason, setReason] = useState<Lead["reason"]>("lead");
+  // Хамгийн сүүлийн бүртгэлийн төрлөөр нээнэ (эвентэд бүртгүүлсэн бол "Эвентийн бүртгэл")
+  const newest = leads.reduce<Lead | undefined>((a, b) => (!a || b.created_at > a.created_at ? b : a), undefined);
+  const [reason, setReason] = useState<Lead["reason"]>(newest?.reason ?? "lead");
   const group = GROUPS.find((item) => item.reason === reason)!;
   const rows = leads.filter((lead) => lead.reason === reason);
 
